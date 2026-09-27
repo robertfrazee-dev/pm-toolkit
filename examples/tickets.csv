@@ -1,0 +1,10 @@
+key,summary,status,assignee,epic,due_date
+FORK-201,Household invite link generation,Done,Dev,Shared Household,2026-10-10
+FORK-202,Merge two users' grocery lists on join,In Progress,Dev,Shared Household,2026-10-24
+FORK-203,Household settings screen design,Done,Lena,Shared Household,2026-10-08
+FORK-204,Refresh-on-open list sync,In Progress,Sam,Shared Household,2026-10-24
+FORK-205,Decide free vs premium for sharing,Blocked,Priya,Shared Household,2026-10-15
+FORK-310,Holiday recipe collection landing page,Done,Lena,Holiday Campaign,2026-10-12
+FORK-311,Push notification for holiday collection,To Do,Sam,Holiday Campaign,2026-11-01
+FORK-120,Fix crash when recipe has no image (Android),Done,Sam,Bugs,
+FORK-121,Grocery list items duplicate after offline edit,In Progress,Dev,Bugs,

@@ -1,0 +1,10 @@
+{
+  "name": "pm-toolkit",
+  "version": "0.1.0",
+  "description": "Skills that help product managers write, critique, and communicate: spec review, PRD drafting, stakeholder status updates, and customer interview synthesis.",
+  "author": {
+    "name": "Robert Frazee"
+  },
+  "license": "MIT",
+  "keywords": ["product-management", "prd", "spec", "status-update", "user-research"]
+}

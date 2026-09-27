@@ -1,0 +1,13 @@
+{
+  "name": "pm-toolkit",
+  "owner": {
+    "name": "Robert Frazee"
+  },
+  "plugins": [
+    {
+      "name": "pm-toolkit",
+      "source": "./",
+      "description": "Skills for product managers: spec critique, PRD drafting, status updates, interview synthesis."
+    }
+  ]
+}
