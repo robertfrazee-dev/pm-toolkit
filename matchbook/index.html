@@ -392,6 +392,20 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .sk-img, .sk-body i { background-image: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--surface) 60%, transparent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk-img, .sk-body i { animation: none; } }
+
+/* Hot on Matchbook: what every group nearby swipes yes on and picks */
+.tags-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.card .hot-tag { align-self: flex-start; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: var(--sulfur); color: #2a1a00; }
+.hot-line { font-size: 14px; font-weight: 600; opacity: .95; }
+.sub .hot { color: var(--match); font-weight: 700; }
+.hot-entry { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; cursor: pointer; padding: 14px 16px; border-radius: 20px; background: var(--surface); box-shadow: var(--soft-shadow); }
+.hot-entry .fire { font-size: 24px; }
+.hot-entry b { display: block; font-family: var(--f-display); font-size: 17px; }
+.hot-entry span span { color: var(--muted); font-size: 14px; }
+.hot-entry i { font-style: normal; color: var(--muted); font-size: 20px; }
+.hot-list .mitem .rank-n { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); font-weight: 800; }
+.hot-list .mitem:first-child .rank-n { background: var(--sulfur); color: #2a1a00; }
+.hot-list .mitem a { font-size: 13px; font-weight: 700; color: var(--match); text-decoration: none; }
 </style>
 </head>
 <body>
@@ -445,6 +459,7 @@ const S = {
   mine: { likes: [], passes: [], done: false },
   form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, ...lastForm() },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [], tab: store.get("mb.tab") || "pick", filtersOpen: false, editName: false,
+  hot: {}, hotCat: "all", hotList: null,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -579,7 +594,7 @@ function placeRow(p, i, ctx) {
   if (!p) return "";
   const key = p.id || p.key;
   return `<li class="mitem" data-row="${esc(key)}"><span class="sw ${coverFor({ id: key, name: p.name })}"><span>${i != null ? i + 1 : ""}</span></span>
-    <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.price, p.distance != null ? p.distance + " mi" : ctx?.area].filter(Boolean).join(" · "))}</span></span>
+    <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.price, p.distance != null ? p.distance + " mi" : ctx?.area].filter(Boolean).join(" · "))}${hotOf(p) ? `<br><span class="hot">${hotOf(p).hot ? "🔥 " : ""}${esc(hotText(hotOf(p)))}</span>` : ""}</span></span>
     <span class="handle"><button type="button" class="star${isFav(p) ? " on" : ""}" data-fav="${esc(key)}" aria-pressed="${isFav(p)}" aria-label="Save">${ICON.star}</button>
     <button type="button" class="btn small-btn" data-book="${esc(key)}" aria-expanded="false">Book</button></span></li>
     <li class="book-panel" data-panel="${esc(key)}" hidden>${bookingRow(p, ctx)}</li>`;
@@ -611,7 +626,7 @@ async function dealMore(btn) {
   try {
     const r = await api("/api/action", { type: "more", code: S.code, playerId: S.me, name: S.name });
     toast(`${r.added} new cards dealt`); haptic("medium");
-    await refresh(true);
+    await refresh(true); loadHot();
   } catch (e) { btn.disabled = false; btn.textContent = "Deal 10 more cards"; toast(e.message); }
 }
 async function nudgeOthers(btn) {
@@ -709,7 +724,7 @@ async function sharePlan(p, btn) {
 }
 
 function feedbackPanel() {
-  const panel = el(`<section class="panel"><div class="eyebrow">Quick question</div>
+  const panel = el(`<section class="panel" data-keep="feedback"><div class="eyebrow">Quick question</div>
     <h3 style="font-size:20px">Would you use Matchbook again?</h3>
     <div class="row"><button class="btn" type="button" data-vote="up">Yes</button><button class="btn" type="button" data-vote="down">Not really</button></div></section>`);
   let vote = "";
@@ -731,6 +746,65 @@ function feedbackPanel() {
     if (e.target.closest("[data-skip]")) send("");
   });
   return panel;
+}
+
+// ---------- hot on Matchbook ----------
+// How every group on Matchbook rates places: yes rate, times picked. Only places with enough swipes show anything.
+async function loadHot() {
+  const code = S.code; if (!code) return;
+  try {
+    const r = await api("/api/hot?code=" + code);
+    if (S.code !== code) return;
+    S.hot = r.stats || {};
+    // Don't redraw under a finger mid-swipe; the next card picks it up anyway.
+    if (Object.keys(S.hot).length && !animating && !$(".card.dragging")) render();
+  } catch { /* the hot list is a nice-to-have */ }
+}
+const hotOf = (p) => (p?.gid && S.hot[p.gid]) || null;
+const hotText = (h) => !h ? "" : `${h.rate}% swipe yes${h.wins ? ` · picked ${h.wins}×` : ""}`;
+const fromHot = (d) => d?.area === "the hot list";
+function lastArea() { try { return JSON.parse(store.get("mb.lastArea") || "null"); } catch { return null; } }
+
+function viewHot() {
+  const a = lastArea();
+  const where = a?.label === "you" ? "near you" : `near ${a?.label || "you"}`;
+  const root = el(`<div class="app stack-y hot-list"><button type="button" class="link" data-back style="align-self:flex-start">← Back</button><div class="greet"><h2>🔥 Hot ${esc(where)}</h2>
+    <p class="muted">Where groups on Matchbook say yes and actually go. Updated as people swipe.</p></div>
+    <div class="chips scroll" role="group" aria-label="Kind of place">${[{ id: "all", label: "Everything" }, ...CATS.filter((c) => c.id !== "any")].map((c) => `<button type="button" class="chip" data-hcat="${c.id}" aria-pressed="${S.hotCat === c.id}">${esc(c.label)}</button>`).join("")}</div>
+    <div id="hotBody"></div></div>`);
+  const body = $("#hotBody", root), list = S.hotList;
+  if (!list) body.append(el(`<div class="skeleton" style="height:220px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w80"></i><i class="w60"></i><i class="w80"></i><i class="w40"></i></div></div>`));
+  else if (list.error) body.append(el(`<div class="notice">${esc(list.error)}</div>`));
+  else if (!list.places.length) body.append(el(`<div class="empty"><span aria-hidden="true" style="font-size:30px">🔥</span><b>Not enough swipes here yet</b><p class="muted">The hot list fills in as groups nearby swipe and pick places. Start a deck and you'll be part of it.</p></div>`));
+  else {
+    body.append(el(`<ol class="mlist">${list.places.map((p, i) => `<li class="mitem"><span class="rank-n">${i + 1}</span>
+      <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub"><span class="hot">${p.hot ? "🔥 " : ""}${p.rate}% yes</span>${p.wins ? ` · picked ${p.wins}×` : ""}${p.kind ? " · " + esc(p.kind) : ""}</span></span>
+      <a class="maps" data-kind="maps" href="${esc(mapsUrl(p))}" target="_blank" rel="noopener">Map</a></li>`).join("")}</ol>`));
+    if (list.places.length >= 2) {
+      const go = el(`<button class="btn primary block big" type="button">Swipe this list with friends</button>`);
+      go.addEventListener("click", async () => {
+        if (!S.name) { toast("Add your name on the Pick tab first."); return; }
+        go.disabled = true;
+        try { const { code } = await api("/api/deck", { playerId: S.me, source: "hot", area: a?.label === "you" ? "" : a?.label, saved: list.places.map((p) => ({ ...p, category: p.cat })) }); openSession(code); }
+        catch (e) { go.disabled = false; toast(e.message); }
+      });
+      body.append(go);
+    }
+    body.append(el(`<p class="attrib">Ranked by Matchbook swipes and picks · Places from Google Maps</p>`));
+  }
+  root.addEventListener("click", (e) => {
+    if (e.target.closest("[data-back]")) return leave();
+    const c = e.target.closest("[data-hcat]"); if (!c || c.dataset.hcat === S.hotCat) return;
+    S.hotCat = c.dataset.hcat; haptic("light"); openHot();
+  });
+  return root;
+}
+async function openHot() {
+  const a = lastArea(); if (!a) return;
+  S.hotList = null; setView("hot");
+  try { S.hotList = await api(`/api/hot?lat=${a.lat}&lng=${a.lng}&cat=${S.hotCat}`); }
+  catch (e) { S.hotList = { error: e.message }; }
+  if (S.view === "hot") render();
 }
 
 // ---------- recent decks (this device only) ----------
@@ -765,10 +839,22 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { home: viewHome, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
-  const v = $("#view"); v.innerHTML = ""; v.append(fn());
+  const fn = { home: viewHome, hot: viewHot, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
+  if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
+  else { v.innerHTML = ""; v.append(next); }
   if (S.lastView !== S.view) { v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); S.lastView = S.view; }
+}
+// Redrawing the same screen keeps every section that didn't change, so photos don't reload and the page doesn't flash.
+function patch(cur, next) {
+  const olds = [...cur.children], news = [...next.children];
+  news.forEach((n, i) => {
+    const o = olds[i];
+    if (o && (o.isEqualNode(n) || (o.dataset.keep && o.dataset.keep === n.dataset.keep))) return;
+    if (o) o.replaceWith(n); else cur.append(n);
+  });
+  olds.slice(news.length).forEach((o) => o.remove());
 }
 
 function nameField(id) {
@@ -823,6 +909,12 @@ function homePick() {
     const quick = el(`<button class="quick" type="button"><span>Same as last time</span><b>${esc(lastWhat)} ${last.nearMe ? "near me" : "near " + esc(last.area)}</b><i aria-hidden="true">→</i></button>`);
     quick.addEventListener("click", () => quickStart(last));
     wrap.append(quick);
+  }
+  const area = lastArea();
+  if (area) {
+    const hot = el(`<button class="hot-entry" type="button"><span class="fire" aria-hidden="true">🔥</span><span><b>Hot on Matchbook</b><span>Where groups ${area.label === "you" ? "near you" : "near " + esc(area.label)} actually go</span></span><i aria-hidden="true">→</i></button>`);
+    hot.addEventListener("click", openHot);
+    wrap.append(hot);
   }
   const askName = !S.name || S.editName;
   const form = el(`<form class="composer" id="newForm" novalidate>
@@ -915,7 +1007,7 @@ function homeDecks() {
   if (!rec.length) list.append(el(`<div class="empty"><b>No decks yet</b><p class="muted">Start one from Pick, or enter a code a friend sent you.</p></div>`));
   for (const d of rec) {
     const b = el(`<button class="deck" type="button"><span class="dot ${COVERS[hash(d.code) % COVERS.length]}"></span>
-      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
+      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : d.area === "the hot list" ? "From the hot list" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
       <span class="code-tag">${esc(d.code)}</span></button>`);
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
@@ -941,7 +1033,7 @@ function homeSaved() {
 
 function viewName() {
   const pv = S.preview, d = pv?.deck;
-  const what = !d ? "" : d.category === "saved" ? "from their saved places" : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
+  const what = !d ? "" : d.category === "saved" ? (fromHot(d) ? "from the Matchbook hot list" : "from their saved places") : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
   const root = el(`<form class="panel invite-page" novalidate>
     <div><div class="eyebrow">You're invited · deck ${esc(S.pendingCode)}</div>
     <h2 style="font-size:28px;margin-top:6px">${d ? `${esc(pv.host || "A friend")} wants to pick ${what} with you` : "Join this deck"}</h2>
@@ -986,7 +1078,7 @@ function cardHtml(p, cls = "") {
     <button type="button" class="fav-btn" data-fav="${esc(p.id)}" aria-pressed="${isFav(p)}" aria-label="Save to favorites">${ICON.star}</button>
     <a class="maps map-btn" href="${esc(mapsUrl(p))}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${ICON.pin}</a>
     <div class="card-body">
-      <span class="kind">${esc(p.kind || S.session.label)}</span>
+      <div class="tags-row"><span class="kind">${esc(p.kind || S.session.label)}</span>${hotOf(p)?.hot ? `<span class="hot-tag">🔥 Hot on Matchbook</span>` : ""}</div>
       <h3>${esc(p.name)}</h3>
       <div class="meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div>
       <div class="where">${esc(p.address)}</div>
@@ -999,7 +1091,7 @@ function cardHtml(p, cls = "") {
 
 function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
-  const where = s.category === "saved" ? "Your saved places" : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  const where = s.category === "saved" ? (fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
   const root = el(`<div class="app swipe-view">
     <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
     <div class="bar" aria-hidden="true"><i style="width:${(seen / total) * 100}%"></i></div>
@@ -1120,7 +1212,7 @@ function avatarRow() {
 async function invite(scope) {
   const url = inviteUrl(S.code);
   const where = S.session.category === "saved" ? "" : S.session.area === "you" ? " nearby" : " near " + S.session.area;
-  const text = S.session.category === "saved" ? "Help me pick from our saved places! Swipe with me:" : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
+  const text = S.session.category === "saved" ? (fromHot(S.session) ? `Help me pick from the hot list! Swipe with me:` : "Help me pick from our saved places! Swipe with me:") : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
   if (NATIVE && Plug.Share) {
     try { await Plug.Share.share({ title: "Matchbook", text, url, dialogTitle: "Invite to Matchbook" }); return; } catch { return; }
   }
@@ -1151,7 +1243,7 @@ function matchItem(id, idx, extra = "") {
   const p = placeById(id); if (!p) return "";
   const img = p.photo ? ` has-img" style="background-image:url('${esc(photoUrl(p))}')` : "";
   return `<li class="mitem" data-id="${esc(id)}"><span class="sw ${coverFor(p)}${img}"><span>${idx != null ? idx + 1 : ""}</span></span>
-    <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.rating ? "★ " + p.rating.toFixed(1) : "", p.price, p.distance != null ? p.distance + " mi" : ""].filter(Boolean).join(" · "))}</span></span>${extra}</li>`;
+    <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.rating ? "★ " + p.rating.toFixed(1) : "", p.price, p.distance != null ? p.distance + " mi" : ""].filter(Boolean).join(" · "))}${hotOf(p) ? `<br><span class="hot">${hotOf(p).hot ? "🔥 " : ""}${esc(hotText(hotOf(p)))}</span>` : ""}</span></span>${extra}</li>`;
 }
 
 const isHost = () => !S.session.hostId || S.session.hostId === S.me;
@@ -1356,6 +1448,7 @@ function viewResults() {
     <h2>${esc(top.name)}</h2>
     <div>${esc([top.kind, top.rating ? "★ " + top.rating.toFixed(1) : "", top.price].filter(Boolean).join(" · "))}</div>
     <div>${esc(top.address)}</div>
+    ${hotOf(top) ? `<div class="hot-line">${hotOf(top).hot ? "🔥 " : ""}Everyone else on Matchbook: ${esc(hotText(hotOf(top)))}</div>` : ""}
     ${tied.length ? `<p style="font-weight:600">Tied with ${esc(tied.join(" and "))}. It's listed first only because it had more yeses or came up earlier. Talk it out or flip a coin.</p>` : ""}
     ${bookingRow(top)}
     <div class="row spread"><a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
@@ -1447,7 +1540,7 @@ async function createSavedDeck(btn) {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling();
-  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, lastSig: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
@@ -1456,6 +1549,10 @@ async function refresh() {
   if (!S.code || document.hidden) return;
   try {
     const r = await api("/api/deck?code=" + S.code);
+    // Most polls bring nothing new: leave the screen alone.
+    const sig = JSON.stringify([r.deck, r.swipes, r.ranks]);
+    if (sig === S.lastSig) return;
+    S.lastSig = sig;
     S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
     if (remaining().length) S.mine.done = false; // more cards were dealt
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
@@ -1483,13 +1580,15 @@ async function openSession(raw) {
     return setView("name");
   }
   stopPolling();
-  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code, session: null, lastSig: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/#" + code); } catch {}
   let r;
   try { r = await api("/api/deck?code=" + code); }
   catch (e) { S.error = e.message; S.code = null; return setView("missing"); }
   S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
   remember(r.deck);
+  if (r.deck.center && r.deck.category !== "saved") store.set("mb.lastArea", JSON.stringify({ lat: r.deck.center.latitude, lng: r.deck.center.longitude, label: r.deck.area }));
+  S.hot = {}; loadHot();
   const mine = S.swipes[S.me];
   if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };
   else { S.swipes[S.me] = { name: S.name, likes: [], passes: [], done: false }; saveMine(); } // join as a swiper
