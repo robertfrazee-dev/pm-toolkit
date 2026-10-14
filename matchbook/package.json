@@ -1,0 +1,7 @@
+{
+  "name": "matchbook",
+  "private": true,
+  "type": "module",
+  "description": "Swipe on places with friends, then rank your matches.",
+  "engines": { "node": ">=20" }
+}
