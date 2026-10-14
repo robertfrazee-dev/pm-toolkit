@@ -1205,14 +1205,25 @@ function inviteBlock() {
 }
 
 // Everyone in the deck, still-swiping first so it's obvious who the group is waiting on. Wraps, so a group of 12 all fits.
-function avatarRow() {
-  const total = S.session.places.length, ppl = participants();
-  const order = [...ppl].sort((a, b) => (S.swipes[a]?.done ? 1 : 0) - (S.swipes[b]?.done ? 1 : 0));
-  return el(`<div class="avatars${ppl.length > 6 ? " many" : ""}" aria-label="Who's done swiping">${order.map((pid) => {
+// In the ranking round, "done" means their ranking is in. Everyone in the deck counts, swiped or not.
+const rankPeople = () => [...new Set([...participants(), ...Object.keys(S.ranks)])];
+function avatarRow(kind = "swipe") {
+  const total = S.session.places.length, ppl = kind === "rank" ? rankPeople() : participants();
+  const done = (pid) => (kind === "rank" ? !!S.ranks[pid] : !!S.swipes[pid]?.done);
+  const order = [...ppl].sort((a, b) => (done(a) ? 1 : 0) - (done(b) ? 1 : 0));
+  return el(`<div class="avatars${ppl.length > 6 ? " many" : ""}" aria-label="${kind === "rank" ? "Who has ranked" : "Who's done swiping"}">${order.map((pid) => {
     const sw = S.swipes[pid] || {}, n = (sw.likes?.length || 0) + (sw.passes?.length || 0);
-    return `<div class="av${sw.done ? " done" : ""}"><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
-      <small>${esc(nameOf(pid))}</small><em>${sw.done ? "Done" : `${n}/${total}`}</em></div>`;
+    const label = kind === "rank" ? (done(pid) ? "Ranked" : "Ranking…") : done(pid) ? "Done" : `${n}/${total}`;
+    return `<div class="av${done(pid) ? " done" : ""}"><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
+      <small>${esc(nameOf(pid))}</small><em>${label}</em></div>`;
   }).join("")}</div>`);
+}
+// Who has submitted a ranking, live. Shown on the ranking screen and on the results while votes come in.
+function rankStatus() {
+  const ppl = rankPeople(), n = ppl.filter((pid) => S.ranks[pid]).length;
+  const box = el(`<section class="panel" id="rankStatus"><div class="row spread"><div class="eyebrow">${n === ppl.length ? "Everyone has ranked" : `${n} of ${ppl.length} ranked`}</div></div></section>`);
+  box.append(avatarRow("rank"));
+  return box;
 }
 async function invite(scope) {
   const url = inviteUrl(S.code);
@@ -1226,22 +1237,6 @@ async function invite(scope) {
   }
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast("Invite link copied"); }
   catch { toast(url); }
-}
-
-function peopleBlock(kind) {
-  const total = S.session.places.length;
-  const ids = kind === "rank" ? [...new Set([...participants(), ...Object.keys(S.ranks)])] : participants();
-  const wrap = el(`<div class="people"></div>`);
-  for (const pid of ids) {
-    let st, done;
-    if (kind === "rank") { done = !!S.ranks[pid]; st = done ? "Ranked" : "Ranking…"; }
-    else { const sw = S.swipes[pid]; const n = (sw.likes?.length || 0) + (sw.passes?.length || 0); done = sw.done; st = done ? "Done" : `${n} / ${total}`; }
-    const initial = nameOf(pid).slice(0, 1).toUpperCase();
-    const row = el(`<div class="person"><span class="sw ${COVERS[hash(pid) % COVERS.length]}" style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--cov-ink);font-weight:700">${esc(initial)}</span><span class="nm"></span><span class="st ${done ? "done" : ""}">${st}</span></div>`);
-    $(".nm", row).textContent = nameOf(pid);
-    wrap.append(row);
-  }
-  return wrap;
 }
 
 function matchItem(id, idx, extra = "") {
@@ -1363,9 +1358,11 @@ function viewRank() {
   const root = el(`<div class="app rank" style="padding:0">
     <div><div class="eyebrow">Round 2 · Rank</div><h2 style="font-size:28px;margin-top:4px">Put your favorite on top</h2>
     <p class="muted" style="margin-top:6px">Drag by the dots, or use the arrows. Everyone's lists combine into one winner.</p></div>
+    <div id="rankStatusSlot"></div>
     <ol class="mlist" id="rankList"></ol>
     <button class="btn primary block" type="button" id="submitRank">Submit my ranking</button>
   </div>`);
+  $("#rankStatusSlot", root).replaceWith(rankStatus());
   const list = $("#rankList", root);
   const draw = () => {
     list.innerHTML = S.rankOrder.map((id, i) => matchItem(id, i, `<span class="handle"><button type="button" data-mv="-1" aria-label="Move up" ${i === 0 ? "disabled" : ""}>${ICON.up}</button><button type="button" data-mv="1" aria-label="Move down" ${i === S.rankOrder.length - 1 ? "disabled" : ""}>${ICON.down}</button><span class="grip" aria-hidden="true">${ICON.grip}</span></span>`)).join("");
@@ -1434,6 +1431,7 @@ function viewResults() {
     <div><div class="eyebrow">${final ? "The verdict" : `Results so far · ${rankers.length} of ${everyone.length} ranked`}</div>
     <h2 style="font-size:28px;margin-top:4px">${final ? "You're going to…" : `Waiting on ${esc(waitingText)}`}</h2></div>
   </div>`);
+  if (!final) root.append(rankStatus()); // while votes are coming in, who's ranked is the main thing to see
   if (top) root.append(el(`<section class="winner ${coverFor(top)}">
     ${top.photo ? `<img src="${esc(photoUrl(top))}" alt="" style="width:calc(100% + 44px);margin:-22px -22px 4px;height:180px;object-fit:cover;display:block" onerror="this.remove()">` : ""}
     <div class="pad">
@@ -1459,10 +1457,7 @@ function viewResults() {
     <thead><tr><th>#</th><th>Place</th>${wide ? rankers.map((u) => `<th class="n">${esc(nameOf(u))}</th>`).join("") : S.ranks[S.me] ? `<th class="n">You</th>` : ""}<th class="n">Pts</th></tr></thead>
     <tbody>${ranked.map((id, i) => `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}</td>${wide ? rankers.map((u) => `<td class="n">${per[id]?.[u] ?? "–"}</td>`).join("") : S.ranks[S.me] ? `<td class="n">${per[id]?.[S.me] ?? "–"}</td>` : ""}<td class="n">${pts[id]}</td></tr>`).join("")}</tbody>
   </table></div><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
-  if (ranked.length > 1) {
-    const pp = el(`<section class="panel"><div class="eyebrow">Rankings in (${rankers.length}/${everyone.length})</div></section>`);
-    pp.append(peopleBlock("rank")); root.append(pp);
-  }
+  if (final && ranked.length > 1) root.append(rankStatus());
   const row = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (!final && isHost()) {
     const close = el(`<button class="btn primary block" type="button">Close voting and pick the winner</button>`);
@@ -1561,6 +1556,7 @@ function route() {
   else want = remaining().length === 0 ? "waiting" : "swipe";
   if (want !== S.view) setView(want);
   else if (S.view === "waiting" || S.view === "results") render(); // live updates; never redraw mid-swipe or mid-sort
+  else if (S.view === "rank") $("#rankStatus")?.replaceWith(rankStatus()); // just who's ranked, not the list being sorted
 }
 
 async function openSession(raw) {
