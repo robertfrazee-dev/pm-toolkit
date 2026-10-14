@@ -62,6 +62,7 @@ function shape(p, i, center) {
   const photo = p.photos?.[0];
   return {
     id: "p" + (i + 1),
+    gid: p.id, // Google's place ID; safe to keep, and lets saved places stay matched to the real place
     name: p.displayName?.text || "Unnamed place",
     kind: p.primaryTypeDisplayName?.text || "",
     address: p.shortFormattedAddress || p.formattedAddress || "",
