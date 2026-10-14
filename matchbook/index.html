@@ -9,7 +9,7 @@
 <meta name="description" content="Swipe on bars, restaurants and things to do with friends, then rank your matches.">
 <title>Matchbook</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -49,7 +49,8 @@ a { color: inherit; }
 
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 16px 2px; }
 .brand { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; cursor: pointer; }
-.brand-mark { width: 14px; height: 30px; border-radius: 7px 7px 3px 3px; background: linear-gradient(var(--match) 0 38%, var(--sulfur) 38% 44%, #C9A37A 44%); }
+.brand-mark { width: 24px; height: 42px; }
+.bm-stick { fill: #C9A37A; } .bm-head { fill: var(--match); } .bm-flame { fill: var(--sulfur); }
 .brand h1 { font-size: 24px; font-weight: 800; }
 .code-pill { font-family: var(--f-mono); font-size: 12px; font-weight: 700; letter-spacing: .12em; padding: 6px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); border: 0; cursor: pointer; }
 
@@ -82,13 +83,9 @@ a { color: inherit; }
 .hero { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
 .hero h2 { font-size: 30px; font-weight: 800; line-height: 1.05; }
 .hero p { margin-top: 8px; color: var(--muted); }
-.fan { position: relative; width: 112px; height: 150px; }
-.fan .mini { position: absolute; inset: 0; border-radius: 12px; color: var(--cov-ink); padding: 10px; font-family: var(--f-display); font-weight: 800; font-size: 14px; line-height: 1.05; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
-.fan .mini::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 16px; background: repeating-linear-gradient(90deg, var(--strike) 0 2px, #5d4a3c 2px 4px); }
-.fan .mini span { font-family: var(--f-mono); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; opacity: .85; font-weight: 700; }
-.fan .mini:nth-child(1) { background: var(--cov3); transform: rotate(-12deg) translateX(-16px); }
-.fan .mini:nth-child(2) { background: var(--cov1); transform: rotate(-3deg); }
-.fan .mini:nth-child(3) { background: var(--cov2); transform: rotate(8deg) translateX(14px); }
+.fan { width: 120px; height: 140px; filter: drop-shadow(0 10px 18px rgba(23,32,44,.18)); }
+.fan-back { fill: var(--cov1); } .fan-front { fill: var(--match); }
+.fan-heart { fill: var(--cov-ink); } .fan-yes { fill: none; stroke: var(--cov-ink); stroke-width: 2; } .fan-yes-t { fill: var(--cov-ink); font: 800 10px var(--f-display); letter-spacing: .06em; }
 
 /* decks list */
 .decks { display: flex; flex-direction: column; }
@@ -186,8 +183,7 @@ a { color: inherit; }
 .cov1 { background: var(--cov1); } .cov2 { background: var(--cov2); } .cov3 { background: var(--cov3); } .cov4 { background: var(--cov4); } .cov5 { background: var(--cov5); }
 @media (max-width: 460px) {
   .hero h2 { font-size: 25px; }
-  .fan { width: 78px; height: 108px; margin-inline: 14px 10px; }
-  .fan .mini { font-size: 11px; padding: 8px; }
+  .fan { width: 92px; height: 108px; }
 }
 @media (max-width: 340px) { .hero { grid-template-columns: 1fr; } .fan { display: none; } }
 </style>
@@ -252,7 +248,7 @@ textarea.input { resize: vertical; font: inherit; }
 <body>
 <div class="app" id="app">
   <header class="top">
-    <button class="brand" id="homeBtn" type="button" aria-label="Matchbook home"><span class="brand-mark" aria-hidden="true"></span><h1>Matchbook</h1></button>
+    <button class="brand" id="homeBtn" type="button" aria-label="Matchbook home"><svg class="brand-mark" viewBox="24 8 52 92" aria-hidden="true"><g transform="rotate(-11 50 96)"><rect x="45" y="46" width="10" height="46" rx="3" class="bm-stick"/><ellipse cx="50" cy="45" rx="7" ry="8" class="bm-head"/></g><g transform="rotate(11 50 96)"><rect x="45" y="46" width="10" height="46" rx="3" class="bm-stick"/><ellipse cx="50" cy="45" rx="7" ry="8" class="bm-head"/></g><path d="M50 42 C36 33 34 19 42 15 C46.5 13.5 50 16.5 50 19.5 C50 16.5 53.5 13.5 58 15 C66 19 64 33 50 42Z" class="bm-flame"/></svg><h1>Matchbook</h1></button>
     <button class="code-pill" id="codePill" type="button" hidden></button>
   </header>
   <main id="view"><p class="muted">Loading…</p></main>
@@ -636,11 +632,12 @@ function viewHome() {
   root.append(el(`<section class="hero">
     <div><h2>Swipe on places together. Go where you both said yes.</h2>
     <p>Pick a category and an area, send the link to a friend, then rank your matches.</p></div>
-    <div class="fan" aria-hidden="true">
-      <div class="mini"><span>Example</span>Lakeside Trail</div>
-      <div class="mini"><span>Example</span>Pho Saigon</div>
-      <div class="mini"><span>Example</span>The Velvet Fox</div>
-    </div></section>`));
+    <svg class="fan" viewBox="0 0 120 140" aria-hidden="true">
+      <g transform="rotate(-13 52 74)"><rect x="18" y="16" width="68" height="100" rx="12" class="fan-back"/></g>
+      <g transform="rotate(9 66 72)"><rect x="34" y="14" width="68" height="100" rx="12" class="fan-front"/>
+        <path d="M68 76 C52 66 49 52 57 48 C61.5 46.5 68 49 68 54 C68 49 74.5 46.5 79 48 C87 52 84 66 68 76Z" class="fan-heart"/>
+        <rect x="42" y="24" width="30" height="13" rx="3" class="fan-yes"/><text x="57" y="34" text-anchor="middle" class="fan-yes-t">YES</text></g>
+    </svg></section>`));
 
   const last = lastForm();
   if (S.name && (last.mood || last.cat) && (last.area || last.nearMe)) {
