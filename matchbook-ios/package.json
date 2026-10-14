@@ -1,0 +1,19 @@
+{
+  "name": "matchbook-ios",
+  "private": true,
+  "description": "iPhone app wrapper for Matchbook (Capacitor). The app loads the live site and adds push, haptics, share and app links.",
+  "scripts": {
+    "sync": "cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/push-notifications": "8.1.3",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

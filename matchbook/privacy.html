@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9EDF2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F141B" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="Swipe on bars, restaurants and things to do with friends, then rank your matches.">
+<title>Matchbook Privacy</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@400;600;700&display=swap">
+<style>
+/* Layout: one phone-width column; each place is a matchbook cover you flick left or right, the striker strip runs along its foot. */
+:root {
+  --bg: #E9EDF2; --surface: #FFFFFF; --sunk: #DDE3EA; --ink: #17202C; --muted: #586476; --line: #CCD4DE;
+  --match: #D33A2C; --match-ink: #FFFFFF; --like: #23895B; --pass: #5F6B7C; --sulfur: #E9A92E;
+  --cov1: #1F3A5F; --cov2: #A9352A; --cov3: #2B6448; --cov4: #5F3A82; --cov5: #9A6514; --cov-ink: #FFF7EA;
+  --strike: #7B6553; --shadow: 0 10px 30px rgba(23, 32, 44, .16);
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F141B; --surface: #19212C; --sunk: #222C39; --ink: #E8EDF3; --muted: #9AA6B6; --line: #2C3748;
+  --match: #F0624F; --match-ink: #1A0B08; --like: #44C089; --pass: #8E9AAB; --sulfur: #F2BB4A;
+  --cov1: #284B78; --cov2: #B6463A; --cov3: #2F7454; --cov4: #6F4796; --cov5: #A8721C; --cov-ink: #FFF7EA;
+  --strike: #8A7462; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0F141B; --surface: #19212C; --sunk: #222C39; --ink: #E8EDF3; --muted: #9AA6B6; --line: #2C3748;
+  --match: #F0624F; --match-ink: #1A0B08; --like: #44C089; --pass: #8E9AAB; --sulfur: #F2BB4A;
+  --cov1: #284B78; --cov2: #B6463A; --cov3: #2F7454; --cov4: #6F4796; --cov5: #A8721C; --cov-ink: #FFF7EA;
+  --strike: #8A7462; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.6; padding-inline: 16px; padding-block: 24px 48px; }
+main { max-width: 640px; margin: 0 auto; }
+h1 { font-family: var(--f-display); font-size: 32px; line-height: 1.1; margin: 8px 0 4px; }
+h2 { font-family: var(--f-display); font-size: 20px; margin: 28px 0 6px; }
+p, li { color: var(--ink); } .muted { color: var(--muted); font-size: 14px; }
+a { color: var(--match); }
+</style>
+</head>
+<body><main>
+<a href="/">← Matchbook</a>
+<h1>Privacy</h1>
+<p class="muted">Last updated October 14, 2026</p>
+<p>Matchbook helps a group pick a place to go. It has no accounts, no ads and no tracking. Here is everything it keeps and why.</p>
+<h2>What you give us</h2>
+<ul>
+<li><b>Your first name</b>, so people in your deck know who swiped. It is stored with the deck.</li>
+<li><b>Your swipes and rankings</b> for each deck you join.</li>
+<li><b>A random ID</b> saved on your device so the app remembers which swipes are yours. It is not tied to your identity.</li>
+<li><b>Your location</b>, only if you tap <i>Near me</i>. It is used to search for places and saved as the center of that deck, rounded to about 100 meters.</li>
+<li><b>A push notification token</b>, only if you turn on notifications in the iPhone app. It lets us tell you when it's time to rank or when a winner is picked.</li>
+</ul>
+<h2>How long we keep it</h2>
+<p>Decks, names, swipes and rankings are deleted automatically 7 days after a deck is created. Notification tokens are deleted after 90 days without use, or as soon as Apple tells us the app was removed.</p>
+<h2>Who we share it with</h2>
+<ul>
+<li><b>People in your deck</b> see your first name, whether you've finished, and your rankings.</li>
+<li><b>Google Maps</b> receives your search (category, area or location, and radius) to find places. Place details and photos come from Google. See <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy policy</a>.</li>
+<li><b>Apple</b> delivers notifications if you turn them on.</li>
+<li>Our hosting providers (Vercel and Upstash) store the data above to run the service.</li>
+</ul>
+<p>We never sell your data or use it for advertising.</p>
+<h2>Your choices</h2>
+<p>You can use Matchbook without location by typing an area, and without notifications. To delete a deck early or ask a question, open an issue at <a href="https://github.com/robertfrazee-dev/pm-toolkit/issues" rel="noopener">github.com/robertfrazee-dev/pm-toolkit/issues</a>.</p>
+<h2>Children</h2>
+<p>Matchbook is not directed at children under 13.</p>
+</main></body></html>

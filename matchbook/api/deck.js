@@ -92,7 +92,8 @@ async function create(req, res) {
   let center, areaLabel;
   const lat = Number(b.lat), lng = Number(b.lng);
   if (Number.isFinite(lat) && Number.isFinite(lng) && b.lat !== null && b.lng !== null) {
-    center = { latitude: lat, longitude: lng };
+    // Round to about 100 m: plenty for a search radius, and we don't keep anyone's exact position.
+    center = { latitude: Math.round(lat * 1000) / 1000, longitude: Math.round(lng * 1000) / 1000 };
     areaLabel = String(b.areaLabel || "your location").slice(0, 80);
   } else {
     const area = String(b.area || "").trim().slice(0, 120);

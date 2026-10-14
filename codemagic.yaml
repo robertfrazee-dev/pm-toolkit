@@ -1,0 +1,39 @@
+# Builds the Matchbook iPhone app on Codemagic's Macs and uploads it to TestFlight.
+# Setup steps are in matchbook-ios/README.md.
+workflows:
+  matchbook-ios:
+    name: Matchbook iOS
+    working_directory: matchbook-ios
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      # The App Store Connect API key you add in Codemagic → Team settings → Integrations, under this name.
+      app_store_connect: Matchbook
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.robertfrazee.matchbook
+      vars:
+        # The app's Apple ID from App Store Connect → App Information (a number like 6747123456).
+        APP_STORE_APPLE_ID: "REPLACE_WITH_APP_ID"
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Install packages
+        script: npm ci
+      - name: Copy web and plugin files into the iOS project
+        script: npx cap sync ios
+      - name: Use the App Store signing profiles
+        script: xcode-project use-profiles
+      - name: Set the build number
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo 0)
+          cd ios/App && agvtool new-version -all $((LATEST + 1))
+      - name: Build the app
+        script: xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
