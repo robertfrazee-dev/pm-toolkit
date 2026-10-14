@@ -393,7 +393,8 @@ function viewHome() {
     <div class="eyebrow">New deck</div>
     ${nameField("nameNew")}
     <div class="field"><label for="mood">What are you in the mood for? <span class="muted">(optional)</span></label>
-      <input class="input" id="mood" maxlength="80" autocomplete="off" placeholder="Cozy Italian, rooftop with a view, cheap dive…" value="${esc(f.mood)}"></div>
+      <input class="input" id="mood" maxlength="120" autocomplete="off" placeholder="Wings at a sports bar in Hoboken" value="${esc(f.mood)}">
+      <p class="small muted">Say it like you'd text it. "Cheap tacos near Union Square, open now" works.</p></div>
     <div class="field"><span class="label" id="catLbl">What kind of place?</span>
       <div class="chips" role="group" aria-labelledby="catLbl">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>
     </div>
@@ -415,7 +416,7 @@ function viewHome() {
   const pressOnly = (attr, btn) => form.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute("aria-pressed", b === btn));
   form.addEventListener("click", (e) => {
     const c = e.target.closest("[data-cat]"), n = e.target.closest("[data-count]"), p = e.target.closest("[data-price]");
-    if (c) { f.cat = c.dataset.cat; pressOnly("data-cat", c); if (f.cat === "any" && !f.mood.trim()) $("#mood", form).focus(); }
+    if (c) { f.cat = c.dataset.cat; f.catTouched = true; pressOnly("data-cat", c); if (f.cat === "any" && !f.mood.trim()) $("#mood", form).focus(); }
     if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); }
     if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); }
   });
@@ -423,7 +424,11 @@ function viewHome() {
     const t = e.target;
     if (t.id === "radius") { f.radius = +t.value; $("#radiusVal", form).textContent = f.radius + " mi"; }
     if (t.id === "area") { f.area = t.value; f.lat = f.lng = null; }
-    if (t.id === "mood") f.mood = t.value;
+    if (t.id === "mood") {
+      f.mood = t.value;
+      // Typing a full idea means "search for this", so stop narrowing to Bars unless they picked a chip themselves.
+      if (!f.catTouched && f.cat !== "any" && f.mood.trim()) { f.cat = "any"; pressOnly("data-cat", form.querySelector('[data-cat="any"]')); }
+    }
     if (t.id === "openNow") f.openNow = t.checked;
   });
   $("#locBtn", form).addEventListener("click", () => {
@@ -476,9 +481,9 @@ function viewName() {
 function viewLoading() {
   const f = S.form;
   const type = CATS.find((c) => c.id === f.cat);
-  const what = f.mood.trim() ? (f.cat === "any" ? f.mood.trim() : `${f.mood.trim()} ${type.label.toLowerCase()}`) : f.cat === "any" ? "places" : type.label.toLowerCase();
+  const what = f.mood.trim() ? `“${f.mood.trim()}”` : f.cat === "any" ? "places" : type.label.toLowerCase();
   return el(`<section class="loading"><div class="flame" aria-hidden="true"></div>
-    <h2 style="font-size:24px">Finding ${esc(what)} within ${f.radius} mi${f.lat != null ? " of you" : " of " + esc(f.area)}</h2>
+    <h2 style="font-size:24px">Finding ${esc(what)}${f.lat != null ? ` within ${f.radius} mi of you` : f.area.trim() ? ` within ${f.radius} mi of ${esc(f.area)}` : ""}</h2>
     <p class="muted">Asking Google Maps. This takes a few seconds.</p></section>`);
 }
 
@@ -866,7 +871,7 @@ function viewResults() {
 async function createDeck() {
   const f = S.form; S.error = "";
   if (f.cat === "any" && !f.mood.trim()) { S.error = "Type what you're in the mood for, or pick a kind of place."; return render(); }
-  if (f.lat == null && !f.area.trim()) { S.error = "Add a city, neighborhood or ZIP code, or tap Near me."; return render(); }
+  if (f.lat == null && !f.area.trim() && !f.mood.trim()) { S.error = "Add a city, neighborhood or ZIP code, or tap Near me."; return render(); }
   setView("loading");
   try {
     const { code } = await api("/api/deck", {

@@ -1,5 +1,6 @@
 // GET  /api/deck?code=ABCDE  -> the deck plus everyone's swipes and rankings
 // POST /api/deck             -> look up places with Google and start a new deck
+import { parseMood } from "./_mood.js";
 import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
 const PLACES = "https://places.googleapis.com/v1/places:searchText";
@@ -81,8 +82,11 @@ async function create(req, res) {
   const radius = Math.min(Math.max(Number(b.radiusMi) || 3, 0.5), 25);
   const count = Math.min(Math.max(Math.round(Number(b.count) || 15), 5), 40);
   const cat = CATEGORIES[b.category] ? b.category : "any";
-  // A free-text mood ("cozy Italian, not too loud") narrows the category, or is the whole search with "Anything".
-  const mood = String(b.mood ?? b.custom ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  // A sentence like "cheap wings at a sports bar in Hoboken" becomes the search, the area and the filters.
+  // With a category chip it narrows that category; with "Anything" it is the whole search.
+  const raw = String(b.mood ?? b.custom ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const parsed = parseMood(raw);
+  const mood = (parsed.query || raw).slice(0, 80);
   if (cat === "any" && !mood) return send(res, 400, { error: "Type what you're in the mood for, or pick a kind of place." });
 
   if (!(await allow(`rl:create:${clientIp(req)}`, 20, 3600))) {
@@ -97,8 +101,8 @@ async function create(req, res) {
     center = { latitude: Math.round(lat * 1000) / 1000, longitude: Math.round(lng * 1000) / 1000 };
     areaLabel = String(b.areaLabel || "your location").slice(0, 80);
   } else {
-    const area = String(b.area || "").trim().slice(0, 120);
-    if (!area) return send(res, 400, { error: "Add a city, neighborhood or ZIP code, or use your location." });
+    const area = (String(b.area || "").trim() || parsed.area).slice(0, 120);
+    if (!area) return send(res, 400, { error: "Where should we look? Add a neighborhood or city (or say \"in Hoboken\"), or tap Near me." });
     const found = await google({ textQuery: area, pageSize: 1 });
     const hit = found.places?.[0];
     if (!hit?.location) return send(res, 404, { error: `Couldn't find "${area}" on the map. Try adding the city or state.` });
@@ -108,8 +112,8 @@ async function create(req, res) {
 
   const textQuery = cat === "any" ? mood : mood ? `${mood} ${CATEGORIES[cat].query}` : CATEGORIES[cat].query;
   const query = { textQuery, pageSize: 20, locationRestriction: { rectangle: box(center, radius) } };
-  if (b.openNow) query.openNow = true;
-  const maxPrice = Math.round(Number(b.maxPrice) || 0);
+  if (b.openNow || parsed.openNow) query.openNow = true;
+  const maxPrice = Math.round(Number(b.maxPrice) || parsed.maxPrice || 0);
   if (maxPrice >= 1 && maxPrice <= 4) query.priceLevels = PRICE_LEVELS.slice(0, maxPrice);
 
   // Up to 3 pages of 20, keeping only places inside the circle.
