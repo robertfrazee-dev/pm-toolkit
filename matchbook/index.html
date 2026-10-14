@@ -209,6 +209,9 @@ a { color: inherit; }
 .mitem .thumb { width: 34px; height: 44px; border-radius: 6px; object-fit: cover; display: block; }
 .mitem .sw.has-img { background-size: cover; background-position: center; }
 .mitem .sw.has-img span { background: rgba(0,0,0,.45); border-radius: 4px; padding: 0 4px; z-index: 1; }
+.book-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.book { display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; text-decoration: none; color: var(--cov-ink); background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); }
+.book.primary { background: var(--cov-ink); color: #1d1a17; border-color: var(--cov-ink); }
 .mood-row { position: relative; }
 .mood-row .input { padding-right: 44px; }
 .mood-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--sunk); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
@@ -334,6 +337,40 @@ function pushPrompt(text) {
   b.addEventListener("click", enablePush);
   return b;
 }
+
+// ---------- booking buttons on the winner ----------
+// Partner IDs come from the server (Vercel env vars); without them these are plain links.
+const EATS = /restaurant|bistro|brasserie|steak|sushi|trattoria|osteria|grill|diner|eatery|tavern|gastropub|brunch|ramen|pizzeria|seafood|bbq|barbecue/i;
+const DOES = /museum|attraction|tour|gallery|zoo|aquarium|landmark|amusement|bowling|escape|arcade|observation|cruise|historical|monument|theater|theatre|karaoke|golf|climbing|axe|go-kart|mini golf/i;
+function bookingLinks(p) {
+  const b = S.booking || {}, cat = S.session.category, enc = encodeURIComponent, links = [];
+  const where = [p.name, p.address].filter(Boolean).join(", ");
+  if (cat === "restaurants" || EATS.test(p.kind)) {
+    let url = `https://www.opentable.com/s?term=${enc(p.name)}` + (p.lat != null ? `&latitude=${p.lat}&longitude=${p.lng}` : "");
+    if (b.opentableWrap) url = b.opentableWrap.replace("{url}", enc(url));
+    links.push({ kind: "reserve", label: "Reserve a table", url, primary: true });
+  } else if (cat === "activities" || cat === "sights" || DOES.test(p.kind)) {
+    let url = `https://www.viator.com/searchResults/all?text=${enc((p.name + " " + (S.session.area === "you" ? "" : S.session.area)).trim())}`;
+    if (b.viatorPid) url += `&pid=${enc(b.viatorPid)}&mcid=${enc(b.viatorMcid || "42383")}&medium=link`;
+    links.push({ kind: "tickets", label: "Get tickets", url, primary: true });
+  }
+  let ride = `https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[nickname]=${enc(p.name)}&dropoff[formatted_address]=${enc(where)}`;
+  if (p.lat != null) ride += `&dropoff[latitude]=${p.lat}&dropoff[longitude]=${p.lng}`;
+  links.push({ kind: "ride", label: "Ride there", url: ride });
+  if (p.website) links.push({ kind: "website", label: "Website", url: p.website });
+  if (p.phone) links.push({ kind: "call", label: "Call", url: "tel:" + p.phone.replace(/[^\d+]/g, "") });
+  return links;
+}
+function bookingRow(p) {
+  const links = bookingLinks(p);
+  return `<div class="book-row">${links.map((l) => `<a class="book${l.primary ? " primary" : ""}" data-kind="${l.kind}" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")}</div>`;
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.book, a.maps"); if (!a || !S.code) return;
+  const kind = a.dataset.kind || "maps";
+  haptic("light");
+  try { navigator.sendBeacon("/api/click", new Blob([JSON.stringify({ code: S.code, kind })], { type: "application/json" })); } catch {}
+});
 
 // ---------- recent decks (this device only) ----------
 function recents() { try { return JSON.parse(store.get("mb.recent") || "[]"); } catch { return []; } }
@@ -848,6 +885,7 @@ function viewResults() {
     <div>${esc([top.kind, top.rating ? "★ " + top.rating.toFixed(1) : "", top.price].filter(Boolean).join(" · "))}</div>
     <div>${esc(top.address)}</div>
     ${tied.length ? `<p style="font-weight:600">Tied with ${esc(tied.join(" and "))}. It's listed first only because it had more yeses or came up earlier. Talk it out or flip a coin.</p>` : ""}
+    ${bookingRow(top)}
     <a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
   </div></section>`));
   // A column per person stops fitting past a few people, so big groups get points plus my own pick.
@@ -905,7 +943,7 @@ async function refresh() {
   if (!S.code || document.hidden) return;
   try {
     const r = await api("/api/deck?code=" + S.code);
-    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks;
+    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
     route();
   } catch { /* keep showing what we have; the next poll tries again */ }
@@ -931,7 +969,7 @@ async function openSession(raw) {
   let r;
   try { r = await api("/api/deck?code=" + code); }
   catch (e) { S.error = e.message; S.code = null; return setView("missing"); }
-  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks;
+  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
   remember(r.deck);
   const mine = S.swipes[S.me];
   if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };
