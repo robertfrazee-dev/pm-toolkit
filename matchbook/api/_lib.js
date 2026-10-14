@@ -4,8 +4,17 @@ export const TTL = 7 * 24 * 60 * 60; // decks expire after a week
 export const CODE_RE = /^[A-Z0-9]{5}$/;
 export const PLAYER_RE = /^[A-Za-z0-9]{8,40}$/;
 
-const redisUrl = () => process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = () => process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Vercel's Upstash integration may add a custom prefix (e.g. STORAGE_KV_REST_API_URL), so match on the suffix.
+const envEnding = (...suffixes) => {
+  for (const s of suffixes) if (process.env[s]) return process.env[s];
+  for (const s of suffixes) {
+    const key = Object.keys(process.env).find((k) => k.endsWith("_" + s) && !k.includes("READ_ONLY"));
+    if (key) return process.env[key];
+  }
+  return undefined;
+};
+const redisUrl = () => envEnding("KV_REST_API_URL", "UPSTASH_REDIS_REST_URL");
+const redisToken = () => envEnding("KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN");
 
 export function missingConfig() {
   const missing = [];
