@@ -261,7 +261,7 @@ const S = {
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
   form: { cat: "bars", custom: "", area: "", lat: null, lng: null, radius: 3, count: 20, openNow: false, maxPrice: 0 },
-  error: "", pollTimer: null, pendingCode: null, minYes: null,
+  error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -640,12 +640,29 @@ function viewWaiting() {
 
   const go = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (host) {
-    if (!allDone && ids.length) go.append(el(`<p class="small muted">You can start now, or wait so everyone's yeses count. Anyone who hasn't finished can still rank.</p>`));
+    const left = n - doneCount;
+    const label = `Start ranking ${Math.min(ids.length, 10)} place${ids.length === 1 ? "" : "s"}`;
     const btn = el(`<button class="btn primary block" type="button"></button>`);
-    btn.textContent = ids.length ? `Start ranking ${Math.min(ids.length, 10)} place${ids.length === 1 ? "" : "s"}` : "Nothing to rank yet";
-    btn.disabled = !ids.length;
-    btn.addEventListener("click", () => startRanking(minYes, btn));
-    go.append(btn);
+    if (allDone || n < 2) {
+      btn.textContent = ids.length ? label : "Nothing to rank yet";
+      btn.disabled = !ids.length;
+      btn.addEventListener("click", () => startRanking(minYes, btn));
+      go.append(btn);
+    } else {
+      // Wait for everyone by default; one straggler shouldn't hold a big group forever, so allow an override.
+      btn.textContent = `Waiting on ${left} ${left === 1 ? "person" : "people"} to finish`;
+      btn.disabled = true;
+      go.append(btn);
+      if (ids.length) {
+        const early = el(`<button class="btn ghost block" type="button">${S.confirmEarly ? `Tap again: ${esc(label.toLowerCase())} without them` : "Start without them"}</button>`);
+        early.addEventListener("click", () => {
+          if (!S.confirmEarly) { S.confirmEarly = true; render(); return; }
+          startRanking(minYes, early);
+        });
+        go.append(early);
+        if (S.confirmEarly) go.append(el(`<p class="small muted">Their yeses won't count toward matches, but they can still rank.</p>`));
+      }
+    }
   } else {
     go.append(el(`<div class="notice">${esc(hostName())} will start the ranking round. This page updates on its own.</div>`));
   }
@@ -798,7 +815,7 @@ async function createDeck() {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling();
-  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", location.pathname); } catch {}
   setView("home");
 }
@@ -828,7 +845,7 @@ async function openSession(raw) {
   if (!code) return;
   if (!S.name) { S.pendingCode = code; return setView("name"); }
   stopPolling();
-  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "#" + code); } catch {}
   let r;
   try { r = await api("/api/deck?code=" + code); }
