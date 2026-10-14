@@ -1,7 +1,7 @@
 // POST /api/click  { code, kind }  counts taps on booking buttons (reserve, tickets, ride, website, call)
 import { CODE_RE, redis, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
-const KINDS = new Set(["reserve", "tickets", "ride", "website", "call", "maps"]);
+const KINDS = new Set(["reserve", "resy", "tickets", "ride", "website", "call", "maps"]);
 
 export default async function handler(req, res) {
   if (missingConfig().length) return send(res, 503, { error: "Not set up." });

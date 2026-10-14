@@ -56,7 +56,7 @@ If something isn't set up, the app says which setting is missing when you try to
 
 ## Booking buttons and partner IDs
 
-The winner card shows **Reserve a table** (OpenTable) for restaurants, **Get tickets** (Viator) for activities and sights, plus **Ride there** (Uber), **Website** and **Call**. They work as plain links until you add partner IDs in Vercel → Settings → Environment Variables:
+The winner card shows **OpenTable** and, for NYC-area decks, **Resy** reservation buttons for restaurants, **Get tickets** (Viator) for activities and sights, plus **Ride there** (Uber), **Website** and **Call**. They work as plain links until you add partner IDs in Vercel → Settings → Environment Variables:
 
 - `VIATOR_PID` and `VIATOR_MCID`: from the Viator Partner Program.
 - `OPENTABLE_LINK_TEMPLATE`: your affiliate network's tracking link for OpenTable, with `{url}` where the OpenTable page address goes.
