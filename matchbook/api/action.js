@@ -37,7 +37,7 @@ async function announceWinner(code, deck, exceptId) {
 
 async function announceRanking(code, deck, count, exceptId) {
   const others = (await deckPlayers(code)).filter((id) => id !== exceptId);
-  await pushToPlayers(others, { title: "Time to rank", body: `${count} place${count === 1 ? "" : "s"} made the cut for ${deck.label.toLowerCase()} near ${deck.area}. Put them in order.`, code });
+  await pushToPlayers(others, { title: "Time to rank", body: `${count} place${count === 1 ? "" : "s"} made the cut ${deck.category === "saved" ? "from your saved places" : `for ${deck.label.toLowerCase()} near ${deck.area}`}. Put them in order.`, code });
 }
 
 async function startRanking(code, deck, swipes, bar, { relax }) {
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
       const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
-        await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: `${deck.label} near ${deck.area}`, code });
+        await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
       }
       // The last person to finish starts the ranking round for everyone. A lone swiper waits for friends.
       if (entry.done && deck.phase === "swiping") {

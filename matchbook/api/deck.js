@@ -84,6 +84,7 @@ function shape(p, i, center) {
 
 async function create(req, res) {
   const b = body(req);
+  if (Array.isArray(b.saved)) return createFromSaved(req, res, b);
   const radius = Math.min(Math.max(Number(b.radiusMi) || 3, 0.5), 25);
   const count = Math.min(Math.max(Math.round(Number(b.count) || 15), 5), 40);
   const cat = CATEGORIES[b.category] ? b.category : "any";
@@ -143,6 +144,10 @@ async function create(req, res) {
     area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(),
     hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
+  return saveDeck(res, deck);
+}
+
+async function saveDeck(res, deck) {
   for (let tries = 0; tries < 5; tries++) {
     let code = "";
     for (let i = 0; i < 5; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
@@ -150,6 +155,30 @@ async function create(req, res) {
     if (ok === "OK") return send(res, 201, { code });
   }
   return send(res, 500, { error: "Couldn't save the deck. Try again." });
+}
+
+// A deck made from someone's saved places: no Google search, so it costs nothing.
+// The places come from the phone, so keep only plain text and https links.
+const text = (v, n) => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+const https = (v) => (/^https:\/\/[^\s"'<>]+$/i.test(String(v || "")) ? String(v).slice(0, 500) : "");
+const coord = (v, lo, hi) => (Number.isFinite(+v) && +v >= lo && +v <= hi && v !== null && v !== "" ? Math.round(+v * 1e5) / 1e5 : null);
+
+async function createFromSaved(req, res, b) {
+  const seen = new Set();
+  const places = b.saved.slice(0, 40).map((f) => ({
+    gid: text(f?.gid, 200), name: text(f?.name, 80), kind: text(f?.kind, 40), address: text(f?.address, 100),
+    price: /^\${1,4}$/.test(f?.price) ? f.price : "", maps: https(f?.maps), website: https(f?.website),
+    phone: text(f?.phone, 30).replace(/[^\d+()\-. ]/g, ""), lat: coord(f?.lat, -90, 90), lng: coord(f?.lng, -180, 180),
+    cat: CATEGORIES[f?.category] ? f.category : "", rating: null, ratings: 0, summary: "", openNow: null, photo: "", photoBy: "", distance: null,
+  })).filter((p) => p.name && !seen.has(p.gid || p.name) && seen.add(p.gid || p.name)).map((p, i) => ({ id: "p" + (i + 1), ...p }));
+  if (places.length < 2) return send(res, 400, { error: "Save at least two places to swipe on them." });
+  if (!(await allow(`rl:create:${clientIp(req)}`, 20, 3600))) return send(res, 429, { error: "Too many new decks from this connection. Try again in an hour." });
+  const pts = places.filter((p) => p.lat != null);
+  const center = pts.length ? { latitude: pts.reduce((a, p) => a + p.lat, 0) / pts.length, longitude: pts.reduce((a, p) => a + p.lng, 0) / pts.length } : null;
+  return saveDeck(res, {
+    category: "saved", mood: "", label: "Our saved places", area: "your saved list", radius: 0, center, places,
+    phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
+  });
 }
 
 // Affiliate IDs are public by nature (they end up in links), so the page gets them with the deck.
