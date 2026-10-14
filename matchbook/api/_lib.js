@@ -85,3 +85,21 @@ export async function allow(key, limit, windowSec) {
 
 export const cleanName = (s) => String(s || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 30);
 export const cleanIds = (a, valid) => (Array.isArray(a) ? [...new Set(a.filter((x) => valid.has(x)))] : []);
+
+export const today = () => new Date().toISOString().slice(0, 10);
+
+// Daily counters for the stats page. Never let counting break a request.
+export async function bump(field, n = 1) {
+  try {
+    const key = `stats:day:${today()}`;
+    await pipeline([["HINCRBY", key, field, n], ["EXPIRE", key, 400 * 24 * 60 * 60]]);
+  } catch (e) { console.error("stats", e); }
+}
+
+// A hard daily ceiling on things that cost money (Google searches, photos).
+export async function underDailyCap(name, limit) {
+  const key = `cap:${name}:${today()}`;
+  const n = await redis("INCR", key);
+  if (n === 1) await redis("EXPIRE", key, 2 * 24 * 60 * 60);
+  return n <= limit;
+}

@@ -4,7 +4,7 @@
 //   type "bar":   { minYes }                host only: how many yeses make a match
 //   type "phase": { minYes }                host only: start ranking now, without waiting for everyone
 //   type "close": {}                        host only: ends ranking so the result is final
-import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
+import { TTL, CODE_RE, PLAYER_RE, bump, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
 
 const MAX_RANKED = 10; // more than this is a chore to drag around on a phone
@@ -48,6 +48,7 @@ async function startRanking(code, deck, swipes, bar, { relax }) {
   while (relax && matches.length < 2 && bar > 1) matches = qualifying(deck, swipes, --bar);
   if (!matches.length) return null;
   await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "ranking", matches, minYes: bar, voters, rankingAt: Date.now() }), "KEEPTTL");
+  await bump("ranking_started");
   return matches;
 }
 
@@ -74,6 +75,7 @@ export default async function handler(req, res) {
       const passes = cleanIds(b.passes, valid).filter((id) => !likes.includes(id));
       const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
+      if (added === 1) await bump("joins");
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
       }
@@ -96,12 +98,14 @@ export default async function handler(req, res) {
       const order = cleanIds(b.order, new Set(deck.matches));
       if (order.length !== deck.matches.length) return send(res, 400, { error: "Rank every match before submitting." });
       const entry = { playerId, name, order, at: Date.now() };
-      await pipeline([["HSET", `deck:${code}:ranks`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:ranks`, TTL]]);
+      const [newRank] = await pipeline([["HSET", `deck:${code}:ranks`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:ranks`, TTL]]);
+      if (newRank === 1) await bump("rankings");
       // Once the last ranking is in, tell everyone where they're going (only once per deck).
       if (!deck.announced) {
         const [players, ranked] = await Promise.all([deckPlayers(code), redis("HKEYS", `deck:${code}:ranks`)]);
         if (players.every((id) => ranked.includes(id))) {
           await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, announced: true }), "KEEPTTL");
+          await bump("winners");
           await announceWinner(code, deck, playerId);
         }
       }
@@ -129,7 +133,7 @@ export default async function handler(req, res) {
       if (!isHost) return send(res, 403, { error: "Only the person who started this deck can close voting." });
       if (deck.phase === "ranking") {
         await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: Date.now(), announced: true }), "KEEPTTL");
-        if (!deck.announced) await announceWinner(code, deck, playerId);
+        if (!deck.announced) { await bump("winners"); await announceWinner(code, deck, playerId); }
       }
       return send(res, 200, { ok: true });
     }

@@ -1,7 +1,7 @@
 // GET  /api/deck?code=ABCDE  -> the deck plus everyone's swipes and rankings
 // POST /api/deck             -> look up places with Google and start a new deck
 import { parseMood } from "./_mood.js";
-import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
+import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
 const PLACES = "https://places.googleapis.com/v1/places:searchText";
 const FIELDS = [
@@ -34,9 +34,13 @@ async function google(payload) {
     body: JSON.stringify(payload),
   });
   const j = await r.json().catch(() => ({}));
+  await bump("google_searches");
   if (!r.ok) {
     const err = new Error(j.error?.message || `Google Places returned ${r.status}`);
-    err.google = true;
+    // What people see; the raw message goes to the logs.
+    err.friendly = r.status === 429 ? "Google Maps is busy right now. Try again in a minute."
+      : r.status === 403 ? "Place search is unavailable right now. Try again later, or swipe your saved places."
+      : "Couldn't reach Google Maps. Try again in a minute.";
     throw err;
   }
   return j;
@@ -98,6 +102,10 @@ async function create(req, res) {
   if (!(await allow(`rl:create:${clientIp(req)}`, 20, 3600))) {
     return send(res, 429, { error: "Too many new decks from this connection. Try again in an hour." });
   }
+  // Every Google-backed deck costs money, so there's a ceiling per day (DAILY_DECK_LIMIT, default 300).
+  if (!(await underDailyCap("decks", Number(process.env.DAILY_DECK_LIMIT) || 300))) {
+    return send(res, 503, { error: "Matchbook hit its limit for new searches today. Try again tomorrow, or swipe your saved places." });
+  }
 
   // Where to search: the phone's location, or the place the person typed.
   let center, areaLabel;
@@ -144,6 +152,7 @@ async function create(req, res) {
     area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(),
     hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
+  await bump("decks_google");
   return saveDeck(res, deck);
 }
 
@@ -175,6 +184,7 @@ async function createFromSaved(req, res, b) {
   if (!(await allow(`rl:create:${clientIp(req)}`, 20, 3600))) return send(res, 429, { error: "Too many new decks from this connection. Try again in an hour." });
   const pts = places.filter((p) => p.lat != null);
   const center = pts.length ? { latitude: pts.reduce((a, p) => a + p.lat, 0) / pts.length, longitude: pts.reduce((a, p) => a + p.lng, 0) / pts.length } : null;
+  await bump("decks_saved");
   return saveDeck(res, {
     category: "saved", mood: "", label: "Our saved places", area: "your saved list", radius: 0, center, places,
     phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
@@ -208,6 +218,6 @@ export default async function handler(req, res) {
     return send(res, 405, { error: "Use GET or POST." });
   } catch (e) {
     console.error(e);
-    return send(res, 502, { error: e.google ? "Google Places error: " + e.message : "Something went wrong on the server. Try again." });
+    return send(res, 502, { error: e.friendly || "Something went wrong on our end. Try again in a minute." });
   }
 }

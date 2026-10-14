@@ -63,8 +63,13 @@ The winner card shows **OpenTable** and, for NYC-area decks, **Resy** reservatio
 
 Redeploy after adding them. Taps are counted per month in Redis under `stats:clicks:YYYY-MM`.
 
+## Stats
+
+Open `/stats.html` on your site and enter your stats key to see decks started, people joining, decks reaching ranking and a winner, booking taps, and Google usage by day. Turn it on by adding `STATS_KEY` (any long random password) in Vercel → Settings → Environment Variables, then redeploy.
+
 ## Limits built in
 
 - 20 new decks per hour from one connection, so a shared link can't burn your Google quota.
+- At most 300 Google-backed decks and 5,000 photos per day across everyone. Change them with `DAILY_DECK_LIMIT` and `DAILY_PHOTO_LIMIT` in Vercel. Past the photo limit, cards show without photos. Past the deck limit, people see a "try again tomorrow" message; saved-places decks still work.
 - Up to 40 cards per deck and a radius of up to 25 miles.
 - Anyone with a deck's link can swipe on it. Codes are random, but don't post a link publicly.

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9EDF2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F141B" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="Swipe on bars, restaurants and things to do with friends, then rank your matches.">
+<title>Matchbook Stats</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one phone-width column; each place is a matchbook cover you flick left or right, the striker strip runs along its foot. */
+:root {
+  --bg: #E9EDF2; --surface: #FFFFFF; --sunk: #DDE3EA; --ink: #17202C; --muted: #586476; --line: #CCD4DE;
+  --match: #D33A2C; --match-ink: #FFFFFF; --like: #23895B; --pass: #5F6B7C; --sulfur: #E9A92E;
+  --cov1: #1F3A5F; --cov2: #A9352A; --cov3: #2B6448; --cov4: #5F3A82; --cov5: #9A6514; --cov-ink: #FFF7EA;
+  --strike: #7B6553; --shadow: 0 10px 30px rgba(23, 32, 44, .16);
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F141B; --surface: #19212C; --sunk: #222C39; --ink: #E8EDF3; --muted: #9AA6B6; --line: #2C3748;
+  --match: #F0624F; --match-ink: #1A0B08; --like: #44C089; --pass: #8E9AAB; --sulfur: #F2BB4A;
+  --cov1: #284B78; --cov2: #B6463A; --cov3: #2F7454; --cov4: #6F4796; --cov5: #A8721C; --cov-ink: #FFF7EA;
+  --strike: #8A7462; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0F141B; --surface: #19212C; --sunk: #222C39; --ink: #E8EDF3; --muted: #9AA6B6; --line: #2C3748;
+  --match: #F0624F; --match-ink: #1A0B08; --like: #44C089; --pass: #8E9AAB; --sulfur: #F2BB4A;
+  --cov1: #284B78; --cov2: #B6463A; --cov3: #2F7454; --cov4: #6F4796; --cov5: #A8721C; --cov-ink: #FFF7EA;
+  --strike: #8A7462; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 24px 48px; }
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1 { font-family: var(--f-display); font-size: 30px; margin: 0; }
+h2 { font-family: var(--f-display); font-size: 18px; margin: 0 0 8px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.muted { color: var(--muted); font-size: 14px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+input { flex: 1; min-width: 0; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+button { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 10px; border: 0; background: var(--match); color: var(--match-ink); cursor: pointer; }
+.wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.err { color: var(--match); font-weight: 600; }
+.summary td:first-child { font-weight: 600; }
+</style>
+</head>
+<body><main>
+<a href="/" style="color:var(--match)">← Matchbook</a>
+<h1>Stats</h1>
+<section class="panel" id="login">
+  <h2>Stats key</h2>
+  <p class="muted">The key you set as <code>STATS_KEY</code> in Vercel. It's remembered on this device.</p>
+  <form class="row" id="keyForm"><input id="key" type="password" autocomplete="current-password" aria-label="Stats key"><button type="submit">Show stats</button></form>
+  <p class="err" id="err" hidden></p>
+</section>
+<section class="panel" id="summary" hidden><h2>How groups are doing</h2><div class="wrap"><table class="summary" id="sumTable"></table></div>
+  <p class="muted">Finish rate is decks that reached a winner out of decks started. Google searches and photos are what cost money.</p></section>
+<section class="panel" id="daily" hidden><h2>By day</h2><div class="wrap"><table id="dayTable"></table></div></section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const get = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+const set = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const COLS = [
+  ["Decks", (d) => (d.decks_google || 0) + (d.decks_saved || 0)],
+  ["People joined", (d) => d.joins || 0],
+  ["Reached ranking", (d) => d.ranking_started || 0],
+  ["Winners", (d) => d.winners || 0],
+  ["Booking taps", (d) => Object.keys(d).filter((k) => k.startsWith("tap_")).reduce((a, k) => a + d[k], 0)],
+  ["Google searches", (d) => d.google_searches || 0],
+  ["Photos", (d) => d.photos || 0],
+];
+const fmt = (n) => n.toLocaleString();
+function sum(days, f) { return days.reduce((a, d) => a + f(d), 0); }
+async function load(key) {
+  $("#err").hidden = true;
+  const r = await fetch("/api/stats?days=30", { headers: { "x-stats-key": key } }).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : { error: "Couldn't reach Matchbook." };
+  if (!r || !r.ok) { $("#err").textContent = j.error || "Couldn't load stats."; $("#err").hidden = false; return; }
+  set("mb.statsKey", key);
+  const days = j.days, periods = [["Today", days.slice(0, 1)], ["Last 7 days", days.slice(0, 7)], ["Last 30 days", days]];
+  $("#sumTable").innerHTML = `<tr><th></th>${periods.map(([n]) => `<th>${n}</th>`).join("")}</tr>`
+    + COLS.map(([name, f]) => `<tr><td>${name}</td>${periods.map(([, ds]) => `<td>${fmt(sum(ds, f))}</td>`).join("")}</tr>`).join("")
+    + `<tr><td>Finish rate</td>${periods.map(([, ds]) => { const a = sum(ds, COLS[0][1]), w = sum(ds, COLS[3][1]); return `<td>${a ? Math.round((w / a) * 100) + "%" : "–"}</td>`; }).join("")}</tr>`;
+  $("#dayTable").innerHTML = `<tr><th>Date</th>${COLS.map(([n]) => `<th>${n}</th>`).join("")}</tr>`
+    + days.map((d) => `<tr><td>${d.date}</td>${COLS.map(([, f]) => `<td>${fmt(f(d))}</td>`).join("")}</tr>`).join("");
+  $("#summary").hidden = $("#daily").hidden = false;
+}
+$("#keyForm").addEventListener("submit", (e) => { e.preventDefault(); const k = $("#key").value.trim(); if (k) load(k); });
+const saved = get("mb.statsKey"); if (saved) { $("#key").value = saved; load(saved); }
+</script>
+</body></html>
