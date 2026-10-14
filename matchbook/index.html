@@ -541,7 +541,8 @@ async function saveMine() {
   if (saving) { saveAgain = true; return; }
   saving = true;
   try {
-    await api("/api/action", { type: "swipe", code: S.code, playerId: S.me, name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done });
+    const r = await api("/api/action", { type: "swipe", code: S.code, playerId: S.me, name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done });
+    if (r.phase === "ranking") refresh();
   } catch (e) {
     toast(e.message);
   } finally {
@@ -605,8 +606,8 @@ function viewWaiting() {
   const allDone = n > 0 && doneCount === n;
   const counts = likeCounts();
   const host = isHost();
-  if (S.minYes == null || S.minYes > n) S.minYes = defaultBar(n);
-  const minYes = Math.min(Math.max(S.minYes, 1), Math.max(n, 1));
+  const stored = host && S.minYes != null ? S.minYes : S.session.minYes;
+  const minYes = Math.min(Math.max(stored ?? defaultBar(n), 1), Math.max(n, 1));
   const ids = qualifying(minYes);
 
   const root = el(`<div class="app" style="padding:0">
@@ -634,7 +635,7 @@ function viewWaiting() {
   if (ids.length > 10) mp.append(el(`<p class="small muted">The 10 with the most yeses go to the ranking round.</p>`));
   mp.addEventListener("click", (e) => {
     const b = e.target.closest("[data-step]"); if (!b || !host) return;
-    S.minYes = minYes + +b.dataset.step; render();
+    S.minYes = minYes + +b.dataset.step; render(); saveBar();
   });
   root.append(mp);
 
@@ -643,16 +644,17 @@ function viewWaiting() {
     const left = n - doneCount;
     const label = `Start ranking ${Math.min(ids.length, 10)} place${ids.length === 1 ? "" : "s"}`;
     const btn = el(`<button class="btn primary block" type="button"></button>`);
-    if (allDone || n < 2) {
+    if (n < 2) {
       btn.textContent = ids.length ? label : "Nothing to rank yet";
       btn.disabled = !ids.length;
       btn.addEventListener("click", () => startRanking(minYes, btn));
       go.append(btn);
+    } else if (allDone) {
+      const anyYes = Object.keys(counts).length > 0;
+      go.append(el(`<div class="notice">${anyYes ? "Getting the ranking round ready…" : "Nobody said yes to anything in this deck. Start a new one with a different category or area."}</div>`));
     } else {
-      // Wait for everyone by default; one straggler shouldn't hold a big group forever, so allow an override.
-      btn.textContent = `Waiting on ${left} ${left === 1 ? "person" : "people"} to finish`;
-      btn.disabled = true;
-      go.append(btn);
+      // Ranking starts for everyone when the last person finishes; one straggler shouldn't hold a big group forever.
+      go.append(el(`<div class="notice">Ranking starts for everyone as soon as the last ${left === 1 ? "person finishes" : left + " people finish"}.</div>`));
       if (ids.length) {
         const early = el(`<button class="btn ghost block" type="button">${S.confirmEarly ? `Tap again: ${esc(label.toLowerCase())} without them` : "Start without them"}</button>`);
         early.addEventListener("click", () => {
@@ -664,13 +666,19 @@ function viewWaiting() {
       }
     }
   } else {
-    go.append(el(`<div class="notice">${esc(hostName())} will start the ranking round. This page updates on its own.</div>`));
+    go.append(el(`<div class="notice">${allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
   }
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`);
   again.addEventListener("click", leave);
   go.append(again);
   root.append(go);
   return root;
+}
+
+let barTimer;
+function saveBar() {
+  clearTimeout(barTimer);
+  barTimer = setTimeout(() => api("/api/action", { type: "bar", code: S.code, playerId: S.me, name: S.name, minYes: S.minYes }).catch((e) => toast(e.message)), 400);
 }
 
 async function startRanking(minYes, btn) {
