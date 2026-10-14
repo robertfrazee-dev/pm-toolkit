@@ -1,5 +1,5 @@
 // POST /api/click  { code, kind }  counts taps on booking buttons (reserve, tickets, ride, website, call)
-import { CODE_RE, redis, send, body, clientIp, allow, missingConfig } from "./_lib.js";
+import { CODE_RE, redis, send, body, clientIp, allow, missingConfig, bump } from "./_lib.js";
 
 const KINDS = new Set(["reserve", "resy", "tickets", "ride", "website", "call", "maps"]);
 
@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     if (!(await allow(`rl:click:${clientIp(req)}`, 120, 3600))) return send(res, 429, { error: "Too many." });
     const month = new Date().toISOString().slice(0, 7);
     await redis("HINCRBY", `stats:clicks:${month}`, kind, 1);
+    await bump(`tap_${kind}`);
     return send(res, 200, { ok: true });
   } catch (e) {
     console.error(e);

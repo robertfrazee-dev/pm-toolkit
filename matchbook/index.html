@@ -132,6 +132,8 @@ a { color: inherit; }
 .round.no { color: var(--pass); }
 .round.yes { color: var(--like); }
 .round:disabled { opacity: .4; }
+.round.undo { width: 48px; height: 48px; align-self: center; color: var(--muted); }
+.round.undo svg { width: 22px; height: 22px; }
 .hint { text-align: center; font-size: 12px; color: var(--muted); }
 
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 14px; font-weight: 700; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: calc(100% - 32px); z-index: 10; text-align: center; }
@@ -257,6 +259,7 @@ const ICON = {
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg>',
   star: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   pin: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
 };
@@ -280,14 +283,15 @@ const S = {
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
   form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 20, openNow: false, maxPrice: 0 },
-  error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false,
+  error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [],
 };
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
 const coverFor = (p) => COVERS[hash(p.id + p.name) % COVERS.length];
-const photoUrl = (p, w = 800) => p.photo ? `/api/photo?name=${encodeURIComponent(p.photo)}&w=${w}` : "";
+// One size everywhere so each photo is fetched (and billed) once, then cached.
+const photoUrl = (p, w = 640) => p.photo ? `/api/photo?name=${encodeURIComponent(p.photo)}&w=${w}` : "";
 const mapsUrl = (p) => p.maps || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + ", " + p.address);
 function ago(t) { const m = Math.round((Date.now() - t) / 60000); if (m < 1) return "just now"; if (m < 60) return m + " min ago"; const h = Math.round(m / 60); if (h < 24) return h + " hr ago"; return Math.round(h / 24) + " d ago"; }
 function el(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
@@ -299,7 +303,9 @@ function toast(msg, kind) {
 }
 
 async function api(path, data) {
-  const r = await fetch(path, data ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) } : {});
+  let r;
+  try { r = await fetch(path, data ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) } : {}); }
+  catch { throw Object.assign(new Error(navigator.onLine === false ? "You're offline. Reconnect and try again." : "Couldn't reach Matchbook. Check your connection and try again."), { status: 0 }); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error || "Couldn't reach the server. Check your connection."), { status: r.status });
   return j;
@@ -647,6 +653,7 @@ function viewSwipe() {
     <div class="stack" id="stack"></div>
     <div class="actions">
       <button class="round no" type="button" id="passBtn" aria-label="Pass">${ICON.x}</button>
+      <button class="round undo" type="button" id="undoBtn" aria-label="Undo last swipe" ${S.history.length ? "" : "disabled"}>${ICON.undo}</button>
       <button class="round yes" type="button" id="likeBtn" aria-label="Like">${ICON.heart}</button>
     </div>
     <p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe the card or tap the buttons." : "Drag the card, tap the buttons, or use ← and → keys."}</p>
@@ -657,6 +664,7 @@ function viewSwipe() {
   if (left[2]?.photo) { const i = new Image(); i.src = photoUrl(left[2]); } // warm the next photo
   $("#passBtn", root).addEventListener("click", () => flyTop(-1));
   $("#likeBtn", root).addEventListener("click", () => flyTop(1));
+  $("#undoBtn", root).addEventListener("click", undo);
   return root;
 }
 
@@ -698,10 +706,12 @@ document.addEventListener("keydown", (e) => {
   if (S.view !== "swipe" || e.target.closest("input,textarea")) return;
   if (e.key === "ArrowLeft") flyTop(-1);
   if (e.key === "ArrowRight") flyTop(1);
+  if (e.key === "Backspace" || e.key.toLowerCase() === "z") undo();
 });
 
 function decide(id, liked) {
   const m = S.mine;
+  S.history.push(id);
   if (liked) m.likes = [...m.likes, id]; else m.passes = [...m.passes, id];
   if (liked) {
     const others = Object.entries(S.swipes).filter(([pid, s]) => pid !== S.me && (s.likes || []).includes(id)).map(([pid]) => nameOf(pid));
@@ -712,6 +722,17 @@ function decide(id, liked) {
   S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: m.done };
   saveMine();
   if (m.done) setView("waiting"); else render();
+}
+
+// Take back the last swipe, as long as ranking hasn't started.
+function undo() {
+  if (animating || !S.history.length) return;
+  if (S.session.phase !== "swiping") { toast("Ranking has started, so swipes are locked."); return; }
+  const id = S.history.pop(), m = S.mine;
+  m.likes = m.likes.filter((x) => x !== id); m.passes = m.passes.filter((x) => x !== id); m.done = false;
+  S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: false };
+  haptic("light"); saveMine();
+  setView("swipe");
 }
 
 let saving = false, saveAgain = false;
@@ -768,7 +789,7 @@ function peopleBlock(kind) {
 
 function matchItem(id, idx, extra = "") {
   const p = placeById(id); if (!p) return "";
-  const img = p.photo ? ` has-img" style="background-image:url('${esc(photoUrl(p, 200))}')` : "";
+  const img = p.photo ? ` has-img" style="background-image:url('${esc(photoUrl(p))}')` : "";
   return `<li class="mitem" data-id="${esc(id)}"><span class="sw ${coverFor(p)}${img}"><span>${idx != null ? idx + 1 : ""}</span></span>
     <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.rating ? "★ " + p.rating.toFixed(1) : "", p.price, p.distance != null ? p.distance + " mi" : ""].filter(Boolean).join(" · "))}</span></span>${extra}</li>`;
 }
@@ -848,6 +869,9 @@ function viewWaiting() {
     }
   } else {
     go.append(el(`<div class="notice">${allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
+  }
+  if (S.history.length && S.session.phase === "swiping") {
+    const u = el(`<button class="btn ghost block" type="button">Undo my last swipe</button>`); u.addEventListener("click", undo); go.append(u);
   }
   const notify = pushPrompt("Notify me when it's time to rank");
   if (notify) go.append(notify);
@@ -1028,7 +1052,7 @@ async function createSavedDeck(btn) {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling();
-  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
@@ -1058,7 +1082,7 @@ async function openSession(raw) {
   if (!code) return;
   if (!S.name) { S.pendingCode = code; return setView("name"); }
   stopPolling();
-  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/#" + code); } catch {}
   let r;
   try { r = await api("/api/deck?code=" + code); }
@@ -1068,6 +1092,8 @@ async function openSession(raw) {
   const mine = S.swipes[S.me];
   if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };
   else { S.swipes[S.me] = { name: S.name, likes: [], passes: [], done: false }; saveMine(); } // join as a swiper
+  // Cards are swiped in deck order, so the swiped ones in that order are the undo history.
+  { const decided = new Set([...S.mine.likes, ...S.mine.passes]); S.history = S.session.places.map((p) => p.id).filter((id) => decided.has(id)); }
   if (S.ranks[S.me]) S.rankOrder = [...S.ranks[S.me].order];
   S.view = "";
   route();
