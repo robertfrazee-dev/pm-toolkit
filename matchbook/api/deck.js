@@ -1,6 +1,6 @@
 // GET  /api/deck?code=ABCDE  -> the deck plus everyone's swipes and rankings
 // POST /api/deck             -> look up places with Google and start a new deck
-import { TTL, CODE_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
+import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
 const PLACES = "https://places.googleapis.com/v1/places:searchText";
 const FIELDS = [
@@ -129,6 +129,7 @@ async function create(req, res) {
   const deck = {
     category: cat, label: cat === "custom" ? custom : CATEGORIES[cat].label,
     area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(),
+    hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
   for (let tries = 0; tries < 5; tries++) {
     let code = "";
