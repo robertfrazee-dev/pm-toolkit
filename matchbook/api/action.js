@@ -4,8 +4,14 @@
 //   type "bar":   { minYes }                host only: how many yeses make a match
 //   type "phase": { minYes }                host only: start ranking now, without waiting for everyone
 //   type "close": {}                        host only: ends ranking so the result is final
-import { TTL, CODE_RE, PLAYER_RE, bump, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
+//   type "more":  {}                        host only: deal 10 more cards (same search, new places)
+//   type "nudge": {}                        anyone: remind people still swiping (push where possible)
+import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
+import { findPlaces, shape } from "./_places.js";
+
+const MAX_CARDS = 40, MAX_DEALS = 2, DEAL = 10;
+const canDeal = (deck) => !!deck.search && (deck.deals || 0) < MAX_DEALS && deck.places.length < MAX_CARDS;
 
 const MAX_RANKED = 10; // more than this is a chore to drag around on a phone
 
@@ -47,8 +53,10 @@ async function startRanking(code, deck, swipes, bar, { relax }) {
   // Starting on its own, lower the bar until there are at least two places worth ranking.
   while (relax && matches.length < 2 && bar > 1) matches = qualifying(deck, swipes, --bar);
   if (!matches.length) return null;
-  await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "ranking", matches, minYes: bar, voters, rankingAt: Date.now() }), "KEEPTTL");
-  await bump("ranking_started");
+  // One match is simply the winner; there's nothing to rank.
+  const single = matches.length === 1;
+  await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: single ? "done" : "ranking", needsMore: false, matches, minYes: bar, voters, rankingAt: Date.now(), announced: single || deck.announced }), "KEEPTTL");
+  await bump(single ? "winners" : "ranking_started");
   return matches;
 }
 
@@ -83,9 +91,19 @@ export default async function handler(req, res) {
       if (entry.done && deck.phase === "swiping") {
         const swipes = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:swipes`)));
         if (swipes.length >= 2 && swipes.every((s) => s.done)) {
-          const matches = await startRanking(code, deck, swipes, deck.minYes ?? defaultBar(swipes.length), { relax: true });
+          const n = swipes.length, bar = Math.min(deck.minYes ?? defaultBar(n), n);
+          // Too few real matches (most of the group said yes)? If more cards can be dealt, let the host choose.
+          if (canDeal(deck) && qualifying(deck, swipes, Math.min(bar, Math.floor(n / 2) + 1)).length < 3) {
+            if (!deck.needsMore) {
+              await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, needsMore: true }), "KEEPTTL");
+              if (deck.hostId) await pushToPlayers([deck.hostId], { title: "Only a few matches", body: "Deal 10 more cards, or rank what you have.", code });
+            }
+            return send(res, 200, { ok: true, phase: "swiping", needsMore: true });
+          }
+          const matches = await startRanking(code, deck, swipes, bar, { relax: true });
           if (matches) {
-            await announceRanking(code, deck, matches.length, playerId);
+            if (matches.length === 1) await announceWinner(code, { ...deck, matches }, playerId);
+            else await announceRanking(code, deck, matches.length, playerId);
             return send(res, 200, { ok: true, phase: "ranking" });
           }
         }
@@ -125,7 +143,8 @@ export default async function handler(req, res) {
       const swipes = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:swipes`)));
       const matches = await startRanking(code, deck, swipes, Number(b.minYes), { relax: false });
       if (!matches) return send(res, 400, { error: "Nothing has that many yeses yet. Lower the bar or wait for more swipes." });
-      await announceRanking(code, deck, matches.length, playerId);
+      if (matches.length === 1) await announceWinner(code, { ...deck, matches }, playerId);
+      else await announceRanking(code, deck, matches.length, playerId);
       return send(res, 200, { ok: true, matches });
     }
 
@@ -138,9 +157,42 @@ export default async function handler(req, res) {
       return send(res, 200, { ok: true });
     }
 
+    if (b.type === "more") {
+      if (!isHost) return send(res, 403, { error: "Only the person who started this deck can deal more cards." });
+      if (deck.phase !== "swiping" || !deck.search) return send(res, 409, { error: "More cards can't be added to this deck." });
+      if (!canDeal(deck)) return send(res, 409, { error: "This deck already has all the cards it can take. Rank what you have." });
+      if (!(await underDailyCap("decks", Number(process.env.DAILY_DECK_LIMIT) || 300))) {
+        return send(res, 503, { error: "Matchbook hit its limit for new searches today. Rank what you have." });
+      }
+      const kept = await findPlaces(deck.search, { want: Math.min(DEAL, MAX_CARDS - deck.places.length), exclude: new Set(deck.places.map((p) => p.gid)) });
+      if (!kept.length) return send(res, 404, { error: "No more places nearby fit this search. Rank what you have." });
+      const added = kept.map((p, i) => shape(p, deck.places.length + i, deck.search.center));
+      const swipes = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
+      // Everyone has new cards to swipe, so nobody is "done" anymore.
+      await pipeline([
+        ["SET", `deck:${code}`, JSON.stringify({ ...deck, places: [...deck.places, ...added], deals: (deck.deals || 0) + 1, needsMore: false }), "KEEPTTL"],
+        ...Object.entries(swipes).map(([id, sw]) => ["HSET", `deck:${code}:swipes`, id, JSON.stringify({ ...sw, done: false })]),
+      ]);
+      await bump("deals");
+      const others = Object.keys(swipes).filter((id) => id !== playerId);
+      await pushToPlayers(others, { title: `${name} dealt ${added.length} more cards`, body: `Back to swiping: ${deck.label}.`, code });
+      return send(res, 200, { ok: true, added: added.length });
+    }
+
+    if (b.type === "nudge") {
+      if (deck.phase !== "swiping") return send(res, 409, { error: "Everyone's past swiping already." });
+      const swipes = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
+      const waiting = Object.entries(swipes).filter(([id, sw]) => id !== playerId && !sw.done);
+      if (!waiting.length) return send(res, 200, { ok: true, waiting: [], pushed: 0 });
+      if (!(await allow(`rl:nudge:${code}`, 1, 600))) return send(res, 429, { error: "Someone nudged a few minutes ago. Give them a minute." });
+      const pushed = await pushToPlayers(waiting.map(([id]) => id), { title: `${name} is waiting on you 👀`, body: `Finish swiping so the group can pick: ${deck.label}.`, code });
+      await bump("nudges");
+      return send(res, 200, { ok: true, waiting: waiting.map(([, sw]) => sw.name || "Someone"), pushed });
+    }
+
     return send(res, 400, { error: "Unknown action." });
   } catch (e) {
     console.error(e);
-    return send(res, 500, { error: "Something went wrong on the server. Try again." });
+    return send(res, 500, { error: e.friendly || "Something went wrong on the server. Try again." });
   }
 }

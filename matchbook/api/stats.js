@@ -10,7 +10,9 @@ export default async function handler(req, res) {
     const dates = Array.from({ length: n }, (_, i) => new Date(Date.now() - i * 864e5).toISOString().slice(0, 10));
     const rows = await pipeline(dates.map((d) => ["HGETALL", `stats:day:${d}`]));
     const days = dates.map((date, i) => ({ date, ...Object.fromEntries(Object.entries(hashToNumbers(rows[i]))) }));
-    return send(res, 200, { days });
+    const [fb] = await pipeline([["LRANGE", "feedback", 0, 49]]);
+    const feedback = (fb || []).map((x) => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean);
+    return send(res, 200, { days, feedback });
   } catch (e) {
     console.error(e);
     return send(res, 500, { error: "Couldn't load stats." });
