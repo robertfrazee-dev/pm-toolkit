@@ -368,8 +368,9 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 /* Waiting */
 .waiting .status h2 { font-size: 30px; letter-spacing: -.02em; }
 .waiting .status p { margin-top: 4px; }
-.avatars { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: none; }
-.av { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 58px; }
+.avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 12px 6px; padding: 4px 2px 6px; }
+.avatars.many .av span { width: 42px; height: 42px; font-size: 17px; }
+.av { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .av span { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: var(--cov-ink); font-weight: 800; font-size: 20px; font-family: var(--f-display); box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--line); }
 .av.done span { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--like); }
 .av small { font-size: 13px; font-weight: 700; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1472,9 +1473,11 @@ function inviteBlock() {
   return b;
 }
 
+// Everyone in the deck, still-swiping first so it's obvious who the group is waiting on. Wraps, so a group of 12 all fits.
 function avatarRow() {
-  const total = S.session.places.length;
-  return el(`<div class="avatars">${participants().map((pid) => {
+  const total = S.session.places.length, ppl = participants();
+  const order = [...ppl].sort((a, b) => (S.swipes[a]?.done ? 1 : 0) - (S.swipes[b]?.done ? 1 : 0));
+  return el(`<div class="avatars${ppl.length > 6 ? " many" : ""}" aria-label="Who's done swiping">${order.map((pid) => {
     const sw = S.swipes[pid] || {}, n = (sw.likes?.length || 0) + (sw.passes?.length || 0);
     return `<div class="av${sw.done ? " done" : ""}"><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
       <small>${esc(nameOf(pid))}</small><em>${sw.done ? "Done" : `${n}/${total}`}</em></div>`;
@@ -1536,7 +1539,7 @@ function viewWaiting() {
   const ids = qualifying(minYes);
 
   const pending = ppl.filter((u) => u !== S.me && !S.swipes[u]?.done).map(nameOf);
-  const title = n < 2 ? "Invite your people" : allDone ? (host ? "Everyone's done swiping" : `Waiting on ${hostName()}`) : pending.length === 1 ? `Waiting on ${pending[0]}` : `Waiting on ${pending.length} people`;
+  const title = n < 2 ? "Invite your people" : allDone ? (host ? "Everyone's done swiping" : `Waiting on ${hostName()}`) : pending.length === 1 ? `Waiting on ${pending[0]}` : pending.length <= 3 ? `Waiting on ${pending.slice(0, -1).join(", ")} & ${pending.at(-1)}` : `Waiting on ${pending.length} people`;
   const root = el(`<div class="app waiting">
     <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p></div>
   </div>`);
