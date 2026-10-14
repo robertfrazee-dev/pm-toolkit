@@ -342,13 +342,16 @@ function pushPrompt(text) {
 // Partner IDs come from the server (Vercel env vars); without them these are plain links.
 const EATS = /restaurant|bistro|brasserie|steak|sushi|trattoria|osteria|grill|diner|eatery|tavern|gastropub|brunch|ramen|pizzeria|seafood|bbq|barbecue/i;
 const DOES = /museum|attraction|tour|gallery|zoo|aquarium|landmark|amusement|bowling|escape|arcade|observation|cruise|historical|monument|theater|theatre|karaoke|golf|climbing|axe|go-kart|mini golf/i;
+const inNyc = (c) => !!c && c.latitude > 40.47 && c.latitude < 40.93 && c.longitude > -74.28 && c.longitude < -73.68;
 function bookingLinks(p) {
   const b = S.booking || {}, cat = S.session.category, enc = encodeURIComponent, links = [];
   const where = [p.name, p.address].filter(Boolean).join(", ");
   if (cat === "restaurants" || EATS.test(p.kind)) {
     let url = `https://www.opentable.com/s?term=${enc(p.name)}` + (p.lat != null ? `&latitude=${p.lat}&longitude=${p.lng}` : "");
     if (b.opentableWrap) url = b.opentableWrap.replace("{url}", enc(url));
-    links.push({ kind: "reserve", label: "Reserve a table", url, primary: true });
+    links.push({ kind: "reserve", label: "OpenTable", url, primary: true });
+    // Resy's links need a city; NYC is the launch market (and covers Hoboken and Jersey City).
+    if (inNyc(S.session.center)) links.push({ kind: "resy", label: "Resy", url: `https://resy.com/cities/new-york-ny/search?query=${enc(p.name)}`, primary: true });
   } else if (cat === "activities" || cat === "sights" || DOES.test(p.kind)) {
     let url = `https://www.viator.com/searchResults/all?text=${enc((p.name + " " + (S.session.area === "you" ? "" : S.session.area)).trim())}`;
     if (b.viatorPid) url += `&pid=${enc(b.viatorPid)}&mcid=${enc(b.viatorMcid || "42383")}&medium=link`;
@@ -363,7 +366,10 @@ function bookingLinks(p) {
 }
 function bookingRow(p) {
   const links = bookingLinks(p);
-  return `<div class="book-row">${links.map((l) => `<a class="book${l.primary ? " primary" : ""}" data-kind="${l.kind}" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")}</div>`;
+  const pill = (l) => `<a class="book${l.primary ? " primary" : ""}" data-kind="${l.kind}" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`;
+  const reserve = links.filter((l) => l.kind === "reserve" || l.kind === "resy"), rest = links.filter((l) => !reserve.includes(l));
+  return (reserve.length ? `<div class="eyebrow" style="color:inherit;opacity:.85">Reserve a table</div><div class="book-row">${reserve.map(pill).join("")}</div>` : "")
+    + `<div class="book-row">${rest.map(pill).join("")}</div>`;
 }
 document.addEventListener("click", (e) => {
   const a = e.target.closest("a.book, a.maps"); if (!a || !S.code) return;
