@@ -1,8 +1,11 @@
 // POST /api/action  { code, playerId, name, type, ... }
 //   type "swipe": { likes, passes, done }  saves this player's swipes
 //   type "rank":  { order }                 saves this player's ranking
-//   type "phase": { matches }               moves the deck to the ranking round
-import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
+//   type "phase": { minYes }                host only: places with at least minYes yeses go to the ranking round
+//   type "close": {}                        host only: ends ranking so the result is final
+import { TTL, CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
+
+const MAX_RANKED = 10; // more than this is a chore to drag around on a phone
 
 export default async function handler(req, res) {
   const missing = missingConfig();
@@ -30,7 +33,7 @@ export default async function handler(req, res) {
     }
 
     if (b.type === "rank") {
-      if (deck.phase !== "ranking") return send(res, 409, { error: "Ranking hasn't started for this deck." });
+      if (deck.phase !== "ranking") return send(res, 409, { error: deck.phase === "done" ? "Voting is closed for this deck." : "Ranking hasn't started for this deck." });
       const order = cleanIds(b.order, new Set(deck.matches));
       if (order.length !== deck.matches.length) return send(res, 400, { error: "Rank every match before submitting." });
       const entry = { playerId, name, order, at: Date.now() };
@@ -38,12 +41,27 @@ export default async function handler(req, res) {
       return send(res, 200, { ok: true });
     }
 
+    const isHost = !deck.hostId || deck.hostId === playerId;
+
     if (b.type === "phase") {
-      if (deck.phase === "ranking") return send(res, 200, { ok: true, matches: deck.matches });
-      const matches = cleanIds(b.matches, valid);
-      if (!matches.length) return send(res, 400, { error: "There's nothing to rank yet." });
-      await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "ranking", matches, rankingAt: Date.now() }), "KEEPTTL");
+      if (!isHost) return send(res, 403, { error: "Only the person who started this deck can start ranking." });
+      if (deck.phase !== "swiping") return send(res, 200, { ok: true, matches: deck.matches });
+      const swipes = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:swipes`)));
+      const voters = Math.max(swipes.length, 1);
+      const minYes = Math.min(Math.max(Math.round(Number(b.minYes) || voters), 1), voters);
+      const yes = {};
+      for (const s of swipes) for (const id of s.likes || []) if (valid.has(id)) yes[id] = (yes[id] || 0) + 1;
+      const matches = deck.places.map((p) => p.id).filter((id) => (yes[id] || 0) >= minYes)
+        .sort((x, y) => yes[y] - yes[x]).slice(0, MAX_RANKED);
+      if (!matches.length) return send(res, 400, { error: `No place has ${minYes} yeses yet. Lower the bar or wait for more swipes.` });
+      await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "ranking", matches, minYes, voters, rankingAt: Date.now() }), "KEEPTTL");
       return send(res, 200, { ok: true, matches });
+    }
+
+    if (b.type === "close") {
+      if (!isHost) return send(res, 403, { error: "Only the person who started this deck can close voting." });
+      if (deck.phase === "ranking") await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: Date.now() }), "KEEPTTL");
+      return send(res, 200, { ok: true });
     }
 
     return send(res, 400, { error: "Unknown action." });

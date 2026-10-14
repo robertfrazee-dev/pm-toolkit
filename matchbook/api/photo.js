@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   const width = Math.min(Math.max(parseInt(q.get("w"), 10) || 800, 100), 1600);
   if (!NAME_RE.test(name)) return send(res, 400, { error: "Bad photo name." });
   try {
-    if (!(await allow(`rl:photo:${clientIp(req)}`, 400, 3600))) return send(res, 429, { error: "Too many photos." });
+    if (!(await allow(`rl:photo:${clientIp(req)}`, 2000, 3600))) return send(res, 429, { error: "Too many photos." });
     const r = await fetch(`https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&skipHttpRedirect=true`, {
       headers: { "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY },
     });
