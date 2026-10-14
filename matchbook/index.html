@@ -244,6 +244,155 @@ textarea.input { resize: vertical; font: inherit; }
 .stepper-val b { font-family: var(--f-mono); font-size: 20px; }
 .mitem .yes { font-family: var(--f-mono); font-size: 13px; font-weight: 700; color: var(--like); font-variant-numeric: tabular-nums; }
 </style>
+<style>
+/* Skin v2: cleaner surfaces, one primary action per screen, photo-first cards, an app-style tab bar. */
+:root {
+  --bg: #F4F5F7; --surface: #FFFFFF; --sunk: #ECEEF2; --ink: #10151D; --muted: #5E6875; --line: #E3E6EB;
+  --soft-shadow: 0 1px 2px rgba(16,21,29,.05), 0 10px 28px rgba(16,21,29,.07);
+  --ring: color-mix(in srgb, var(--match) 35%, transparent);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B0E13; --surface: #151A21; --sunk: #1D232C; --ink: #EEF1F5; --muted: #98A2B1; --line: #262E39;
+  --soft-shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 30px rgba(0,0,0,.45);
+} }
+:root[data-theme="dark"] {
+  --bg: #0B0E13; --surface: #151A21; --sunk: #1D232C; --ink: #EEF1F5; --muted: #98A2B1; --line: #262E39;
+  --soft-shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 30px rgba(0,0,0,.45);
+}
+body { font-size: 16px; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+body { height: auto; min-height: 100%; }
+body.with-tabs { padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+.app { gap: 20px; }
+.top { padding-block: 14px 4px; }
+.brand h1 { font-size: 22px; }
+.code-pill { font-family: var(--f-body); letter-spacing: 0; font-size: 13px; background: var(--surface); color: var(--ink); box-shadow: var(--soft-shadow); padding: 8px 12px; }
+
+/* Friendlier labels: no more tiny all-caps code text everywhere */
+.eyebrow { font-family: var(--f-body); font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.panel { border: 0; border-radius: 22px; box-shadow: var(--soft-shadow); padding: 20px; }
+.field label, .field .label { font-size: 15px; font-weight: 700; }
+.input { border: 1.5px solid transparent; background: var(--sunk); border-radius: 14px; padding: 14px 16px; transition: border-color .15s, background .15s; }
+.input:focus { outline: none; border-color: var(--match); background: var(--surface); box-shadow: 0 0 0 4px var(--ring); }
+.input.big { font-size: 18px; padding: 16px 44px 16px 16px; }
+.chip { border: 0; background: var(--sunk); font-weight: 600; padding: 9px 14px; transition: transform .12s, background .15s; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.chips.scroll { flex-wrap: nowrap; overflow-x: auto; margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.chips.scroll::-webkit-scrollbar { display: none; }
+.chips.scroll .chip { flex: none; scroll-snap-align: start; }
+.btn { border-radius: 16px; transition: transform .12s, filter .15s, opacity .15s; }
+.btn:active:not(:disabled), .chip:active, .round:active:not(:disabled), .tab:active, .quick:active, .deck:active { transform: scale(.97); }
+.btn.big { padding: 17px 20px; font-size: 17px; }
+.btn.primary { box-shadow: 0 8px 20px color-mix(in srgb, var(--match) 30%, transparent); }
+.btn.ghost { border: 0; background: transparent; color: var(--muted); padding-block: 10px; }
+.notice { background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 16px; padding: 14px 16px; }
+.link { border: 0; background: none; padding: 0; color: var(--match); font-weight: 700; cursor: pointer; }
+.stack-y { display: flex; flex-direction: column; gap: 18px; }
+
+/* Screen-to-screen motion */
+#view.enter > * { animation: viewIn .32s cubic-bezier(.2,.8,.2,1); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #view.enter > * { animation: none; } }
+
+/* Home */
+.hero h2, .greet h2 { font-size: 30px; line-height: 1.05; letter-spacing: -.02em; }
+.greet { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.greet p b { color: var(--ink); }
+.composer { display: flex; flex-direction: column; gap: 18px; }
+.mood-clear { right: 8px; }
+.quick { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; text-align: left; border: 0; cursor: pointer; padding: 16px 18px; border-radius: 20px; background: var(--ink); color: var(--bg); box-shadow: var(--soft-shadow); transition: transform .12s; }
+.quick span { grid-column: 1; font-size: 13px; font-weight: 600; opacity: .7; text-transform: none; letter-spacing: 0; }
+.quick b { grid-column: 1; font-size: 17px; font-family: var(--f-display); }
+.quick i { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-size: 22px; }
+.filters-toggle { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 16px; padding: 14px 16px; cursor: pointer; }
+.filters-toggle span { font-weight: 700; }
+.filters-toggle b { font-weight: 500; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filters-toggle i { font-style: normal; font-size: 20px; color: var(--muted); }
+.filters { display: flex; flex-direction: column; gap: 18px; background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 20px; padding: 18px; margin-top: -8px; }
+.cta-bar { position: fixed; left: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); padding: 14px 16px 10px; background: linear-gradient(to top, var(--bg) 72%, transparent); z-index: 5; }
+.cta-bar .btn { max-width: 460px; margin: 0 auto; display: flex; }
+.join { display: flex; gap: 10px; }
+.code-in { font-family: var(--f-mono); letter-spacing: .2em; text-transform: uppercase; font-size: 18px; min-width: 0; }
+.decks { display: flex; flex-direction: column; gap: 10px; }
+.deck { grid-template-columns: 12px 1fr auto; background: var(--surface); box-shadow: var(--soft-shadow); border: 0; border-radius: 18px; padding: 14px 16px; transition: transform .12s; }
+.deck .dot { width: 12px; height: 40px; border-radius: 6px; }
+.deck .t { display: block; font-size: 16px; }
+.code-tag { font-family: var(--f-mono); font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .08em; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 34px 20px; background: var(--surface); border-radius: 22px; box-shadow: var(--soft-shadow); }
+.empty-star { color: var(--sulfur); } .empty-star svg { width: 34px; height: 34px; }
+.attrib { padding-top: 8px; }
+.attrib a { color: inherit; }
+
+/* Tab bar */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: center; gap: 4px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); }
+.tab { flex: 1; max-width: 150px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; position: relative; border-radius: 12px; transition: transform .12s, color .15s; }
+.tab svg { width: 24px; height: 24px; }
+.tab[aria-current="page"] { color: var(--match); }
+.tab .badge { position: absolute; top: 0; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--match); color: var(--match-ink); font-style: normal; font-size: 11px; line-height: 18px; }
+
+/* Swipe: the card is the screen */
+.swipe-view { gap: 12px; }
+.deck-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.dh-text { display: flex; flex-direction: column; min-width: 0; }
+.dh-text b { font-family: var(--f-display); font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-text span { color: var(--muted); font-size: 14px; }
+.swipe-view .bar { height: 4px; }
+.stack { height: calc(100dvh - 300px); min-height: 400px; max-height: 620px; }
+.card { border-radius: 26px; box-shadow: 0 18px 40px rgba(16,21,29,.22); display: block; }
+.card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 70% at 100% 0%, rgba(255,255,255,.16), transparent 60%), repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 10px, transparent 10px 20px); }
+.card.has-photo::before { display: none; }
+.card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.card-shade { position: absolute; inset: 0; pointer-events: none; }
+.card.has-photo .card-shade { background: linear-gradient(to bottom, rgba(0,0,0,.28) 0%, transparent 22%, transparent 38%, rgba(0,0,0,.55) 62%, rgba(0,0,0,.88) 100%); }
+.card-body { position: absolute; left: 0; right: 0; bottom: 14px; padding: 20px 22px; display: flex; flex-direction: column; gap: 8px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.card:not(.has-photo) .card-body { color: var(--cov-ink); text-shadow: none; }
+.card .kind { align-self: flex-start; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.18); backdrop-filter: blur(6px); }
+.card h3 { font-size: clamp(30px, 8.5vw, 38px); line-height: 1; margin: 0; letter-spacing: -.02em; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; font-weight: 700; font-family: var(--f-body); }
+.card .meta .dim { font-weight: 500; opacity: .75; }
+.card .where { font-weight: 500; font-size: 14px; opacity: .9; }
+.card .blurb { font-size: 14px; opacity: .9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .credit { font-size: 10px; opacity: .65; }
+.card .striker { position: absolute; left: 0; right: 0; bottom: 0; height: 14px; border-top: 0; }
+.fav-btn, .map-btn { position: absolute; top: 14px; z-index: 3; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.32); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; border: 0; }
+.fav-btn { left: 14px; } .card .map-btn { position: absolute; right: 14px; left: auto; font-size: 0; text-decoration: none; }
+.map-btn svg { width: 18px; height: 18px; }
+.stamp { top: 70px; }
+.card.behind { transform: scale(.94) translateY(16px); filter: brightness(.9); }
+.actions { gap: 22px; align-items: center; }
+.round { width: 68px; height: 68px; box-shadow: var(--soft-shadow); transition: transform .12s; }
+.round.yes { background: var(--match); color: #fff; box-shadow: 0 10px 24px color-mix(in srgb, var(--match) 40%, transparent); }
+.round.no { color: var(--ink); }
+.round.undo { width: 46px; height: 46px; background: var(--surface); }
+
+/* Waiting */
+.waiting .status h2 { font-size: 30px; letter-spacing: -.02em; }
+.waiting .status p { margin-top: 4px; }
+.avatars { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: none; }
+.av { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 58px; }
+.av span { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: var(--cov-ink); font-weight: 800; font-size: 20px; font-family: var(--f-display); box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--line); }
+.av.done span { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--like); }
+.av small { font-size: 13px; font-weight: 700; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av em { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.av.done em { color: var(--like); font-weight: 700; }
+.invite { border: 0; background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 20px; padding: 14px 14px 14px 18px; }
+.inv-text { display: flex; flex-direction: column; min-width: 0; }
+.invite .code { font-size: 24px; letter-spacing: .14em; }
+.mitem { border: 0; box-shadow: var(--soft-shadow); border-radius: 16px; }
+.winner { border-radius: 26px; }
+
+/* Loading: a placeholder card instead of a spinner */
+.loading { padding-block: 24px; gap: 16px; }
+.loading h2 { font-size: 22px; }
+.skeleton { width: min(100%, 340px); height: 380px; border-radius: 26px; overflow: hidden; background: var(--surface); box-shadow: var(--soft-shadow); display: flex; flex-direction: column; }
+.sk-img { flex: 1; background: var(--sunk); }
+.sk-body { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.sk-body i { display: block; height: 14px; border-radius: 7px; background: var(--sunk); }
+.sk-body .w40 { width: 40%; } .sk-body .w80 { width: 80%; height: 22px; } .sk-body .w60 { width: 60%; }
+.sk-img, .sk-body i { background-image: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--surface) 60%, transparent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-img, .sk-body i { animation: none; } }
+</style>
 </head>
 <body>
 <div class="app" id="app">
@@ -269,6 +418,9 @@ const ICON = {
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg>',
+  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.5 2.6-5.8 4.2-8.8.4 2 1.6 3.2 2.8 3.9 0-1.7.6-3.6 2-4.9.6 2.7 3.9 5 3.9 9.4 0 3.8-2.6 6.6-6.4 6.6z"/></svg>',
+  cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="7" y="3" width="13" height="17" rx="2.5" transform="rotate(8 13.5 11.5)"/><rect x="4" y="4" width="13" height="17" rx="2.5"/></svg>',
+  share: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
   star: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   pin: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
 };
@@ -292,7 +444,7 @@ const S = {
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
   form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, ...lastForm() },
-  error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [],
+  error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [], tab: store.get("mb.tab") || "pick", filtersOpen: false, editName: false,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -615,6 +767,8 @@ function render() {
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
   const fn = { home: viewHome, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"); v.innerHTML = ""; v.append(fn());
+  document.body.classList.toggle("with-tabs", S.view === "home");
+  if (S.lastView !== S.view) { v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); S.lastView = S.view; }
 }
 
 function nameField(id) {
@@ -627,52 +781,77 @@ function takeName(input) {
 }
 
 function viewHome() {
-  const f = S.form;
-  const root = el(`<div class="app" style="padding:0"></div>`);
-  root.append(el(`<section class="hero">
-    <div><h2>Swipe on places together. Go where you both said yes.</h2>
-    <p>Pick a category and an area, send the link to a friend, then rank your matches.</p></div>
-    <svg class="fan" viewBox="0 0 120 140" aria-hidden="true">
-      <g transform="rotate(-13 52 74)"><rect x="18" y="16" width="68" height="100" rx="12" class="fan-back"/></g>
-      <g transform="rotate(9 66 72)"><rect x="34" y="14" width="68" height="100" rx="12" class="fan-front"/>
-        <path d="M68 76 C52 66 49 52 57 48 C61.5 46.5 68 49 68 54 C68 49 74.5 46.5 79 48 C87 52 84 66 68 76Z" class="fan-heart"/>
-        <rect x="42" y="24" width="30" height="13" rx="3" class="fan-yes"/><text x="57" y="34" text-anchor="middle" class="fan-yes-t">YES</text></g>
-    </svg></section>`));
+  const root = el(`<div class="app home"></div>`);
+  root.append(S.tab === "decks" ? homeDecks() : S.tab === "saved" ? homeSaved() : homePick());
+  root.append(tabBar());
+  return root;
+}
 
+function tabBar() {
+  const n = favs().length;
+  const t = (id, label, icon, badge) => `<button type="button" class="tab" data-tab="${id}" aria-current="${S.tab === id ? "page" : "false"}">${icon}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ""}</button>`;
+  const bar = el(`<nav class="tabbar" aria-label="Sections">${t("pick", "Pick", ICON.flame)}${t("decks", "Decks", ICON.cards)}${t("saved", "Saved", ICON.star, n)}</nav>`);
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tab]"); if (!b || b.dataset.tab === S.tab) return;
+    S.tab = b.dataset.tab; store.set("mb.tab", S.tab); haptic("light"); render(); scrollTo(0, 0);
+  });
+  return bar;
+}
+
+const filterSummary = (f) => [`${f.radius} mi`, ["Any price", "$", "$$ and under", "$$$ and under"][f.maxPrice] || "Any price", f.openNow ? "Open now" : "", `${f.count} cards`].filter(Boolean).join(" · ");
+
+function homePick() {
+  const f = S.form;
+  const wrap = el(`<div class="stack-y"></div>`);
+  if (!S.name) {
+    wrap.append(el(`<section class="hero">
+      <div><h2>Decide where to go, together.</h2>
+      <p>Swipe on real places with friends. Go where everyone said yes.</p></div>
+      <svg class="fan" viewBox="0 0 120 140" aria-hidden="true">
+        <g transform="rotate(-13 52 74)"><rect x="18" y="16" width="68" height="100" rx="12" class="fan-back"/></g>
+        <g transform="rotate(9 66 72)"><rect x="34" y="14" width="68" height="100" rx="12" class="fan-front"/>
+          <path d="M68 76 C52 66 49 52 57 48 C61.5 46.5 68 49 68 54 C68 49 74.5 46.5 79 48 C87 52 84 66 68 76Z" class="fan-heart"/>
+          <rect x="42" y="24" width="30" height="13" rx="3" class="fan-yes"/><text x="57" y="34" text-anchor="middle" class="fan-yes-t">YES</text></g>
+      </svg></section>`));
+  } else {
+    wrap.append(el(`<div class="greet"><h2>What are we deciding?</h2><p class="muted">Swiping as <b></b> · <button type="button" class="link" id="changeName">Change</button></p></div>`));
+    $(".greet b", wrap).textContent = S.name;
+  }
   const last = lastForm();
   if (S.name && (last.mood || last.cat) && (last.area || last.nearMe)) {
     const lastWhat = last.mood || CATS.find((c) => c.id === last.cat)?.label || "Places";
-    const quick = el(`<button class="btn primary block quick" type="button"><span>Same as last time</span><b>${esc(lastWhat)} ${last.nearMe ? "near me" : "near " + esc(last.area)}</b></button>`);
+    const quick = el(`<button class="quick" type="button"><span>Same as last time</span><b>${esc(lastWhat)} ${last.nearMe ? "near me" : "near " + esc(last.area)}</b><i aria-hidden="true">→</i></button>`);
     quick.addEventListener("click", () => quickStart(last));
-    root.append(quick);
+    wrap.append(quick);
   }
-  const form = el(`<form class="panel" id="newForm" novalidate>
-    <div class="eyebrow">New deck</div>
-    ${nameField("nameNew")}
-    <div class="field"><label for="mood">What are you in the mood for? <span class="muted">(optional)</span></label>
-      <div class="mood-row"><input class="input" id="mood" maxlength="120" autocomplete="off" placeholder="Wings at a sports bar in Hoboken" value="${esc(f.mood)}">
-      <button type="button" class="mood-clear" id="moodClear" aria-label="Clear" ${f.mood ? "" : "hidden"}>×</button></div>
-      <p class="small muted">Say it like you'd text it. "Cheap tacos near Union Square, open now" works.</p></div>
-    <div class="field"><span class="label" id="catLbl">What kind of place?</span>
-      <div class="chips" role="group" aria-labelledby="catLbl">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>
-    </div>
+  const askName = !S.name || S.editName;
+  const form = el(`<form class="composer" id="newForm" novalidate>
+    ${askName ? nameField("nameNew") : ""}
+    <div class="field"><label for="mood">What are you in the mood for?</label>
+      <div class="mood-row"><input class="input big" id="mood" maxlength="120" autocomplete="off" placeholder="Wings at a sports bar in Hoboken" value="${esc(f.mood)}">
+      <button type="button" class="mood-clear" id="moodClear" aria-label="Clear" ${f.mood ? "" : "hidden"}>×</button></div></div>
+    <div class="chips scroll" role="group" aria-label="Kind of place">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>
     <div class="field"><label for="area">Where?</label>
-      <div class="area-row"><input class="input" id="area" placeholder="City, neighborhood or ZIP" value="${esc(f.lat != null ? "Current location" : f.area)}" autocomplete="off">
+      <div class="area-row"><input class="input" id="area" placeholder="Neighborhood, city or ZIP" value="${esc(f.lat != null ? "Current location" : f.area)}" autocomplete="off">
       <button class="btn locbtn" type="button" id="locBtn">${ICON.pin} Near me</button></div></div>
-    <div class="field"><label for="radius">Radius</label>
-      <div class="range-row"><input type="range" id="radius" min="0.5" max="25" step="0.5" value="${f.radius}"><span class="range-val" id="radiusVal">${f.radius} mi</span></div></div>
-    <div class="field"><span class="label" id="priceLbl">Max price</span>
-      <div class="chips" role="group" aria-labelledby="priceLbl">${["Any", "$", "$$", "$$$"].map((p, i) => `<button type="button" class="chip" data-price="${i}" aria-pressed="${f.maxPrice === i}">${p}</button>`).join("")}</div></div>
-    <label class="toggle"><input type="checkbox" id="openNow" ${f.openNow ? "checked" : ""}> Open now only</label>
-    <div class="field"><span class="label" id="cntLbl">Cards in the deck</span>
-      <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 15, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
+    <button type="button" class="filters-toggle" id="filtersBtn" aria-expanded="${!!S.filtersOpen}"><span>Filters</span><b id="filterSum">${esc(filterSummary(f))}</b><i aria-hidden="true">${S.filtersOpen ? "−" : "+"}</i></button>
+    <div class="filters" id="filters" ${S.filtersOpen ? "" : "hidden"}>
+      <div class="field"><label for="radius">Radius</label>
+        <div class="range-row"><input type="range" id="radius" min="0.5" max="25" step="0.5" value="${f.radius}"><span class="range-val" id="radiusVal">${f.radius} mi</span></div></div>
+      <div class="field"><span class="label" id="priceLbl">Max price</span>
+        <div class="chips" role="group" aria-labelledby="priceLbl">${["Any", "$", "$$", "$$$"].map((p, i) => `<button type="button" class="chip" data-price="${i}" aria-pressed="${f.maxPrice === i}">${p}</button>`).join("")}</div></div>
+      <label class="toggle"><input type="checkbox" id="openNow" ${f.openNow ? "checked" : ""}> Open now only</label>
+      <div class="field"><span class="label" id="cntLbl">Cards in the deck</span>
+        <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 15, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
+    </div>
     ${S.error ? `<p class="err">${esc(S.error)}</p>` : ""}
-    <button class="btn primary block" type="submit">Find places</button>
+    <div class="cta-bar"><button class="btn primary block big" type="submit">Find places</button></div>
   </form>`);
-  root.append(form);
+  wrap.append(form);
 
   const setMood = (v) => { f.mood = v; $("#mood", form).value = v; $("#moodClear", form).hidden = !v; };
   const pressOnly = (attr, btn) => form.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute("aria-pressed", b === btn));
+  const sum = () => { $("#filterSum", form).textContent = filterSummary(f); };
   form.addEventListener("click", (e) => {
     const c = e.target.closest("[data-cat]"), n = e.target.closest("[data-count]"), p = e.target.closest("[data-price]");
     if (c) {
@@ -682,19 +861,23 @@ function viewHome() {
       else if (!f.mood.trim()) $("#mood", form).focus();
     }
     if (e.target.closest("#moodClear")) { setMood(""); $("#mood", form).focus(); }
-    if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); }
-    if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); }
+    if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); sum(); }
+    if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); sum(); }
+    if (e.target.closest("#filtersBtn")) {
+      S.filtersOpen = !S.filtersOpen; $("#filters", form).hidden = !S.filtersOpen;
+      $("#filtersBtn", form).setAttribute("aria-expanded", S.filtersOpen); $("#filtersBtn i", form).textContent = S.filtersOpen ? "−" : "+";
+    }
   });
   form.addEventListener("input", (e) => {
     const t = e.target;
-    if (t.id === "radius") { f.radius = +t.value; $("#radiusVal", form).textContent = f.radius + " mi"; }
+    if (t.id === "radius") { f.radius = +t.value; $("#radiusVal", form).textContent = f.radius + " mi"; sum(); }
     if (t.id === "area") { f.area = t.value; f.lat = f.lng = null; }
     if (t.id === "mood") {
       f.mood = t.value;
       $("#moodClear", form).hidden = !f.mood;
       if (f.cat !== "any" && f.mood.trim()) { f.cat = "any"; pressOnly("data-cat", form.querySelector('[data-cat="any"]')); }
     }
-    if (t.id === "openNow") f.openNow = t.checked;
+    if (t.id === "openNow") { f.openNow = t.checked; sum(); }
   });
   $("#locBtn", form).addEventListener("click", () => {
     const btn = $("#locBtn", form);
@@ -706,39 +889,54 @@ function viewHome() {
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );
   });
-  form.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameNew", form))) createDeck(); else { S.error = "Add your name first."; render(); } });
+  $("#changeName", wrap)?.addEventListener("click", () => { S.editName = true; render(); setTimeout(() => $("#nameNew")?.focus(), 30); });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#nameNew", form);
+    if (input ? takeName(input) : S.name) { S.editName = false; createDeck(); }
+    else { S.error = "Add your name first."; render(); }
+  });
+  return wrap;
+}
 
-  const join = el(`<section class="panel">
-    <div class="eyebrow">Join a deck</div>
-    <form class="row" id="joinForm" novalidate style="flex-wrap:nowrap">
-      <input class="input" id="joinCode" placeholder="Enter code" maxlength="5" autocomplete="off" style="text-transform:uppercase;font-family:var(--f-mono);letter-spacing:.15em;min-width:0">
-      <button class="btn" type="submit">Join</button>
+function homeDecks() {
+  const wrap = el(`<div class="stack-y">
+    <div class="greet"><h2>Your decks</h2><p class="muted">Decks you start or join stay here for a week.</p></div>
+    <form class="join" id="joinForm" novalidate>
+      <input class="input code-in" id="joinCode" placeholder="Enter a code" maxlength="5" autocomplete="off" aria-label="Deck code">
+      <button class="btn primary" type="submit">Join</button>
     </form>
     <div class="decks" id="decks"></div>
-  </section>`);
-  root.append(join);
-  $("#joinForm", join).addEventListener("submit", (e) => { e.preventDefault(); const c = $("#joinCode", join).value.trim(); if (c) openSession(c); });
-  const list = $("#decks", join);
+    <p class="attrib">Places, photos and ratings from Google Maps · <a href="/privacy.html">Privacy</a></p>
+  </div>`);
+  $("#joinForm", wrap).addEventListener("submit", (e) => { e.preventDefault(); const c = $("#joinCode", wrap).value.trim(); if (c) openSession(c); });
+  const list = $("#decks", wrap);
   const rec = recents().filter((d) => Date.now() - (d.at || 0) < 7 * 864e5);
-  if (!rec.length) list.append(el(`<p class="muted small">Decks you start or join show up here.</p>`));
+  if (!rec.length) list.append(el(`<div class="empty"><b>No decks yet</b><p class="muted">Start one from Pick, or enter a code a friend sent you.</p></div>`));
   for (const d of rec) {
     const b = el(`<button class="deck" type="button"><span class="dot ${COVERS[hash(d.code) % COVERS.length]}"></span>
-      <span class="info"><span class="t" style="display:block">${esc(d.label)} near ${esc(d.area)}</span><span class="s">${esc(d.code)} · ${ago(d.at)}</span></span>
-      <span class="phase">Open</span></button>`);
+      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
+      <span class="code-tag">${esc(d.code)}</span></button>`);
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
   }
+  return wrap;
+}
+
+function homeSaved() {
   const saved = favs();
-  if (saved.length) {
-    const panel = el(`<section class="panel"><div class="row spread"><div class="eyebrow">Saved places</div><span class="count">${saved.length}</span></div>
-      <ul class="mlist">${saved.slice(0, 30).map((f) => placeRow(f, null, f.ctx)).join("")}</ul>
-      ${saved.length >= 2 ? `<button class="btn primary block" type="button" id="swipeSaved">Swipe these together</button>
-      <p class="small muted">Makes a deck from your ${Math.min(saved.length, 40)} most recent saved places to share like any other.</p>` : `<p class="small muted">Save one more place to swipe on your list with someone.</p>`}</section>`);
-    $("#swipeSaved", panel)?.addEventListener("click", (e) => createSavedDeck(e.currentTarget));
-    root.append(panel);
+  const wrap = el(`<div class="stack-y"><div class="greet"><h2>Saved places</h2><p class="muted">${saved.length ? `${saved.length} place${saved.length === 1 ? "" : "s"} on this phone.` : "Tap the star on any card to save it here."}</p></div></div>`);
+  if (!saved.length) {
+    wrap.append(el(`<div class="empty"><span class="empty-star" aria-hidden="true">${ICON.star}</span><b>Nothing saved yet</b><p class="muted">Saved places can become their own deck to swipe with your partner or friends.</p></div>`));
+    return wrap;
   }
-  root.append(el(`<p class="attrib">Places, photos and ratings from Google Maps · <a href="/privacy.html" style="color:inherit">Privacy</a></p>`));
-  return root;
+  if (saved.length >= 2) {
+    const go = el(`<button class="btn primary block big" type="button" id="swipeSaved">Swipe these together</button>`);
+    go.addEventListener("click", (e) => createSavedDeck(e.currentTarget));
+    wrap.append(go);
+  }
+  wrap.append(el(`<ul class="mlist">${saved.slice(0, 40).map((f) => placeRow(f, null, f.ctx)).join("")}</ul>`));
+  return wrap;
 }
 
 function viewName() {
@@ -761,9 +959,10 @@ function viewLoading() {
   const f = S.form;
   const type = CATS.find((c) => c.id === f.cat);
   const what = f.mood.trim() ? `“${f.mood.trim()}”` : f.cat === "any" ? "places" : type.label.toLowerCase();
-  return el(`<section class="loading"><div class="flame" aria-hidden="true"></div>
-    <h2 style="font-size:24px">Finding ${esc(what)}${f.lat != null ? ` within ${f.radius} mi of you` : f.area.trim() ? ` within ${f.radius} mi of ${esc(f.area)}` : ""}</h2>
-    <p class="muted">Asking Google Maps. This takes a few seconds.</p></section>`);
+  return el(`<section class="loading">
+    <div class="skeleton" aria-hidden="true"><div class="sk-img"></div><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>
+    <h2>Finding ${esc(what)}${f.lat != null ? " near you" : f.area.trim() ? ` near ${esc(f.area)}` : ""}</h2>
+    <p class="muted">Pulling real places from Google Maps.</p></section>`);
 }
 
 function viewMissing() {
@@ -776,38 +975,41 @@ function viewMissing() {
 
 function cardHtml(p, cls = "") {
   const meta = [
-    p.rating ? `★ ${p.rating.toFixed(1)} (${p.ratings.toLocaleString()})` : "",
-    p.price, p.distance != null ? `${p.distance} mi` : "",
-    p.openNow === true ? `<span class="open">Open now</span>` : p.openNow === false ? `<span class="closed">Closed now</span>` : "",
+    p.rating ? `★ ${p.rating.toFixed(1)}${p.ratings ? ` <span class="dim">(${p.ratings.toLocaleString()})</span>` : ""}` : "",
+    esc(p.price), p.distance != null ? `${p.distance} mi` : "",
+    p.openNow === true ? `<span class="open">Open now</span>` : p.openNow === false ? `<span class="closed">Closed</span>` : "",
   ].filter(Boolean);
-  return `<article class="card ${coverFor(p)} ${cls}" data-id="${esc(p.id)}">
+  return `<article class="card ${coverFor(p)} ${cls}${p.photo ? " has-photo" : ""}" data-id="${esc(p.id)}">
+    ${p.photo ? `<img class="card-img" src="${esc(photoUrl(p))}" alt="" loading="eager" draggable="false" onerror="this.closest('.card').classList.remove('has-photo'); this.remove()">` : ""}
+    <div class="card-shade" aria-hidden="true"></div>
     <div class="stamp yes">YES</div><div class="stamp no">NOPE</div>
     <button type="button" class="fav-btn" data-fav="${esc(p.id)}" aria-pressed="${isFav(p)}" aria-label="Save to favorites">${ICON.star}</button>
-    ${p.photo ? `<div class="photo"><img src="${esc(photoUrl(p))}" alt="" loading="eager" draggable="false" onerror="this.parentNode.remove()">${p.photoBy ? `<span class="credit">Photo: ${esc(p.photoBy)}</span>` : ""}</div>` : ""}
-    <div class="cover">
-      <div class="kicker"><span>${esc(p.kind || S.session.label)}</span></div>
+    <a class="maps map-btn" href="${esc(mapsUrl(p))}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${ICON.pin}</a>
+    <div class="card-body">
+      <span class="kind">${esc(p.kind || S.session.label)}</span>
       <h3>${esc(p.name)}</h3>
-      <div class="meta">${meta.map((m) => `<span>${m.startsWith("<") ? m : esc(m)}</span>`).join("")}</div>
+      <div class="meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div>
       <div class="where">${esc(p.address)}</div>
       ${p.summary ? `<p class="blurb">${esc(p.summary)}</p>` : ""}
-      <div class="foot"><a class="maps" href="${esc(mapsUrl(p))}" target="_blank" rel="noopener">Open in Google Maps</a></div>
+      ${p.photo && p.photoBy ? `<span class="credit">Photo: ${esc(p.photoBy)}</span>` : ""}
     </div>
     <div class="striker" aria-hidden="true"></div>
   </article>`;
 }
 
 function viewSwipe() {
-  const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length;
-  const root = el(`<div class="app" style="padding:0">
-    <div class="eyebrow">${esc(s.label)}${s.category === "saved" ? "" : ` · ${s.radius} mi of ${esc(s.area)}`}${participants().length > 1 ? ` · ${participants().length} swiping` : ""}</div>
-    <div class="progress"><div class="bar"><i style="width:${(seen / total) * 100}%"></i></div><span class="count">${Math.min(seen + 1, total)} / ${total}</span></div>
+  const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
+  const where = s.category === "saved" ? "Your saved places" : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  const root = el(`<div class="app swipe-view">
+    <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
+    <div class="bar" aria-hidden="true"><i style="width:${(seen / total) * 100}%"></i></div>
     <div class="stack" id="stack"></div>
     <div class="actions">
       <button class="round no" type="button" id="passBtn" aria-label="Pass">${ICON.x}</button>
       <button class="round undo" type="button" id="undoBtn" aria-label="Undo last swipe" ${S.history.length ? "" : "disabled"}>${ICON.undo}</button>
       <button class="round yes" type="button" id="likeBtn" aria-label="Like">${ICON.heart}</button>
     </div>
-    <p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe the card or tap the buttons." : "Drag the card, tap the buttons, or use ← and → keys."}</p>
+    ${S.history.length ? "" : `<p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe right if you'd go, left if you wouldn't." : "Drag the card, tap the buttons, or use ← and → keys."}</p>`}
   </div>`);
   const stack = $("#stack", root);
   if (left[1]) stack.append(el(cardHtml(left[1], "behind")));
@@ -901,11 +1103,19 @@ async function saveMine() {
 }
 
 function inviteBlock() {
-  const b = el(`<div class="invite"><div style="min-width:0"><div class="eyebrow">Invite code</div><div class="code">${esc(S.code)}</div>
-    <p class="small muted">Send this link so friends can swipe the same deck.</p></div>
-    <button class="btn primary" type="button">Invite</button></div>`);
+  const b = el(`<div class="invite"><div class="inv-text"><span class="muted small">Invite code</span><span class="code">${esc(S.code)}</span></div>
+    <button class="btn primary" type="button">${ICON.share} Invite</button></div>`);
   $("button", b).addEventListener("click", () => invite(b));
   return b;
+}
+
+function avatarRow() {
+  const total = S.session.places.length;
+  return el(`<div class="avatars">${participants().map((pid) => {
+    const sw = S.swipes[pid] || {}, n = (sw.likes?.length || 0) + (sw.passes?.length || 0);
+    return `<div class="av${sw.done ? " done" : ""}"><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
+      <small>${esc(nameOf(pid))}</small><em>${sw.done ? "Done" : `${n}/${total}`}</em></div>`;
+  }).join("")}</div>`);
 }
 async function invite(scope) {
   const url = inviteUrl(S.code);
@@ -962,13 +1172,13 @@ function viewWaiting() {
   const minYes = Math.min(Math.max(stored ?? defaultBar(n), 1), Math.max(n, 1));
   const ids = qualifying(minYes);
 
-  const root = el(`<div class="app" style="padding:0">
-    <div><div class="eyebrow">Round 1 · ${doneCount} of ${n} done swiping</div>
-    <h2 style="font-size:28px;margin-top:4px">${n < 2 ? "Now invite your people" : allDone ? "Everyone's finished" : "Waiting on the others"}</h2></div>
+  const pending = ppl.filter((u) => u !== S.me && !S.swipes[u]?.done).map(nameOf);
+  const title = n < 2 ? "Invite your people" : allDone ? "Everyone's done" : pending.length === 1 ? `Waiting on ${pending[0]}` : `Waiting on ${pending.length} people`;
+  const root = el(`<div class="app waiting">
+    <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p></div>
   </div>`);
+  if (n >= 2) root.append(avatarRow());
   root.append(inviteBlock());
-  const ppanel = el(`<section class="panel"><div class="eyebrow">Who's swiping (${n})</div></section>`);
-  ppanel.append(peopleBlock("swipe")); root.append(ppanel);
 
   const mp = el(`<section class="panel"></section>`);
   if (n >= 2) {
