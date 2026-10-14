@@ -1,8 +1,8 @@
 // POST /api/action  { code, playerId, name, type, ... }
-//   type "swipe": { likes, passes, done }  saves this player's swipes; when everyone is done, ranking starts on its own
+//   type "swipe": { likes, passes, done }  saves this player's swipes; swiping stays open until the host closes it
 //   type "rank":  { order }                 saves this player's ranking
 //   type "bar":   { minYes }                host only: how many yeses make a match
-//   type "phase": { minYes }                host only: start ranking now, without waiting for everyone
+//   type "phase": { minYes }                host only: close swiping and start ranking for everyone
 //   type "close": {}                        host only: ends ranking so the result is final
 //   type "more":  {}                        host only: deal 10 more cards (same search, new places)
 //   type "nudge": {}                        anyone: remind people still swiping (push where possible)
@@ -98,25 +98,22 @@ export default async function handler(req, res) {
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
       }
-      // The last person to finish starts the ranking round for everyone. A lone swiper waits for friends.
+      // Swiping stays open until the host closes it, however many people have the link.
+      // When everyone who's joined so far is done, the host gets a nudge to close it (once per head count).
       if (entry.done && deck.phase === "swiping") {
         const swipes = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:swipes`)));
-        if (swipes.length >= 2 && swipes.every((s) => s.done)) {
-          const n = swipes.length, bar = Math.min(deck.minYes ?? defaultBar(n), n);
-          // Too few real matches (most of the group said yes)? If more cards can be dealt, let the host choose.
-          if (canDeal(deck) && qualifying(deck, swipes, Math.min(bar, Math.floor(n / 2) + 1)).length < 3) {
-            if (!deck.needsMore) {
-              await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, needsMore: true }), "KEEPTTL");
-              if (deck.hostId) await pushToPlayers([deck.hostId], { title: "Only a few matches", body: "Deal 10 more cards, or rank what you have.", code });
-            }
-            return send(res, 200, { ok: true, phase: "swiping", needsMore: true });
+        const n = swipes.length;
+        if (n >= 2 && swipes.every((s) => s.done) && deck.doneNotified !== n) {
+          const bar = Math.min(deck.minYes ?? defaultBar(n), n);
+          // Too few real matches (most of the group said yes)? The host is offered more cards.
+          const few = canDeal(deck) && qualifying(deck, swipes, Math.min(bar, Math.floor(n / 2) + 1)).length < 3;
+          await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, needsMore: few, doneNotified: n }), "KEEPTTL");
+          if (deck.hostId && deck.hostId !== playerId) {
+            await pushToPlayers([deck.hostId], few
+              ? { title: "Everyone's done swiping", body: "Only a few matches. Deal 10 more cards, or close swiping and rank.", code }
+              : { title: "Everyone's done swiping", body: "Close swiping when you're ready, and ranking starts for everyone.", code });
           }
-          const matches = await startRanking(code, deck, swipes, bar, { relax: true });
-          if (matches) {
-            if (matches.length === 1) await announceWinner(code, { ...deck, matches }, playerId);
-            else await announceRanking(code, deck, matches.length, playerId);
-            return send(res, 200, { ok: true, phase: "ranking" });
-          }
+          return send(res, 200, { ok: true, phase: "swiping", allDone: true, needsMore: few });
         }
       }
       return send(res, 200, { ok: true, phase: deck.phase });
@@ -182,7 +179,7 @@ export default async function handler(req, res) {
       const swipes = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
       // Everyone has new cards to swipe, so nobody is "done" anymore.
       await pipeline([
-        ["SET", `deck:${code}`, JSON.stringify({ ...deck, places: [...deck.places, ...added], deals: (deck.deals || 0) + 1, needsMore: false }), "KEEPTTL"],
+        ["SET", `deck:${code}`, JSON.stringify({ ...deck, places: [...deck.places, ...added], deals: (deck.deals || 0) + 1, needsMore: false, doneNotified: 0 }), "KEEPTTL"],
         ...Object.entries(swipes).map(([id, sw]) => ["HSET", `deck:${code}:swipes`, id, JSON.stringify({ ...sw, done: false })]),
       ]);
       await bump("deals");

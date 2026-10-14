@@ -1037,9 +1037,11 @@ function viewName() {
   const root = el(`<form class="panel invite-page" novalidate>
     <div><div class="eyebrow">You're invited · deck ${esc(S.pendingCode)}</div>
     <h2 style="font-size:28px;margin-top:6px">${d ? `${esc(pv.host || "A friend")} wants to pick ${what} with you` : "Join this deck"}</h2>
-    ${d ? `<p class="muted" style="margin-top:8px">${d.places.length} places to swipe${pv.people > 1 ? ` · ${pv.people} people in so far` : ""}. Swipe right on places you'd go, left on ones you wouldn't. Places most of you like go to a final vote.</p>` : ""}</div>
+    ${!d ? "" : d.phase === "ranking" ? `<p class="muted" style="margin-top:8px">Swiping is closed. The group narrowed it to ${d.matches.length} places. Put them in your order and everyone's lists combine into one pick.</p>`
+      : d.phase === "done" ? `<p class="muted" style="margin-top:8px">The group already picked. Join to see where you're going.</p>`
+      : `<p class="muted" style="margin-top:8px">${d.places.length} places to swipe${pv.people > 1 ? ` · ${pv.people} people in so far` : ""}. Swipe right on places you'd go, left on ones you wouldn't. When ${esc(pv.host || "they")} closes swiping, everyone ranks the places most of you liked.</p>`}</div>
     ${nameField("nameJoin")}
-    <button class="btn primary block" type="submit">Join and start swiping</button>
+    <button class="btn primary block" type="submit">${d?.phase === "ranking" ? "Join and rank" : d?.phase === "done" ? "See the pick" : "Join and start swiping"}</button>
     <p class="small muted">No account or app needed.</p>
   </form>`);
   root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameJoin", root))) openSession(S.pendingCode); });
@@ -1265,7 +1267,7 @@ function viewWaiting() {
   const ids = qualifying(minYes);
 
   const pending = ppl.filter((u) => u !== S.me && !S.swipes[u]?.done).map(nameOf);
-  const title = n < 2 ? "Invite your people" : allDone ? "Everyone's done" : pending.length === 1 ? `Waiting on ${pending[0]}` : `Waiting on ${pending.length} people`;
+  const title = n < 2 ? "Invite your people" : allDone ? (host ? "Everyone's done swiping" : `Waiting on ${hostName()}`) : pending.length === 1 ? `Waiting on ${pending[0]}` : `Waiting on ${pending.length} people`;
   const root = el(`<div class="app waiting">
     <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p></div>
   </div>`);
@@ -1295,40 +1297,28 @@ function viewWaiting() {
 
   const go = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (host) {
-    const left = n - doneCount;
-    const label = ids.length === 1 ? `Go with ${placeById(ids[0])?.name}` : `Start ranking ${Math.min(ids.length, 10)} places`;
-    const btn = el(`<button class="btn primary block" type="button"></button>`);
-    if (n < 2) {
-      btn.textContent = ids.length ? label : "Nothing to rank yet";
-      btn.disabled = !ids.length;
-      btn.addEventListener("click", () => startRanking(minYes, btn));
-      go.append(btn);
-    } else if (allDone && (S.session.needsMore || canDealMore())) {
-      go.append(el(`<div class="notice">${ids.length ? `Only ${ids.length} match${ids.length === 1 ? "" : "es"} so far.` : "No matches yet."} Deal 10 more places to swipe${ids.length ? ", or rank what you have" : ""}.</div>`));
-      if (canDealMore()) {
-        const more = el(`<button class="btn primary block" type="button">Deal 10 more cards</button>`);
-        more.addEventListener("click", () => dealMore(more)); go.append(more);
-      }
-      const rank = el(`<button class="btn block" type="button">${ids.length ? esc(label) : "Lower the bar to rank"}</button>`);
-      rank.disabled = !ids.length; rank.addEventListener("click", () => startRanking(minYes, rank)); go.append(rank);
-    } else if (allDone) {
-      const anyYes = Object.keys(counts).length > 0;
-      go.append(el(`<div class="notice">${anyYes ? "Getting the ranking round ready…" : "Nobody said yes to anything in this deck. Start a new one with a different category or area."}</div>`));
-    } else {
-      // Ranking starts for everyone when the last person finishes; one straggler shouldn't hold a big group forever.
-      go.append(el(`<div class="notice">Ranking starts for everyone as soon as the last ${left === 1 ? "person finishes" : left + " people finish"}.</div>`));
-      if (ids.length) {
-        const early = el(`<button class="btn ghost block" type="button">${S.confirmEarly ? `Tap again: ${esc(label.toLowerCase())} without them` : "Start without them"}</button>`);
-        early.addEventListener("click", () => {
-          if (!S.confirmEarly) { S.confirmEarly = true; render(); return; }
-          startRanking(minYes, early);
-        });
-        go.append(early);
-        if (S.confirmEarly) go.append(el(`<p class="small muted">Their yeses won't count toward matches, but they can still rank.</p>`));
-      }
+    // Swiping stays open until the host closes it; then the same link is the ranking round for everyone.
+    const left = n - doneCount, few = allDone && n >= 2 && (S.session.needsMore || canDealMore()) && ids.length < 3;
+    const what = ids.length === 1 ? `go with ${placeById(ids[0])?.name}` : `rank ${Math.min(ids.length, 10)} places`;
+    const close = el(`<button class="btn primary block big" type="button"></button>`);
+    if (!ids.length) { close.textContent = n < 2 ? "Nothing to rank yet" : "No matches to rank yet"; close.disabled = true; }
+    else if (!allDone && n >= 2 && S.confirmEarly) close.textContent = `Tap again to close: ${left} still swiping`;
+    else close.textContent = `Close swiping and ${what}`;
+    close.addEventListener("click", () => {
+      if (!allDone && n >= 2 && !S.confirmEarly) { S.confirmEarly = true; render(); return; }
+      startRanking(minYes, close);
+    });
+    const block = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
+    if (few) {
+      block.append(el(`<div class="notice">${ids.length ? `Only ${ids.length} match${ids.length === 1 ? "" : "es"} so far.` : "No matches yet."} Deal 10 more places to swipe${ids.length ? ", or close swiping and rank what you have" : ""}.</div>`));
+      if (canDealMore()) { const more = el(`<button class="btn primary block" type="button">Deal 10 more cards</button>`); more.addEventListener("click", () => dealMore(more)); block.append(more); close.classList.remove("primary"); }
     }
+    block.append(close);
+    block.append(el(`<p class="small muted">${n < 2 ? "Swiping stays open until you close it, so send the link first." : allDone ? "Everyone who's joined is done. More people can still join until you close swiping." : `${left} ${left === 1 ? "person is" : "people are"} still swiping. Swiping stays open until you close it.`} After that, the same link opens the ranking round for everyone.</p>`));
+    // The host's one big decision sits right under who's done.
+    root.insertBefore(block, $(".invite", root));
   } else {
-    go.append(el(`<div class="notice">${S.session.needsMore ? `Only a few matches. ${esc(hostName())} can deal more cards or start ranking.` : allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
+    go.append(el(`<div class="notice">${allDone && !Object.keys(counts).length ? `Nobody's said yes to anything yet. ${esc(hostName())} can deal more cards.` : `Ranking starts when ${esc(hostName())} closes swiping. This page updates on its own.`}</div>`));
   }
   if (!allDone && n >= 2 && S.mine.done) {
     const nudge = el(`<button class="btn block" type="button">Nudge the others</button>`);
