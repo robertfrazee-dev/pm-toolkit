@@ -95,8 +95,10 @@ async function createFromSaved(req, res, b) {
   const pts = places.filter((p) => p.lat != null);
   const center = pts.length ? { latitude: pts.reduce((a, p) => a + p.lat, 0) / pts.length, longitude: pts.reduce((a, p) => a + p.lng, 0) / pts.length } : null;
   await bump("decks_saved");
+  // The same kind of deck can come from the hot list; it's labeled for where it came from.
+  const hot = b.source === "hot", near = text(b.area, 60);
   return saveDeck(res, {
-    category: "saved", mood: "", label: "Our saved places", area: "your saved list", radius: 0, center, places,
+    category: "saved", mood: "", label: hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: hot ? "the hot list" : "your saved list", radius: 0, center, places,
     phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   });
 }

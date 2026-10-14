@@ -9,6 +9,7 @@
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
 import { findPlaces, shape } from "./_places.js";
+import { recordPlaces, swipeChanges } from "./_hot.js";
 
 const MAX_CARDS = 40, MAX_DEALS = 2, DEAL = 10;
 const canDeal = (deck) => !!deck.search && (deck.deals || 0) < MAX_DEALS && deck.places.length < MAX_CARDS;
@@ -41,6 +42,12 @@ async function announceWinner(code, deck, exceptId) {
   await pushToPlayers(others, { title: "It's decided", body: `You're going to ${top.name}.`, code });
 }
 
+// Counts the winner toward the place's lifetime picks and its area's hot list.
+async function recordWinner(code, deck) {
+  const ranks = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:ranks`)));
+  await recordPlaces(deck, [{ place: winnerOf(deck, ranks), field: "win", n: 1 }]);
+}
+
 async function announceRanking(code, deck, count, exceptId) {
   const others = (await deckPlayers(code)).filter((id) => id !== exceptId);
   await pushToPlayers(others, { title: "Time to rank", body: `${count} place${count === 1 ? "" : "s"} made the cut ${deck.category === "saved" ? "from your saved places" : `for ${deck.label.toLowerCase()} near ${deck.area}`}. Put them in order.`, code });
@@ -57,6 +64,8 @@ async function startRanking(code, deck, swipes, bar, { relax }) {
   const single = matches.length === 1;
   await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: single ? "done" : "ranking", needsMore: false, matches, minYes: bar, voters, rankingAt: Date.now(), announced: single || deck.announced }), "KEEPTTL");
   await bump(single ? "winners" : "ranking_started");
+  await recordPlaces(deck, matches.map((id) => ({ place: deck.places.find((p) => p.id === id), field: "match", n: 1 })));
+  if (single) await recordWinner(code, { ...deck, matches });
   return matches;
 }
 
@@ -82,8 +91,10 @@ export default async function handler(req, res) {
       const likes = cleanIds(b.likes, valid);
       const passes = cleanIds(b.passes, valid).filter((id) => !likes.includes(id));
       const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
+      const before = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1) await bump("joins");
+      await recordPlaces(deck, swipeChanges(deck, before, playerId, likes, passes));
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
       }
@@ -124,6 +135,7 @@ export default async function handler(req, res) {
         if (players.every((id) => ranked.includes(id))) {
           await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, announced: true }), "KEEPTTL");
           await bump("winners");
+          await recordWinner(code, deck);
           await announceWinner(code, deck, playerId);
         }
       }
@@ -152,7 +164,7 @@ export default async function handler(req, res) {
       if (!isHost) return send(res, 403, { error: "Only the person who started this deck can close voting." });
       if (deck.phase === "ranking") {
         await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: Date.now(), announced: true }), "KEEPTTL");
-        if (!deck.announced) { await bump("winners"); await announceWinner(code, deck, playerId); }
+        if (!deck.announced) { await bump("winners"); await recordWinner(code, deck); await announceWinner(code, deck, playerId); }
       }
       return send(res, 200, { ok: true });
     }

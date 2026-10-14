@@ -15,6 +15,7 @@ Decks expire after a week.
 - `index.html`: the whole front end. Plain HTML, CSS and JavaScript, no build step.
 - `api/deck.js`: creates a deck with Google Places Text Search and returns a deck with everyone's swipes and rankings.
 - `api/action.js`: saves swipes and rankings, and starts the ranking round.
+- `api/hot.js` and `api/_hot.js`: "Hot on Matchbook". Every swipe, match and win is counted per place (by Google place ID, the one piece of Google data that may be stored), plus monthly points per ~2 km square for each area's hot list. A place only shows stats once it has `HOT_MIN_SWIPES` swipes (default 20) from `HOT_MIN_GROUPS` groups (default 3). The area list looks up names fresh from Google each time (up to 10 lookups per view, capped by `HOT_DAILY_LIMIT` views a day, default 200).
 - `api/photo.js`: sends place photos without exposing the API key. Vercel caches each photo for a day.
 - Storage is Upstash Redis through its REST API, so there are no npm packages to install.
 - Friends' screens refresh every 3 seconds while a deck is open.
