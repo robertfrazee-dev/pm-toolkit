@@ -80,9 +80,10 @@ async function create(req, res) {
   const b = body(req);
   const radius = Math.min(Math.max(Number(b.radiusMi) || 3, 0.5), 25);
   const count = Math.min(Math.max(Math.round(Number(b.count) || 15), 5), 40);
-  const cat = CATEGORIES[b.category] ? b.category : "custom";
-  const custom = String(b.custom || "").trim().slice(0, 80);
-  if (cat === "custom" && !custom) return send(res, 400, { error: "Type what kind of place you're looking for." });
+  const cat = CATEGORIES[b.category] ? b.category : "any";
+  // A free-text mood ("cozy Italian, not too loud") narrows the category, or is the whole search with "Anything".
+  const mood = String(b.mood ?? b.custom ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (cat === "any" && !mood) return send(res, 400, { error: "Type what you're in the mood for, or pick a kind of place." });
 
   if (!(await allow(`rl:create:${clientIp(req)}`, 20, 3600))) {
     return send(res, 429, { error: "Too many new decks from this connection. Try again in an hour." });
@@ -105,7 +106,8 @@ async function create(req, res) {
     areaLabel = area;
   }
 
-  const query = { textQuery: cat === "custom" ? custom : CATEGORIES[cat].query, pageSize: 20, locationRestriction: { rectangle: box(center, radius) } };
+  const textQuery = cat === "any" ? mood : mood ? `${mood} ${CATEGORIES[cat].query}` : CATEGORIES[cat].query;
+  const query = { textQuery, pageSize: 20, locationRestriction: { rectangle: box(center, radius) } };
   if (b.openNow) query.openNow = true;
   const maxPrice = Math.round(Number(b.maxPrice) || 0);
   if (maxPrice >= 1 && maxPrice <= 4) query.priceLevels = PRICE_LEVELS.slice(0, maxPrice);
@@ -128,7 +130,7 @@ async function create(req, res) {
 
   const places = kept.slice(0, count).map((p, i) => shape(p, i, center));
   const deck = {
-    category: cat, label: cat === "custom" ? custom : CATEGORIES[cat].label,
+    category: cat, mood, label: mood ? mood.charAt(0).toUpperCase() + mood.slice(1) : CATEGORIES[cat].label,
     area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(),
     hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
