@@ -228,9 +228,9 @@ a { color: inherit; }
 
 <script>
 const CATS = [
-  { id: "bars", label: "Bars" }, { id: "restaurants", label: "Restaurants" }, { id: "coffee", label: "Coffee & brunch" },
+  { id: "any", label: "Anything" }, { id: "bars", label: "Bars" }, { id: "restaurants", label: "Restaurants" }, { id: "coffee", label: "Coffee & brunch" },
   { id: "activities", label: "Activities" }, { id: "sights", label: "Sights & tourism" }, { id: "outdoors", label: "Outdoors" },
-  { id: "music", label: "Live music" }, { id: "dessert", label: "Dessert" }, { id: "custom", label: "Something else" },
+  { id: "music", label: "Live music" }, { id: "dessert", label: "Dessert" },
 ];
 const COVERS = ["cov1", "cov2", "cov3", "cov4", "cov5"];
 const ICON = {
@@ -260,7 +260,7 @@ const S = {
   me: playerId(), name: store.get("mb.name") || "",
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
-  form: { cat: "bars", custom: "", area: "", lat: null, lng: null, radius: 3, count: 20, openNow: false, maxPrice: 0 },
+  form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 20, openNow: false, maxPrice: 0 },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false,
 };
 
@@ -392,9 +392,10 @@ function viewHome() {
   const form = el(`<form class="panel" id="newForm" novalidate>
     <div class="eyebrow">New deck</div>
     ${nameField("nameNew")}
-    <div class="field"><span class="label" id="catLbl">What are you deciding on?</span>
+    <div class="field"><label for="mood">What are you in the mood for? <span class="muted">(optional)</span></label>
+      <input class="input" id="mood" maxlength="80" autocomplete="off" placeholder="Cozy Italian, rooftop with a view, cheap dive…" value="${esc(f.mood)}"></div>
+    <div class="field"><span class="label" id="catLbl">What kind of place?</span>
       <div class="chips" role="group" aria-labelledby="catLbl">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>
-      <input class="input" id="customCat" maxlength="80" placeholder="e.g. rooftop patios, taco trucks, day hikes" value="${esc(f.custom)}" ${f.cat === "custom" ? "" : "hidden"}>
     </div>
     <div class="field"><label for="area">Where?</label>
       <div class="area-row"><input class="input" id="area" placeholder="City, neighborhood or ZIP" value="${esc(f.lat != null ? "Current location" : f.area)}" autocomplete="off">
@@ -414,7 +415,7 @@ function viewHome() {
   const pressOnly = (attr, btn) => form.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute("aria-pressed", b === btn));
   form.addEventListener("click", (e) => {
     const c = e.target.closest("[data-cat]"), n = e.target.closest("[data-count]"), p = e.target.closest("[data-price]");
-    if (c) { f.cat = c.dataset.cat; pressOnly("data-cat", c); $("#customCat", form).hidden = f.cat !== "custom"; if (f.cat === "custom") $("#customCat", form).focus(); }
+    if (c) { f.cat = c.dataset.cat; pressOnly("data-cat", c); if (f.cat === "any" && !f.mood.trim()) $("#mood", form).focus(); }
     if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); }
     if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); }
   });
@@ -422,7 +423,7 @@ function viewHome() {
     const t = e.target;
     if (t.id === "radius") { f.radius = +t.value; $("#radiusVal", form).textContent = f.radius + " mi"; }
     if (t.id === "area") { f.area = t.value; f.lat = f.lng = null; }
-    if (t.id === "customCat") f.custom = t.value;
+    if (t.id === "mood") f.mood = t.value;
     if (t.id === "openNow") f.openNow = t.checked;
   });
   $("#locBtn", form).addEventListener("click", () => {
@@ -474,7 +475,8 @@ function viewName() {
 
 function viewLoading() {
   const f = S.form;
-  const what = f.cat === "custom" ? f.custom : CATS.find((c) => c.id === f.cat).label.toLowerCase();
+  const type = CATS.find((c) => c.id === f.cat);
+  const what = f.mood.trim() ? (f.cat === "any" ? f.mood.trim() : `${f.mood.trim()} ${type.label.toLowerCase()}`) : f.cat === "any" ? "places" : type.label.toLowerCase();
   return el(`<section class="loading"><div class="flame" aria-hidden="true"></div>
     <h2 style="font-size:24px">Finding ${esc(what)} within ${f.radius} mi${f.lat != null ? " of you" : " of " + esc(f.area)}</h2>
     <p class="muted">Asking Google Maps. This takes a few seconds.</p></section>`);
@@ -863,12 +865,12 @@ function viewResults() {
 // ---------- flows ----------
 async function createDeck() {
   const f = S.form; S.error = "";
-  if (f.cat === "custom" && !f.custom.trim()) { S.error = "Type what kind of place you're looking for."; return render(); }
+  if (f.cat === "any" && !f.mood.trim()) { S.error = "Type what you're in the mood for, or pick a kind of place."; return render(); }
   if (f.lat == null && !f.area.trim()) { S.error = "Add a city, neighborhood or ZIP code, or tap Near me."; return render(); }
   setView("loading");
   try {
     const { code } = await api("/api/deck", {
-      category: f.cat, custom: f.custom, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
+      category: f.cat, mood: f.mood, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
       playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice,
     });
     openSession(code);
