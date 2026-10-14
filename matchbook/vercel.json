@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/j/:code", "destination": "/index.html" },
+    { "source": "/.well-known/apple-app-site-association", "destination": "/api/aasa" }
+  ]
+}

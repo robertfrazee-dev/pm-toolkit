@@ -1,0 +1,16 @@
+{
+  "appId": "com.robertfrazee.matchbook",
+  "appName": "Matchbook",
+  "webDir": "www",
+  "server": {
+    "url": "https://pm-toolkit-matchbook.vercel.app",
+    "allowNavigation": ["pm-toolkit-matchbook.vercel.app"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#E9EDF2"
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["banner", "sound", "list"] }
+  }
+}

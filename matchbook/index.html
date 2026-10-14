@@ -286,6 +286,52 @@ async function api(path, data) {
   return j;
 }
 
+// ---------- iPhone app (Capacitor) ----------
+// Inside the App Store app, Capacitor injects window.Capacitor with native plugins; on the web these are no-ops.
+const SITE = "https://pm-toolkit-matchbook.vercel.app";
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const Plug = NATIVE ? window.Capacitor.Plugins : {};
+function haptic(kind) {
+  try {
+    if (NATIVE) {
+      if (kind === "match" || kind === "win") Plug.Haptics?.notification({ type: "SUCCESS" });
+      else Plug.Haptics?.impact({ style: kind === "medium" ? "MEDIUM" : "LIGHT" });
+    } else if (navigator.vibrate) navigator.vibrate(kind === "match" || kind === "win" ? [15, 40, 15] : 8);
+  } catch {}
+}
+const inviteUrl = (code) => `${NATIVE ? SITE : location.origin}/j/${code}`;
+const codeFromUrl = (url) => (String(url).match(/\/j\/([A-Za-z0-9]{5})/) || String(url).match(/#([A-Za-z0-9]{5})$/) || [])[1];
+
+const pushOn = () => store.get("mb.push") === "on";
+async function enablePush() {
+  if (!NATIVE || !Plug.PushNotifications) return;
+  try {
+    let perm = await Plug.PushNotifications.checkPermissions();
+    if (perm.receive !== "granted") perm = await Plug.PushNotifications.requestPermissions();
+    if (perm.receive !== "granted") { toast("Notifications are off. You can turn them on in Settings → Matchbook."); return; }
+    await Plug.PushNotifications.register(); // the token arrives in the "registration" listener
+  } catch { toast("Couldn't turn on notifications."); }
+}
+if (NATIVE) {
+  Plug.PushNotifications?.addListener("registration", async ({ value }) => {
+    try { await api("/api/push", { playerId: S.me, token: value }); store.set("mb.push", "on"); toast("Notifications on"); render(); }
+    catch (e) { toast(e.message); }
+  });
+  // Tapping a notification or an invite link opens that deck.
+  Plug.PushNotifications?.addListener("pushNotificationActionPerformed", ({ notification }) => {
+    const code = notification?.data?.code; if (code) openSession(code);
+  });
+  Plug.App?.addListener("appUrlOpen", ({ url }) => { const code = codeFromUrl(url); if (code) openSession(code); });
+  // Keep the token fresh on each launch once someone has opted in.
+  if (pushOn()) Plug.PushNotifications?.register().catch(() => {});
+}
+function pushPrompt(text) {
+  if (!NATIVE || pushOn()) return null;
+  const b = el(`<button class="btn block" type="button">${esc(text)}</button>`);
+  b.addEventListener("click", enablePush);
+  return b;
+}
+
 // ---------- recent decks (this device only) ----------
 function recents() { try { return JSON.parse(store.get("mb.recent") || "[]"); } catch { return []; } }
 function remember(d) {
@@ -411,7 +457,7 @@ function viewHome() {
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
   }
-  root.append(el(`<p class="attrib">Places, photos and ratings from Google Maps.</p>`));
+  root.append(el(`<p class="attrib">Places, photos and ratings from Google Maps · <a href="/privacy.html" style="color:inherit">Privacy</a></p>`));
   return root;
 }
 
@@ -473,7 +519,7 @@ function viewSwipe() {
       <button class="round no" type="button" id="passBtn" aria-label="Pass">${ICON.x}</button>
       <button class="round yes" type="button" id="likeBtn" aria-label="Like">${ICON.heart}</button>
     </div>
-    <p class="hint">Drag the card, tap the buttons, or use ← and → keys.</p>
+    <p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe the card or tap the buttons." : "Drag the card, tap the buttons, or use ← and → keys."}</p>
   </div>`);
   const stack = $("#stack", root);
   if (left[1]) stack.append(el(cardHtml(left[1], "behind")));
@@ -511,6 +557,7 @@ function flyTop(dir) { const c = $("#stack .card:not(.behind)"); if (c && !anima
 function fly(card, dir, dy) {
   animating = true;
   $(dir > 0 ? ".stamp.yes" : ".stamp.no", card).style.opacity = 1;
+  haptic(dir > 0 ? "medium" : "light");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   card.style.transition = reduce ? "none" : "transform .32s ease-in, opacity .32s";
   card.style.transform = `translate(${dir * (window.innerWidth + 200)}px, ${dy * 0.4 + 40}px) rotate(${dir * 28}deg)`;
@@ -528,6 +575,7 @@ function decide(id, liked) {
   if (liked) m.likes = [...m.likes, id]; else m.passes = [...m.passes, id];
   if (liked) {
     const others = Object.entries(S.swipes).filter(([pid, s]) => pid !== S.me && (s.likes || []).includes(id)).map(([pid]) => nameOf(pid));
+    if (others.length) haptic("match");
     if (others.length) toast(others.length <= 2 ? `${others.join(" & ")} said yes too` : `You and ${others.length} others said yes`, "match");
   }
   m.done = remaining().length === 0;
@@ -559,9 +607,12 @@ function inviteBlock() {
   return b;
 }
 async function invite(scope) {
-  const url = `${location.origin}/#${S.code}`;
+  const url = inviteUrl(S.code);
   const where = S.session.area === "you" ? "nearby" : "near " + S.session.area;
   const text = `Help me pick ${S.session.label.toLowerCase()} ${where}! Swipe with me:`;
+  if (NATIVE && Plug.Share) {
+    try { await Plug.Share.share({ title: "Matchbook", text, url, dialogTitle: "Invite to Matchbook" }); return; } catch { return; }
+  }
   if (navigator.share) {
     try { await navigator.share({ title: "Matchbook", text, url }); return; } catch (e) { if (e?.name === "AbortError") return; }
   }
@@ -668,6 +719,8 @@ function viewWaiting() {
   } else {
     go.append(el(`<div class="notice">${allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
   }
+  const notify = pushPrompt("Notify me when it's time to rank");
+  if (notify) go.append(notify);
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`);
   again.addEventListener("click", leave);
   go.append(again);
@@ -710,7 +763,7 @@ function viewRank() {
     const b = e.target.closest("[data-mv]"); if (!b) return;
     const id = b.closest(".mitem").dataset.id, i = S.rankOrder.indexOf(id), j = i + +b.dataset.mv;
     if (j < 0 || j >= S.rankOrder.length) return;
-    [S.rankOrder[i], S.rankOrder[j]] = [S.rankOrder[j], S.rankOrder[i]]; draw();
+    [S.rankOrder[i], S.rankOrder[j]] = [S.rankOrder[j], S.rankOrder[i]]; draw(); haptic("light");
     list.querySelector(`[data-id="${CSS.escape(id)}"] [data-mv="${b.dataset.mv}"]`)?.focus();
   });
   let drag = null;
@@ -729,7 +782,7 @@ function viewRank() {
     if (!placed && list.lastElementChild !== drag.item) list.append(drag.item);
   });
   const drop = () => {
-    if (!drag) return; drag.item.classList.remove("lifted"); drag = null;
+    if (!drag) return; drag.item.classList.remove("lifted"); drag = null; haptic("light");
     S.rankOrder = [...list.children].map((c) => c.dataset.id); draw();
   };
   list.addEventListener("pointerup", drop); list.addEventListener("pointercancel", drop);
@@ -762,6 +815,7 @@ function viewResults() {
   const { ranked, pts, per } = tally();
   const top = placeById(ranked[0]);
   const final = S.session.phase === "done" || (waiting.length === 0 && rankers.length > 0);
+  if (final && S.celebrated !== S.code) { S.celebrated = S.code; haptic("win"); }
   const tied = ranked.slice(1).filter((id) => pts[id] === pts[ranked[0]]).map((id) => placeById(id)?.name);
   const waitingText = waiting.length <= 3 ? waiting.map(nameOf).join(", ") : `${waiting.slice(0, 2).map(nameOf).join(", ")} and ${waiting.length - 2} more`;
   const root = el(`<div class="app" style="padding:0">
@@ -796,6 +850,7 @@ function viewResults() {
     });
     row.append(close);
   }
+  if (!final) { const notify = pushPrompt("Notify me when the winner is picked"); if (notify) row.append(notify); }
   if (S.session.phase === "ranking") {
     const edit = el(`<button class="btn block" type="button">Change my ranking</button>`); edit.addEventListener("click", () => setView("rank"));
     row.append(edit);
@@ -824,7 +879,7 @@ function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling();
   Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
-  try { history.replaceState(null, "", location.pathname); } catch {}
+  try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
 
@@ -854,7 +909,7 @@ async function openSession(raw) {
   if (!S.name) { S.pendingCode = code; return setView("name"); }
   stopPolling();
   Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, mine: { likes: [], passes: [], done: false }, error: "" });
-  try { history.replaceState(null, "", "#" + code); } catch {}
+  try { history.replaceState(null, "", "/#" + code); } catch {}
   let r;
   try { r = await api("/api/deck?code=" + code); }
   catch (e) { S.error = e.message; S.code = null; return setView("missing"); }
@@ -873,8 +928,8 @@ $("#homeBtn").addEventListener("click", () => { if (S.view !== "loading") leave(
 $("#codePill").addEventListener("click", () => { if (S.session) invite(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 
-const fromHash = location.hash.slice(1);
-if (/^[A-Za-z0-9]{5}$/.test(fromHash)) openSession(fromHash); else render();
+const fromLink = codeFromUrl(location.pathname) || codeFromUrl(location.hash);
+if (fromLink) openSession(fromLink); else render();
 </script>
 </body>
 </html>
