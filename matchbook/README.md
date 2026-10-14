@@ -16,6 +16,7 @@ Decks expire after a week.
 - `api/deck.js`: creates a deck with Google Places Text Search and returns a deck with everyone's swipes and rankings.
 - `api/action.js`: saves swipes and rankings, and starts the ranking round.
 - `api/hot.js` and `api/_hot.js`: "Hot on Matchbook". Every swipe, match and win is counted per place (by Google place ID, the one piece of Google data that may be stored), plus monthly points per ~2 km square for each area's hot list. A place only shows stats once it has `HOT_MIN_SWIPES` swipes (default 20) from `HOT_MIN_GROUPS` groups (default 3). The area list looks up names fresh from Google each time (up to 10 lookups per view, capped by `HOT_DAILY_LIMIT` views a day, default 200).
+- `api/market.js` (with `_market.js`, `_stripe.js`, `_auth.js`): group deals. Venues sign up at `/venue.html`, list offers (bundle, price per person, group size, weekly times, groups per time) and boost them; you approve venues at `/admin.html`. Groups book a time and each person pays their share from the booking link (`/b/ID`). Cards are only authorized when each person pays and are captured once every share is in; if the group doesn't fill by the deadline (2 hours before, at most 48 hours after booking) the holds are released and nobody is charged. Matchbook's cut (`MATCHBOOK_FEE_PERCENT`, default 10) is taken automatically through Stripe Connect. Boosted offers (`BOOST_DAILY_CENTS`, default 500) show as sponsored cards every 8 swipes nearby. One route handles all of it to stay within Vercel's function limit.
 - `api/photo.js`: sends place photos without exposing the API key. Vercel caches each photo for a day.
 - Storage is Upstash Redis through its REST API, so there are no npm packages to install.
 - Friends' screens refresh every 3 seconds while a deck is open.
@@ -74,3 +75,16 @@ Open `/stats.html` on your site and enter your stats key to see decks started, p
 - At most 300 Google-backed decks and 5,000 photos per day across everyone. Change them with `DAILY_DECK_LIMIT` and `DAILY_PHOTO_LIMIT` in Vercel. Past the photo limit, cards show without photos. Past the deck limit, people see a "try again tomorrow" message; saved-places decks still work.
 - Up to 40 cards per deck and a radius of up to 25 miles.
 - Anyone with a deck's link can swipe on it. Codes are random, but don't post a link publicly.
+
+## Group deals setup
+
+Group deals need these in Vercel (Settings → Environment Variables), then a redeploy:
+
+- `STRIPE_SECRET_KEY`: from the Stripe dashboard (Developers → API keys). Use the test key (`sk_test_...`) first.
+- `STRIPE_WEBHOOK_SECRET`: in Stripe, Developers → Webhooks → Add endpoint `https://YOUR-SITE/api/market?op=stripe` with the events `checkout.session.completed`, `checkout.session.expired` and `account.updated` (tick "Listen to events on Connected accounts" too). Copy its signing secret.
+- `ADMIN_KEY`: any long random password; it opens `/admin.html` to approve venues.
+- `CRON_SECRET`: any long random string; Vercel's daily job uses it to close bookings that ran out of time.
+- Stripe Connect has to be turned on in your Stripe account (Connect → Get started, "Platform or marketplace").
+- Optional: `MATCHBOOK_FEE_PERCENT`, `BOOST_DAILY_CENTS`, `SITE_URL`.
+
+Without `STRIPE_SECRET_KEY`, venues can still sign up and create offers; booking shows "opens soon".
