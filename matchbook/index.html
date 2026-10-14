@@ -357,7 +357,7 @@ const EATS = /restaurant|bistro|brasserie|steak|sushi|trattoria|osteria|grill|di
 const DOES = /museum|attraction|tour|gallery|zoo|aquarium|landmark|amusement|bowling|escape|arcade|observation|cruise|historical|monument|theater|theatre|karaoke|golf|climbing|axe|go-kart|mini golf/i;
 const inNyc = (c) => !!c && c.latitude > 40.47 && c.latitude < 40.93 && c.longitude > -74.28 && c.longitude < -73.68;
 function bookingLinks(p, ctx = S.session) {
-  const b = S.booking || {}, cat = ctx.category, enc = encodeURIComponent, links = [];
+  const b = S.booking || {}, cat = p.cat || ctx.category, enc = encodeURIComponent, links = [];
   const where = [p.name, p.address].filter(Boolean).join(", ");
   if (cat === "restaurants" || EATS.test(p.kind)) {
     let url = `https://www.opentable.com/s?term=${enc(p.name)}` + (p.lat != null ? `&latitude=${p.lat}&longitude=${p.lng}` : "");
@@ -401,7 +401,7 @@ function toggleFav(p, ctx = S.session) {
   if (saved) {
     list.unshift({ key, gid: p.gid || "", name: p.name, kind: p.kind || "", address: p.address || "", price: p.price || "", maps: p.maps || "",
       website: p.website || "", phone: p.phone || "", lat: p.lat ?? null, lng: p.lng ?? null,
-      ctx: { category: ctx?.category || "any", area: ctx?.area || "", center: ctx?.center || null }, at: Date.now() });
+      ctx: { category: p.cat || ctx?.category || "any", area: ctx?.area || "", center: ctx?.center || null }, at: Date.now() });
     haptic("light"); toast("Saved to your places");
   } else { list = list.filter((f) => f.key !== key); toast("Removed from saved places"); }
   store.set("mb.favs", JSON.stringify(list.slice(0, 200)));
@@ -578,8 +578,12 @@ function viewHome() {
   }
   const saved = favs();
   if (saved.length) {
-    root.append(el(`<section class="panel"><div class="row spread"><div class="eyebrow">Saved places</div><span class="count">${saved.length}</span></div>
-      <ul class="mlist">${saved.slice(0, 30).map((f) => placeRow(f, null, f.ctx)).join("")}</ul></section>`));
+    const panel = el(`<section class="panel"><div class="row spread"><div class="eyebrow">Saved places</div><span class="count">${saved.length}</span></div>
+      <ul class="mlist">${saved.slice(0, 30).map((f) => placeRow(f, null, f.ctx)).join("")}</ul>
+      ${saved.length >= 2 ? `<button class="btn primary block" type="button" id="swipeSaved">Swipe these together</button>
+      <p class="small muted">Makes a deck from your ${Math.min(saved.length, 40)} most recent saved places to share like any other.</p>` : `<p class="small muted">Save one more place to swipe on your list with someone.</p>`}</section>`);
+    $("#swipeSaved", panel)?.addEventListener("click", (e) => createSavedDeck(e.currentTarget));
+    root.append(panel);
   }
   root.append(el(`<p class="attrib">Places, photos and ratings from Google Maps · <a href="/privacy.html" style="color:inherit">Privacy</a></p>`));
   return root;
@@ -638,7 +642,7 @@ function cardHtml(p, cls = "") {
 function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length;
   const root = el(`<div class="app" style="padding:0">
-    <div class="eyebrow">${esc(s.label)} · ${s.radius} mi of ${esc(s.area)}${participants().length > 1 ? ` · ${participants().length} swiping` : ""}</div>
+    <div class="eyebrow">${esc(s.label)}${s.category === "saved" ? "" : ` · ${s.radius} mi of ${esc(s.area)}`}${participants().length > 1 ? ` · ${participants().length} swiping` : ""}</div>
     <div class="progress"><div class="bar"><i style="width:${(seen / total) * 100}%"></i></div><span class="count">${Math.min(seen + 1, total)} / ${total}</span></div>
     <div class="stack" id="stack"></div>
     <div class="actions">
@@ -734,8 +738,8 @@ function inviteBlock() {
 }
 async function invite(scope) {
   const url = inviteUrl(S.code);
-  const where = S.session.area === "you" ? "nearby" : "near " + S.session.area;
-  const text = `Help me pick ${S.session.label.toLowerCase()} ${where}! Swipe with me:`;
+  const where = S.session.category === "saved" ? "" : S.session.area === "you" ? " nearby" : " near " + S.session.area;
+  const text = S.session.category === "saved" ? "Help me pick from our saved places! Swipe with me:" : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
   if (NATIVE && Plug.Share) {
     try { await Plug.Share.share({ title: "Matchbook", text, url, dialogTitle: "Invite to Matchbook" }); return; } catch { return; }
   }
@@ -1007,6 +1011,18 @@ async function createDeck() {
     });
     openSession(code);
   } catch (e) { S.error = e.message; setView("home"); }
+}
+
+async function createSavedDeck(btn) {
+  const nameInput = $("#nameNew");
+  if (!S.name && !(nameInput && takeName(nameInput))) { toast("Add your name at the top first."); nameInput?.focus(); return; }
+  if (nameInput?.value.trim()) takeName(nameInput);
+  btn.disabled = true;
+  try {
+    const saved = favs().slice(0, 40).map((f) => ({ ...f, category: f.ctx?.category }));
+    const { code } = await api("/api/deck", { playerId: S.me, saved });
+    openSession(code);
+  } catch (e) { btn.disabled = false; toast(e.message); }
 }
 
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
