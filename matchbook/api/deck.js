@@ -7,7 +7,7 @@ const PLACES = "https://places.googleapis.com/v1/places:searchText";
 const FIELDS = [
   "places.id", "places.displayName", "places.formattedAddress", "places.shortFormattedAddress", "places.location",
   "places.rating", "places.userRatingCount", "places.priceLevel", "places.primaryTypeDisplayName", "places.photos",
-  "places.googleMapsUri", "places.editorialSummary", "places.businessStatus", "places.currentOpeningHours.openNow",
+  "places.googleMapsUri", "places.websiteUri", "places.nationalPhoneNumber", "places.editorialSummary", "places.businessStatus", "places.currentOpeningHours.openNow",
   "nextPageToken",
 ].join(",");
 
@@ -72,6 +72,10 @@ function shape(p, i, center) {
     summary: p.editorialSummary?.text || "",
     openNow: p.currentOpeningHours?.openNow ?? null,
     maps: p.googleMapsUri || "",
+    website: p.websiteUri || "",
+    phone: p.nationalPhoneNumber || "",
+    lat: p.location ? Math.round(p.location.latitude * 1e5) / 1e5 : null,
+    lng: p.location ? Math.round(p.location.longitude * 1e5) / 1e5 : null,
     photo: photo?.name || "",
     photoBy: photo?.authorAttributions?.[0]?.displayName || "",
   };
@@ -147,12 +151,22 @@ async function create(req, res) {
   return send(res, 500, { error: "Couldn't save the deck. Try again." });
 }
 
+// Affiliate IDs are public by nature (they end up in links), so the page gets them with the deck.
+// Leave them unset to send people to the booking sites without a partner tag.
+function bookingConfig() {
+  return {
+    opentableWrap: process.env.OPENTABLE_LINK_TEMPLATE || "", // e.g. an affiliate network link with {url} where the OpenTable URL goes
+    viatorPid: process.env.VIATOR_PID || "",
+    viatorMcid: process.env.VIATOR_MCID || "",
+  };
+}
+
 async function read(req, res) {
   const code = String(req.query?.code || new URL(req.url, "http://x").searchParams.get("code") || "").toUpperCase();
   if (!CODE_RE.test(code)) return send(res, 400, { error: "Deck codes are 5 letters and numbers." });
   const [deck, swipes, ranks] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
   if (!deck) return send(res, 404, { error: `No deck with code ${code}. It may have expired after a week.` });
-  return send(res, 200, { deck: JSON.parse(deck), swipes: hashToObject(swipes), ranks: hashToObject(ranks) });
+  return send(res, 200, { deck: JSON.parse(deck), swipes: hashToObject(swipes), ranks: hashToObject(ranks), booking: bookingConfig() });
 }
 
 export default async function handler(req, res) {

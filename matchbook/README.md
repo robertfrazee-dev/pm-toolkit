@@ -54,6 +54,15 @@ Open the `.vercel.app` address Vercel shows you. Add it to your home screen so i
 
 If something isn't set up, the app says which setting is missing when you try to start a deck.
 
+## Booking buttons and partner IDs
+
+The winner card shows **Reserve a table** (OpenTable) for restaurants, **Get tickets** (Viator) for activities and sights, plus **Ride there** (Uber), **Website** and **Call**. They work as plain links until you add partner IDs in Vercel → Settings → Environment Variables:
+
+- `VIATOR_PID` and `VIATOR_MCID`: from the Viator Partner Program.
+- `OPENTABLE_LINK_TEMPLATE`: your affiliate network's tracking link for OpenTable, with `{url}` where the OpenTable page address goes.
+
+Redeploy after adding them. Taps are counted per month in Redis under `stats:clicks:YYYY-MM`.
+
 ## Limits built in
 
 - 20 new decks per hour from one connection, so a shared link can't burn your Google quota.
