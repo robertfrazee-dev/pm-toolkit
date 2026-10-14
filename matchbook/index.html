@@ -392,6 +392,45 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .sk-img, .sk-body i { background-image: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--surface) 60%, transparent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk-img, .sk-body i { animation: none; } }
+
+/* Night-out plans: a few stops, each its own deck */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: var(--sunk); }
+.seg button { border: 0; background: none; padding: 10px 8px; border-radius: 12px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--soft-shadow); }
+.stops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.stop { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 14px; background: var(--sunk); }
+.stop b { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg); font-size: 14px; }
+.stop span { font-weight: 700; }
+.stop button { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--surface); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.stop button:disabled { opacity: .35; cursor: default; }
+.add-stop { align-items: center; }
+.add-stop .chip { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); }
+.plan-strip { background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ps-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ps-head b { font-family: var(--f-display); font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-head span { color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.plan-strip ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.plan-strip li { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan-strip li::before { content: ""; height: 4px; border-radius: 2px; background: var(--sunk); }
+.plan-strip li.done::before { background: var(--like); }
+.plan-strip li.now::before { background: var(--match); }
+.plan-strip li b { font-size: 13px; display: block; }
+.plan-strip li small { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-strip li.done small { color: var(--ink); font-weight: 600; }
+.date-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.date-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 16px; border: 0; background: var(--sunk); cursor: pointer; }
+.date-opt b { font-size: 15px; }
+.date-opt small { font-size: 12px; color: var(--muted); }
+.date-opt[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.date-opt[aria-pressed="true"] small { color: inherit; opacity: .75; }
+.date-opt.best { box-shadow: inset 0 0 0 2px var(--like); }
+.itin { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.itin li { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; }
+.itin .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--match); color: var(--match-ink); font-weight: 800; font-size: 14px; }
+.itin .t { min-width: 0; }
+.itin .t small { display: block; color: var(--muted); font-size: 13px; font-weight: 600; }
+.itin .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itin a { font-size: 13px; font-weight: 700; color: var(--match); text-decoration: none; }
 </style>
 </head>
 <body>
@@ -445,6 +484,7 @@ const S = {
   mine: { likes: [], passes: [], done: false },
   form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, ...lastForm() },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [], tab: store.get("mb.tab") || "pick", filtersOpen: false, editName: false,
+  mode: store.get("mb.mode") === "night" ? "night" : "one", night: { occasion: "dinner-drinks", stops: ["restaurants", "bars"], title: "", dates: [] }, plan: null, awaitNext: false,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -733,11 +773,142 @@ function feedbackPanel() {
   return panel;
 }
 
+// ---------- night-out plans ----------
+// A plan is a few stops (dinner, then drinks...). Each stop is its own deck; the next one is dealt near the last winner.
+const OCCASIONS = [
+  { id: "dinner-drinks", label: "Dinner & drinks", stops: ["restaurants", "bars"] },
+  { id: "birthday", label: "Birthday", stops: ["restaurants", "bars", "music"] },
+  { id: "bach", label: "Bachelor / bachelorette", stops: ["activities", "restaurants", "bars"] },
+  { id: "date", label: "Date night", stops: ["restaurants", "dessert"] },
+  { id: "team", label: "Team outing", stops: ["activities", "bars"] },
+  { id: "day", label: "Day out", stops: ["coffee", "sights", "restaurants"] },
+];
+const STOP_LABEL = { restaurants: "Dinner", bars: "Drinks", coffee: "Coffee & brunch", activities: "Something fun", sights: "Sightseeing", outdoors: "Outdoors", music: "Live music", dessert: "Dessert" };
+const stopLabel = (cat) => STOP_LABEL[cat] || CATS.find((c) => c.id === cat)?.label || "Stop";
+const fmtDay = (d) => new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const todayIso = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const planHost = () => !S.plan?.hostId || S.plan.hostId === S.me;
+const stopIndex = () => S.session?.plan?.stop ?? 0;
+const nextStopOf = () => S.plan?.stops[stopIndex() + 1] || null;
+// Who could make which night, worked out from everyone's picks.
+function dateTally(P) {
+  const votes = Object.entries(P.votes || {});
+  const who = P.dates.map((_, i) => votes.filter(([, v]) => (v.picks || []).includes(i)).map(([pid, v]) => (pid === S.me ? "You" : v.name || "Someone")));
+  const most = Math.max(0, ...who.map((w) => w.length));
+  return { who, best: most ? who.findIndex((w) => w.length === most) : -1, voters: votes.length };
+}
+
+function planStrip(currentWinner) {
+  const P = S.plan; if (!P) return null;
+  const cur = stopIndex();
+  const when = P.date ? fmtDay(P.date) : P.dates.length > 1 ? "Night TBD" : "";
+  const sub = (s, i) => i === cur && currentWinner ? currentWinner.name : s.winner ? s.winner.name : s.skipped ? "Skipped" : i === cur ? "Picking now" : i < cur ? "Done" : "Up next";
+  const node = el(`<section class="plan-strip" aria-label="The plan"><div class="ps-head"><b></b><span>${esc(when)}</span></div>
+    <ol>${P.stops.map((s, i) => `<li class="${i < cur || (i === cur && currentWinner) ? "done" : i === cur ? "now" : ""}"><b>${esc(s.label)}</b><small>${esc(sub(s, i))}</small></li>`).join("")}</ol></section>`);
+  $(".ps-head b", node).textContent = P.title;
+  return node;
+}
+
+// "Which nights work?" for big groups: everyone taps the nights they can do, the host locks one in.
+function datesPanel() {
+  const P = S.plan; if (!P || P.dates.length < 2) return null;
+  const host = planHost();
+  if (P.date) {
+    if (!host) return null; // the date already shows at the top of the plan
+    const panel = el(`<section class="panel"><div class="row spread"><div><div class="eyebrow">It's on</div><h3 style="font-size:22px;margin-top:2px">${esc(fmtDay(P.date))}</h3></div>
+      ${host ? `<button type="button" class="btn small-btn" data-reopen>Change</button>` : ""}</div></section>`);
+    $("[data-reopen]", panel)?.addEventListener("click", () => lockDate(-1));
+    return panel;
+  }
+  const { who, best, voters } = dateTally(P), mine = P.votes?.[S.me]?.picks || [];
+  const panel = el(`<section class="panel"><div><div class="eyebrow">${voters ? `${voters} ${voters === 1 ? "person has" : "people have"} answered` : "Nobody has answered yet"}</div>
+    <h3 style="font-size:20px;margin-top:2px">Which nights work for you?</h3></div>
+    <div class="date-opts">${P.dates.map((d, i) => `<button type="button" class="date-opt${i === best ? " best" : ""}" data-day="${i}" aria-pressed="${mine.includes(i)}">
+      <b>${esc(fmtDay(d))}</b><small>${who[i].length ? esc(who[i].length <= 2 ? who[i].join(" & ") : `${who[i].length} can make it`) : "No one yet"}</small></button>`).join("")}</div>
+    ${host ? `<button type="button" class="btn primary block" data-lock ${best < 0 ? "disabled" : ""}>${best < 0 ? "Lock in a night once people answer" : `Lock in ${esc(fmtDay(P.dates[best]))}`}</button>`
+      : `<p class="small muted">${esc(nameOfPlanHost())} locks in the night.</p>`}</section>`);
+  panel.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-day]");
+    if (b) {
+      const i = +b.dataset.day, picks = mine.includes(i) ? mine.filter((x) => x !== i) : [...mine, i];
+      P.votes = { ...(P.votes || {}), [S.me]: { name: S.name, picks } }; haptic("light"); render();
+      api("/api/plan", { type: "dates", id: P.id, playerId: S.me, name: S.name, picks }).catch((err) => toast(err.message));
+    }
+    if (e.target.closest("[data-lock]")) lockDate(best);
+  });
+  return panel;
+}
+const nameOfPlanHost = () => S.swipes[S.plan?.hostId]?.name || S.ranks[S.plan?.hostId]?.name || "Whoever started the plan";
+async function lockDate(i) {
+  try {
+    const r = await api("/api/plan", { type: "lock", id: S.plan.id, playerId: S.me, name: S.name, date: i });
+    S.plan = { ...S.plan, date: r.date }; haptic("medium"); if (r.date) toast(`Locked in ${fmtDay(r.date)}`); render();
+  } catch (e) { toast(e.message); }
+}
+
+// Deal the next stop near this stop's winner. Whoever taps first deals it; everyone else gets a button to follow.
+async function nextStop(btn, skip = false) {
+  btn.disabled = true; btn.textContent = "Dealing the next deck…";
+  try {
+    const r = await api("/api/plan", { type: "next", id: S.plan.id, playerId: S.me, name: S.name, skip });
+    if (r.code) { haptic("medium"); return openSession(r.code); }
+    S.awaitNext = true; // someone else is dealing it; follow as soon as it shows up
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "Try again"; toast(e.message);
+  }
+}
+
+function nightStops(finalTop) {
+  const cur = stopIndex();
+  return S.plan.stops.map((s, i) => ({ label: s.label, place: i === cur ? finalTop : s.winner, skipped: s.skipped })).filter((s) => s.place);
+}
+function itinerary(finalTop) {
+  const stops = nightStops(finalTop);
+  return el(`<section class="panel"><div><div class="eyebrow">Your night${S.plan.date ? " · " + esc(fmtDay(S.plan.date)) : ""}</div><h3 style="font-size:22px;margin-top:2px">${esc(S.plan.title)}</h3></div>
+    <ol class="itin">${stops.map((s, i) => `<li><span class="n">${i + 1}</span><span class="t"><small>${esc(s.label)}</small><b>${esc(s.place.name)}</b></span>
+      <a class="maps" data-kind="maps" href="${esc(mapsUrl(s.place))}" target="_blank" rel="noopener">Map</a></li>`).join("")}</ol></section>`);
+}
+async function nightImage(finalTop) {
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d"), css = getComputedStyle(document.documentElement);
+  const bg = css.getPropertyValue("--cov1").trim() || "#1F3A5F", ink = css.getPropertyValue("--cov-ink").trim() || "#FFF7EA", hot = css.getPropertyValue("--sulfur").trim() || "#E9A92E";
+  try { await Promise.all([document.fonts.load('800 96px "Bricolage Grotesque"'), document.fonts.load('700 36px "JetBrains Mono"'), document.fonts.load('600 40px Figtree')]); } catch {}
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  for (let i = 0; i < W; i += 12) { x.fillStyle = i % 24 ? "#5d4a3c" : "#8A7462"; x.fillRect(i, H - 110, 12, 110); }
+  x.textBaseline = "top"; x.fillStyle = ink;
+  const fit = (t, font, max) => { x.font = font; let s = t; while (x.measureText(s).width > max && s.length > 3) s = s.slice(0, -2); return s === t ? t : s.trimEnd() + "…"; };
+  x.font = '700 34px "JetBrains Mono", monospace'; x.fillText((S.plan.date ? fmtDay(S.plan.date) : "THE PLAN").toUpperCase(), 80, 110);
+  x.fillText(fit(S.plan.title, '800 92px "Bricolage Grotesque", sans-serif', W - 160), 80, 170);
+  let y = 330;
+  nightStops(finalTop).forEach((s, i) => {
+    x.fillStyle = hot; x.beginPath(); x.arc(110, y + 38, 30, 0, Math.PI * 2); x.fill();
+    x.fillStyle = bg; x.font = '800 34px "Bricolage Grotesque", sans-serif'; x.textAlign = "center"; x.fillText(String(i + 1), 110, y + 20); x.textAlign = "left";
+    x.fillStyle = ink; x.globalAlpha = .8; x.font = '700 28px "JetBrains Mono", monospace'; x.fillText(s.label.toUpperCase(), 170, y);
+    x.globalAlpha = 1; x.fillText(fit(s.place.name, '800 64px "Bricolage Grotesque", sans-serif', W - 250), 170, y + 36);
+    x.globalAlpha = .8; x.fillText(fit(s.place.address || "", '600 32px Figtree, sans-serif', W - 250), 170, y + 112); x.globalAlpha = 1;
+    y += 200;
+  });
+  x.font = '700 30px "JetBrains Mono", monospace'; x.fillText("PICKED TOGETHER WITH MATCHBOOK", 80, H - 200);
+  return new Promise((ok) => c.toBlob(ok, "image/png"));
+}
+async function shareNight(finalTop, btn) {
+  btn.disabled = true;
+  const text = `${S.plan.title}${S.plan.date ? " · " + fmtDay(S.plan.date) : ""}\n` + nightStops(finalTop).map((s, i) => `${i + 1}. ${s.label}: ${s.place.name} ${mapsUrl(s.place)}`).join("\n");
+  try {
+    const blob = await nightImage(finalTop), file = blob && new File([blob], "matchbook-night.png", { type: "image/png" });
+    if (NATIVE && Plug.Share) await Plug.Share.share({ title: S.plan.title, text });
+    else if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+    else if (navigator.share) await navigator.share({ text });
+    else { await navigator.clipboard.writeText(text); toast("Copied the plan. Paste it in your group chat."); }
+  } catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard?.writeText(text).catch(() => {}); toast("Copied the plan. Paste it in your group chat."); } }
+  finally { btn.disabled = false; }
+}
+
 // ---------- recent decks (this device only) ----------
 function recents() { try { return JSON.parse(store.get("mb.recent") || "[]"); } catch { return []; } }
 function remember(d) {
   const list = recents().filter((x) => x.code !== d.code);
-  list.unshift({ code: d.code, label: d.label, area: d.area, at: d.createdAt });
+  list.unshift({ code: d.code, label: d.planTitle ? `${d.planTitle} · ${d.label}` : d.label, area: d.area, at: d.createdAt });
   store.set("mb.recent", JSON.stringify(list.slice(0, 8)));
 }
 
@@ -772,7 +943,7 @@ function render() {
 }
 
 function nameField(id) {
-  return `<div class="field"><label for="${id}">Your name</label><input class="input" id="${id}" maxlength="30" autocomplete="given-name" placeholder="So your friends know who swiped" value="${esc(S.name)}"></div>`;
+  return `<div class="field"><label for="${id}">Your name</label><input class="input" id="${id}" maxlength="30" autocomplete="given-name" placeholder="So your friends know who swiped" value="${esc(S.nameDraft ?? S.name)}"></div>`;
 }
 function takeName(input) {
   const n = input.value.trim().slice(0, 30);
@@ -817,8 +988,15 @@ function homePick() {
     wrap.append(el(`<div class="greet"><h2>What are we deciding?</h2><p class="muted">Swiping as <b></b> · <button type="button" class="link" id="changeName">Change</button></p></div>`));
     $(".greet b", wrap).textContent = S.name;
   }
+  const night = S.mode === "night", nt = S.night;
+  const seg = el(`<div class="seg" role="group" aria-label="What to plan"><button type="button" data-mode="one" aria-pressed="${!night}">One place</button><button type="button" data-mode="night" aria-pressed="${night}">A night out</button></div>`);
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mode]"); if (!b || b.dataset.mode === S.mode) return;
+    S.mode = b.dataset.mode; store.set("mb.mode", S.mode); S.error = ""; haptic("light"); render();
+  });
+  wrap.append(seg);
   const last = lastForm();
-  if (S.name && (last.mood || last.cat) && (last.area || last.nearMe)) {
+  if (!night && S.name && (last.mood || last.cat) && (last.area || last.nearMe)) {
     const lastWhat = last.mood || CATS.find((c) => c.id === last.cat)?.label || "Places";
     const quick = el(`<button class="quick" type="button"><span>Same as last time</span><b>${esc(lastWhat)} ${last.nearMe ? "near me" : "near " + esc(last.area)}</b><i aria-hidden="true">→</i></button>`);
     quick.addEventListener("click", () => quickStart(last));
@@ -827,10 +1005,10 @@ function homePick() {
   const askName = !S.name || S.editName;
   const form = el(`<form class="composer" id="newForm" novalidate>
     ${askName ? nameField("nameNew") : ""}
-    <div class="field"><label for="mood">What are you in the mood for?</label>
+    ${night ? nightFields() : `<div class="field"><label for="mood">What are you in the mood for?</label>
       <div class="mood-row"><input class="input big" id="mood" maxlength="120" autocomplete="off" placeholder="Wings at a sports bar in Hoboken" value="${esc(f.mood)}">
       <button type="button" class="mood-clear" id="moodClear" aria-label="Clear" ${f.mood ? "" : "hidden"}>×</button></div></div>
-    <div class="chips scroll" role="group" aria-label="Kind of place">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>
+    <div class="chips scroll" role="group" aria-label="Kind of place">${CATS.map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${f.cat === c.id}">${esc(c.label)}</button>`).join("")}</div>`}
     <div class="field"><label for="area">Where?</label>
       <div class="area-row"><input class="input" id="area" placeholder="Neighborhood, city or ZIP" value="${esc(f.lat != null ? "Current location" : f.area)}" autocomplete="off">
       <button class="btn locbtn" type="button" id="locBtn">${ICON.pin} Near me</button></div></div>
@@ -845,7 +1023,7 @@ function homePick() {
         <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 15, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
     </div>
     ${S.error ? `<p class="err">${esc(S.error)}</p>` : ""}
-    <div class="cta-bar"><button class="btn primary block big" type="submit">Find places</button></div>
+    <div class="cta-bar"><button class="btn primary block big" type="submit">${night ? "Plan the night" : "Find places"}</button></div>
   </form>`);
   wrap.append(form);
 
@@ -863,6 +1041,11 @@ function homePick() {
     if (e.target.closest("#moodClear")) { setMood(""); $("#mood", form).focus(); }
     if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); sum(); }
     if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); sum(); }
+    const occ = e.target.closest("[data-occ]"), add = e.target.closest("[data-add]"), rm = e.target.closest("[data-rm]"), rmDate = e.target.closest("[data-rmdate]");
+    if (occ) { const o = OCCASIONS.find((x) => x.id === occ.dataset.occ); Object.assign(nt, { occasion: o.id, stops: [...o.stops] }); haptic("light"); render(); }
+    if (add && nt.stops.length < 4) { nt.stops.push(add.dataset.add); nt.occasion = ""; haptic("light"); render(); }
+    if (rm && nt.stops.length > 2) { nt.stops.splice(+rm.dataset.rm, 1); nt.occasion = ""; render(); }
+    if (rmDate) { nt.dates.splice(+rmDate.dataset.rmdate, 1); render(); }
     if (e.target.closest("#filtersBtn")) {
       S.filtersOpen = !S.filtersOpen; $("#filters", form).hidden = !S.filtersOpen;
       $("#filtersBtn", form).setAttribute("aria-expanded", S.filtersOpen); $("#filtersBtn i", form).textContent = S.filtersOpen ? "−" : "+";
@@ -878,6 +1061,14 @@ function homePick() {
       if (f.cat !== "any" && f.mood.trim()) { f.cat = "any"; pressOnly("data-cat", form.querySelector('[data-cat="any"]')); }
     }
     if (t.id === "openNow") { f.openNow = t.checked; sum(); }
+    if (t.id === "planTitle") nt.title = t.value;
+    if (t.id === "nameNew") S.nameDraft = t.value; // survives the redraws when chips are tapped
+  });
+  form.addEventListener("change", (e) => {
+    // Picking a date adds it straight away (iPhone's date picker has no separate "add" step).
+    if (e.target.id !== "dateIn" || !e.target.value) return;
+    if (!nt.dates.includes(e.target.value) && nt.dates.length < 5) nt.dates = [...nt.dates, e.target.value].sort();
+    render(); setTimeout(() => $("#dateChips")?.scrollIntoView({ block: "nearest" }), 30);
   });
   $("#locBtn", form).addEventListener("click", () => {
     const btn = $("#locBtn", form);
@@ -893,10 +1084,43 @@ function homePick() {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const input = $("#nameNew", form);
-    if (input ? takeName(input) : S.name) { S.editName = false; createDeck(); }
+    if (input ? takeName(input) : S.name) { S.editName = false; night ? createPlan() : createDeck(); }
     else { S.error = "Add your name first."; render(); }
   });
   return wrap;
+}
+
+function nightFields() {
+  const nt = S.night, n = nt.stops.length;
+  const occ = OCCASIONS.find((o) => o.id === nt.occasion);
+  return `<div class="field"><span class="label" id="occLbl">What's the occasion?</span>
+      <div class="chips scroll" role="group" aria-labelledby="occLbl">${OCCASIONS.map((o) => `<button type="button" class="chip" data-occ="${o.id}" aria-pressed="${nt.occasion === o.id}">${esc(o.label)}</button>`).join("")}</div></div>
+    <div class="field"><span class="label">The stops</span>
+      <ol class="stops">${nt.stops.map((c, i) => `<li class="stop"><b>${i + 1}</b><span>${esc(stopLabel(c))}</span><button type="button" data-rm="${i}" aria-label="Remove ${esc(stopLabel(c))}" ${n <= 2 ? "disabled" : ""}>×</button></li>`).join("")}</ol>
+      ${n < 4 ? `<div class="chips scroll add-stop" role="group" aria-label="Add a stop">${CATS.filter((c) => c.id !== "any").map((c) => `<button type="button" class="chip" data-add="${c.id}">+ ${esc(stopLabel(c.id))}</button>`).join("")}</div>` : ""}
+      <p class="small muted">Each stop is its own deck. Once the group picks one, the next deck is dealt within a mile of it.</p></div>
+    <div class="field"><label for="planTitle">Name it <span class="muted">(optional)</span></label>
+      <input class="input" id="planTitle" maxlength="40" autocomplete="off" placeholder="${esc(occ?.id === "birthday" ? "Jake's 30th" : occ?.id === "bach" ? "Sam's last night out" : occ?.id === "team" ? "Team night" : "Friday night")}" value="${esc(nt.title)}"></div>
+    <div class="field"><label for="dateIn">When? <span class="muted">(optional)</span></label>
+      <input class="input" type="date" id="dateIn" min="${todayIso()}" ${nt.dates.length >= 5 ? "disabled" : ""}>
+      ${nt.dates.length ? `<div class="chips" id="dateChips">${nt.dates.map((d, i) => `<button type="button" class="chip" aria-pressed="true" data-rmdate="${i}" aria-label="Remove ${esc(fmtDay(d))}">${esc(fmtDay(d))} ×</button>`).join("")}</div>` : ""}
+      <p class="small muted">${nt.dates.length > 1 ? "Everyone taps the nights they can make. You lock one in." : nt.dates.length ? "Add another night and the group votes on which works." : "Add a few possible nights and the group votes on which works."}</p></div>`;
+}
+
+async function createPlan() {
+  const f = S.form, nt = S.night; S.error = "";
+  if (f.lat == null && !f.area.trim()) { S.error = "Add a city, neighborhood or ZIP code, or tap Near me."; return render(); }
+  S.loadingWhat = stopLabel(nt.stops[0]).toLowerCase();
+  setView("loading");
+  try {
+    const { code } = await api("/api/plan", {
+      type: "create", stops: nt.stops.map((cat) => ({ cat })), title: nt.title.trim() || OCCASIONS.find((o) => o.id === nt.occasion)?.label || "",
+      dates: nt.dates, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
+      playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice,
+    });
+    S.loadingWhat = "";
+    openSession(code);
+  } catch (e) { S.loadingWhat = ""; S.error = e.message; setView("home"); }
 }
 
 function homeDecks() {
@@ -940,7 +1164,8 @@ function homeSaved() {
 }
 
 function viewName() {
-  const pv = S.preview, d = pv?.deck;
+  const pv = S.preview, d = pv?.deck, P = pv?.plan;
+  if (P && d) return viewPlanInvite(pv, d, P);
   const what = !d ? "" : d.category === "saved" ? "from their saved places" : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
   const root = el(`<form class="panel invite-page" novalidate>
     <div><div class="eyebrow">You're invited · deck ${esc(S.pendingCode)}</div>
@@ -955,10 +1180,24 @@ function viewName() {
   return root;
 }
 
+function viewPlanInvite(pv, d, P) {
+  const root = el(`<form class="panel invite-page" novalidate>
+    <div><div class="eyebrow">You're invited${P.date ? " · " + esc(fmtDay(P.date)) : P.dates.length > 1 ? ` · ${P.dates.length} possible nights` : ""}</div>
+    <h2 style="font-size:28px;margin-top:6px">${esc(pv.host || "A friend")} is planning ${esc(P.title)}</h2>
+    <p class="muted" style="margin-top:8px">${esc(P.stops.map((s) => s.label).join(" → "))}. You're picking ${esc(d.label.toLowerCase())}${d.near ? ` near ${esc(d.near)}` : d.area === "you" ? "" : ` near ${esc(d.area)}`}: ${d.places.length} places to swipe${pv.people > 1 ? ` · ${pv.people} people in so far` : ""}.${P.dates.length > 1 && !P.date ? " You'll also say which nights work." : ""}</p></div>
+    ${nameField("nameJoin")}
+    <button class="btn primary block" type="submit">Join and start swiping</button>
+    <p class="small muted">No account or app needed.</p>
+  </form>`);
+  root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameJoin", root))) openSession(S.pendingCode); });
+  setTimeout(() => $("#nameJoin")?.focus(), 50);
+  return root;
+}
+
 function viewLoading() {
   const f = S.form;
   const type = CATS.find((c) => c.id === f.cat);
-  const what = f.mood.trim() ? `“${f.mood.trim()}”` : f.cat === "any" ? "places" : type.label.toLowerCase();
+  const what = S.loadingWhat ? `places for ${S.loadingWhat}` : f.mood.trim() ? `“${f.mood.trim()}”` : f.cat === "any" ? "places" : type.label.toLowerCase();
   return el(`<section class="loading">
     <div class="skeleton" aria-hidden="true"><div class="sk-img"></div><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>
     <h2>Finding ${esc(what)}${f.lat != null ? " near you" : f.area.trim() ? ` near ${esc(f.area)}` : ""}</h2>
@@ -999,7 +1238,8 @@ function cardHtml(p, cls = "") {
 
 function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
-  const where = s.category === "saved" ? "Your saved places" : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  let where = s.category === "saved" ? "Your saved places" : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  if (S.plan) where = `${S.plan.title} · stop ${stopIndex() + 1} of ${S.plan.stops.length}` + (s.near ? ` · near ${s.near}` : "");
   const root = el(`<div class="app swipe-view">
     <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
     <div class="bar" aria-hidden="true"><i style="width:${(seen / total) * 100}%"></i></div>
@@ -1120,7 +1360,8 @@ function avatarRow() {
 async function invite(scope) {
   const url = inviteUrl(S.code);
   const where = S.session.category === "saved" ? "" : S.session.area === "you" ? " nearby" : " near " + S.session.area;
-  const text = S.session.category === "saved" ? "Help me pick from our saved places! Swipe with me:" : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
+  const text = S.plan ? `Help me plan ${S.plan.title}${S.plan.date ? ` (${fmtDay(S.plan.date)})` : ""}: ${S.plan.stops.map((x) => x.label.toLowerCase()).join(", then ")}. Swipe with me:`
+    : S.session.category === "saved" ? "Help me pick from our saved places! Swipe with me:" : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
   if (NATIVE && Plug.Share) {
     try { await Plug.Share.share({ title: "Matchbook", text, url, dialogTitle: "Invite to Matchbook" }); return; } catch { return; }
   }
@@ -1177,8 +1418,10 @@ function viewWaiting() {
   const root = el(`<div class="app waiting">
     <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p></div>
   </div>`);
+  const strip = planStrip(); if (strip) root.prepend(strip);
   if (n >= 2) root.append(avatarRow());
   root.append(inviteBlock());
+  const days = datesPanel(); if (days) root.append(days);
 
   const mp = el(`<section class="panel"></section>`);
   if (n >= 2) {
@@ -1202,7 +1445,12 @@ function viewWaiting() {
   root.append(mp);
 
   const go = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
-  if (host) {
+  if (nextStopOf()?.code) {
+    // This stop was skipped and the group has moved on.
+    const b = el(`<button class="btn primary block big" type="button">Swipe on ${esc(nextStopOf().label.toLowerCase())} →</button>`);
+    b.addEventListener("click", () => openSession(nextStopOf().code));
+    root.append(b);
+  } else if (host) {
     const left = n - doneCount;
     const label = ids.length === 1 ? `Go with ${placeById(ids[0])?.name}` : `Start ranking ${Math.min(ids.length, 10)} places`;
     const btn = el(`<button class="btn primary block" type="button"></button>`);
@@ -1221,7 +1469,11 @@ function viewWaiting() {
       rank.disabled = !ids.length; rank.addEventListener("click", () => startRanking(minYes, rank)); go.append(rank);
     } else if (allDone) {
       const anyYes = Object.keys(counts).length > 0;
-      go.append(el(`<div class="notice">${anyYes ? "Getting the ranking round ready…" : "Nobody said yes to anything in this deck. Start a new one with a different category or area."}</div>`));
+      go.append(el(`<div class="notice">${anyYes ? "Getting the ranking round ready…" : nextStopOf() ? "Nobody said yes to anything at this stop. Skip ahead to the next one." : "Nobody said yes to anything in this deck. Start a new one with a different category or area."}</div>`));
+      if (!anyYes && nextStopOf() && !nextStopOf().code) {
+        const skip = el(`<button class="btn primary block" type="button">Skip to ${esc(nextStopOf().label.toLowerCase())}</button>`);
+        skip.addEventListener("click", () => nextStop(skip, true)); go.append(skip);
+      }
     } else {
       // Ranking starts for everyone when the last person finishes; one straggler shouldn't hold a big group forever.
       go.append(el(`<div class="notice">Ranking starts for everyone as soon as the last ${left === 1 ? "person finishes" : left + " people finish"}.</div>`));
@@ -1236,7 +1488,8 @@ function viewWaiting() {
       }
     }
   } else {
-    go.append(el(`<div class="notice">${S.session.needsMore ? `Only a few matches. ${esc(hostName())} can deal more cards or start ranking.` : allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
+    const noYes = allDone && !Object.keys(counts).length;
+    go.append(el(`<div class="notice">${S.session.needsMore ? `Only a few matches. ${esc(hostName())} can deal more cards or start ranking.` : noYes ? (nextStopOf() ? `Nobody said yes to anything here. ${esc(hostName())} can skip to the next stop.` : "Nobody said yes to anything in this deck. Start a new one with a different category or area.") : allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
   }
   if (!allDone && n >= 2 && S.mine.done) {
     const nudge = el(`<button class="btn block" type="button">Nudge the others</button>`);
@@ -1346,9 +1599,27 @@ function viewResults() {
   const tied = ranked.slice(1).filter((id) => pts[id] === pts[ranked[0]]).map((id) => placeById(id)?.name);
   const waitingText = waiting.length <= 3 ? waiting.map(nameOf).join(", ") : `${waiting.slice(0, 2).map(nameOf).join(", ")} and ${waiting.length - 2} more`;
   const root = el(`<div class="app" style="padding:0">
-    <div><div class="eyebrow">${final ? "The verdict" : `Results so far · ${rankers.length} of ${everyone.length} ranked`}</div>
+    <div><div class="eyebrow">${final ? (S.plan ? `${esc(S.session.label)} · the verdict` : "The verdict") : `Results so far · ${rankers.length} of ${everyone.length} ranked`}</div>
     <h2 style="font-size:28px;margin-top:4px">${final ? "You're going to…" : `Waiting on ${esc(waitingText)}`}</h2></div>
   </div>`);
+  const strip = planStrip(final ? top : null); if (strip) root.prepend(strip);
+  const upNext = S.plan && final && top ? nextStopOf() : null;
+  let nextBlock = null;
+  if (upNext) {
+    // The night goes on: one tap deals the next stop near this winner (or joins it if someone already did).
+    const nb = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
+    if (upNext.code) {
+      const go = el(`<button class="btn primary block big" type="button">Swipe on ${esc(upNext.label.toLowerCase())} →</button>`);
+      go.addEventListener("click", () => openSession(upNext.code));
+      nb.append(el(`<div class="notice"><b>${esc(upNext.label)}</b> near ${esc(top.name)} is ready to swipe.</div>`), go);
+    } else {
+      const go = el(`<button class="btn primary block big" type="button">${S.awaitNext ? "Dealing the next deck…" : `Next stop: ${esc(upNext.label.toLowerCase())} near here →`}</button>`);
+      go.disabled = S.awaitNext;
+      go.addEventListener("click", () => nextStop(go));
+      nb.append(go);
+    }
+    nextBlock = nb;
+  }
   if (top) root.append(el(`<section class="winner ${coverFor(top)}">
     ${top.photo ? `<img src="${esc(photoUrl(top))}" alt="" style="width:calc(100% + 44px);margin:-22px -22px 4px;height:180px;object-fit:cover;display:block" onerror="this.remove()">` : ""}
     <div class="pad">
@@ -1361,6 +1632,7 @@ function viewResults() {
     <div class="row spread"><a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
     <button type="button" class="fav-inline" data-fav="${esc(top.id)}" aria-pressed="${isFav(top)}">${ICON.star}<span>${isFav(top) ? "Saved" : "Save"}</span></button></div>
   </div></section>`));
+  if (nextBlock) root.append(nextBlock);
   if (ranked.length > 1) {
     const opts = el(`<section class="panel"><div class="eyebrow">Book any of them</div>
       <p class="small muted">Winner booked up? Go down the list.</p>
@@ -1392,11 +1664,17 @@ function viewResults() {
     const edit = el(`<button class="btn block" type="button">Change my ranking</button>`); edit.addEventListener("click", () => setView("rank"));
     row.append(edit);
   }
-  if (final && top) {
+  if (final && top && S.plan && !upNext) {
+    // Last stop: show and share the whole night.
+    const share = el(`<button class="btn primary block big" type="button">Share the night with the group</button>`);
+    share.addEventListener("click", () => shareNight(top, share));
+    $(".winner", root).after(itinerary(top), share);
+  } else if (final && top && !S.plan) {
     const share = el(`<button class="btn primary block" type="button">Share the plan with the group</button>`);
     share.addEventListener("click", () => sharePlan(top, share));
     row.prepend(share);
   }
+  const days = datesPanel(); if (days) root.append(days);
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`); again.addEventListener("click", leave);
   row.append(again); root.append(row);
   if (final && !store.get("mb.fb." + S.code)) root.append(feedbackPanel());
@@ -1447,7 +1725,7 @@ async function createSavedDeck(btn) {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling();
-  Object.assign(S, { code: null, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, plan: null, awaitNext: false, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
@@ -1456,7 +1734,10 @@ async function refresh() {
   if (!S.code || document.hidden) return;
   try {
     const r = await api("/api/deck?code=" + S.code);
-    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking; S.plan = r.plan || null;
+    // Someone else dealt the next stop while we waited on it.
+    const nxt = nextStopOf();
+    if (S.awaitNext && nxt?.code) { S.awaitNext = false; return openSession(nxt.code); }
     if (remaining().length) S.mine.done = false; // more cards were dealt
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
     route();
@@ -1478,17 +1759,20 @@ async function openSession(raw) {
   if (!code) return;
   if (!S.name) {
     S.pendingCode = code;
-    try { const r = await api("/api/deck?code=" + code); S.preview = { deck: r.deck, host: r.swipes[r.deck.hostId]?.name || "", people: Object.keys(r.swipes).length }; }
+    try { const r = await api("/api/deck?code=" + code); S.preview = { deck: r.deck, plan: r.plan, host: r.swipes[r.deck.hostId]?.name || r.ranks[r.deck.hostId]?.name || "", people: Object.keys(r.swipes).length }; }
     catch (e) { S.error = e.message; return setView("missing"); }
     return setView("name");
   }
   stopPolling();
-  Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code, session: null, plan: null, awaitNext: false, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/#" + code); } catch {}
   let r;
   try { r = await api("/api/deck?code=" + code); }
   catch (e) { S.error = e.message; S.code = null; return setView("missing"); }
-  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking; S.plan = r.plan || null;
+  // An old invite link to a night out that has moved on: newcomers go straight to the stop the group is on now.
+  const latest = S.plan?.stops.findLast((x) => x.code)?.code;
+  if (latest && latest !== code && !S.swipes[S.me] && !S.ranks[S.me] && S.session.phase !== "swiping") return openSession(latest);
   remember(r.deck);
   const mine = S.swipes[S.me];
   if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };

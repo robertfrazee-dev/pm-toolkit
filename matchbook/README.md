@@ -15,6 +15,7 @@ Decks expire after a week.
 - `index.html`: the whole front end. Plain HTML, CSS and JavaScript, no build step.
 - `api/deck.js`: creates a deck with Google Places Text Search and returns a deck with everyone's swipes and rankings.
 - `api/action.js`: saves swipes and rankings, and starts the ranking round.
+- `api/plan.js`: night-out plans. A plan is 2–4 stops (say dinner, then drinks); each stop is its own deck. Once a stop has a winner, anyone can deal the next stop, searched within a mile of that winner. Plans can also carry up to 5 possible nights for the group to vote on, and the host locks one in.
 - `api/photo.js`: sends place photos without exposing the API key. Vercel caches each photo for a day.
 - Storage is Upstash Redis through its REST API, so there are no npm packages to install.
 - Friends' screens refresh every 3 seconds while a deck is open.

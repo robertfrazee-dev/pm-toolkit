@@ -26,7 +26,7 @@ function qualifying(deck, swipes, bar) {
 }
 
 // Same scoring as the results screen: a list of n places gives n points to its top pick, n-1 to the next...
-function winnerOf(deck, ranks) {
+export function winnerOf(deck, ranks) {
   const n = deck.matches.length, pts = Object.fromEntries(deck.matches.map((id) => [id, 0]));
   for (const r of ranks) (r.order || []).forEach((id, pos) => { if (id in pts) pts[id] += n - pos; });
   const best = deck.matches.slice().sort((a, b) => pts[b] - pts[a] || deck.matches.indexOf(a) - deck.matches.indexOf(b))[0];
@@ -84,6 +84,8 @@ export default async function handler(req, res) {
       const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1) await bump("joins");
+      // Remembered for 60 days so the stats page can tell when someone who joined goes on to start their own deck.
+      if (added === 1 && playerId !== deck.hostId) await redis("SET", `seen:joined:${playerId}`, "1", "EX", 60 * 86400).catch(() => {});
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
       }

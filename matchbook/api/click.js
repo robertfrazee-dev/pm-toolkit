@@ -14,6 +14,8 @@ export default async function handler(req, res) {
     const month = new Date().toISOString().slice(0, 7);
     await redis("HINCRBY", `stats:clicks:${month}`, kind, 1);
     await bump(`tap_${kind}`);
+    // Counted once per deck: how many groups went as far as booking, calling or riding there.
+    if (kind !== "maps" && (await redis("SET", `tapped:${code}`, "1", "EX", 8 * 86400, "NX")) === "OK") await bump("decks_with_tap");
     return send(res, 200, { ok: true });
   } catch (e) {
     console.error(e);
