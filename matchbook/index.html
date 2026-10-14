@@ -37,6 +37,7 @@
   --strike: #8A7462; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { margin: 0; padding-top: env(safe-area-inset-top, 0px); background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; padding-inline: 16px; padding-block: 0 32px; }
 .app { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
@@ -212,6 +213,17 @@ a { color: inherit; }
 .book-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .book { display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; text-decoration: none; color: var(--cov-ink); background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); }
 .book.primary { background: var(--cov-ink); color: #1d1a17; border-color: var(--cov-ink); }
+.fav-btn { position: absolute; top: 12px; left: 12px; z-index: 3; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; background: rgba(0,0,0,.35); color: #fff; }
+.fav-btn[aria-pressed="true"], .star.on { color: var(--sulfur); }
+.fav-btn[aria-pressed="true"] svg, .star.on svg, .fav-inline[aria-pressed="true"] svg { fill: currentColor; }
+.fav-inline { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: inherit; font-weight: 700; cursor: pointer; padding: 6px 0; }
+.fav-inline[aria-pressed="true"] { color: var(--sulfur); }
+.star { width: 34px; height: 34px; border-radius: 8px; border: 0; background: var(--sunk); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.small-btn { padding: 8px 12px; font-size: 13px; }
+.book-panel { list-style: none; padding: 4px 4px 8px; display: flex; flex-direction: column; gap: 8px; }
+.book-panel .eyebrow { color: var(--muted) !important; opacity: 1 !important; }
+.panel .book { color: var(--ink); background: var(--sunk); border-color: var(--line); }
+.panel .book.primary { background: var(--match); color: var(--match-ink); border-color: var(--match); }
 .mood-row { position: relative; }
 .mood-row .input { padding-right: 44px; }
 .mood-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--sunk); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
@@ -245,6 +257,7 @@ const ICON = {
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>',
+  star: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   pin: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
 };
 
@@ -343,17 +356,17 @@ function pushPrompt(text) {
 const EATS = /restaurant|bistro|brasserie|steak|sushi|trattoria|osteria|grill|diner|eatery|tavern|gastropub|brunch|ramen|pizzeria|seafood|bbq|barbecue/i;
 const DOES = /museum|attraction|tour|gallery|zoo|aquarium|landmark|amusement|bowling|escape|arcade|observation|cruise|historical|monument|theater|theatre|karaoke|golf|climbing|axe|go-kart|mini golf/i;
 const inNyc = (c) => !!c && c.latitude > 40.47 && c.latitude < 40.93 && c.longitude > -74.28 && c.longitude < -73.68;
-function bookingLinks(p) {
-  const b = S.booking || {}, cat = S.session.category, enc = encodeURIComponent, links = [];
+function bookingLinks(p, ctx = S.session) {
+  const b = S.booking || {}, cat = ctx.category, enc = encodeURIComponent, links = [];
   const where = [p.name, p.address].filter(Boolean).join(", ");
   if (cat === "restaurants" || EATS.test(p.kind)) {
     let url = `https://www.opentable.com/s?term=${enc(p.name)}` + (p.lat != null ? `&latitude=${p.lat}&longitude=${p.lng}` : "");
     if (b.opentableWrap) url = b.opentableWrap.replace("{url}", enc(url));
     links.push({ kind: "reserve", label: "OpenTable", url, primary: true });
     // Resy's links need a city; NYC is the launch market (and covers Hoboken and Jersey City).
-    if (inNyc(S.session.center)) links.push({ kind: "resy", label: "Resy", url: `https://resy.com/cities/new-york-ny/search?query=${enc(p.name)}`, primary: true });
+    if (inNyc(ctx.center)) links.push({ kind: "resy", label: "Resy", url: `https://resy.com/cities/new-york-ny/search?query=${enc(p.name)}`, primary: true });
   } else if (cat === "activities" || cat === "sights" || DOES.test(p.kind)) {
-    let url = `https://www.viator.com/searchResults/all?text=${enc((p.name + " " + (S.session.area === "you" ? "" : S.session.area)).trim())}`;
+    let url = `https://www.viator.com/searchResults/all?text=${enc((p.name + " " + (ctx.area === "you" ? "" : ctx.area || "")).trim())}`;
     if (b.viatorPid) url += `&pid=${enc(b.viatorPid)}&mcid=${enc(b.viatorMcid || "42383")}&medium=link`;
     links.push({ kind: "tickets", label: "Get tickets", url, primary: true });
   }
@@ -364,8 +377,8 @@ function bookingLinks(p) {
   if (p.phone) links.push({ kind: "call", label: "Call", url: "tel:" + p.phone.replace(/[^\d+]/g, "") });
   return links;
 }
-function bookingRow(p) {
-  const links = bookingLinks(p);
+function bookingRow(p, ctx) {
+  const links = bookingLinks(p, ctx);
   const pill = (l) => `<a class="book${l.primary ? " primary" : ""}" data-kind="${l.kind}" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`;
   const reserve = links.filter((l) => l.kind === "reserve" || l.kind === "resy"), rest = links.filter((l) => !reserve.includes(l));
   return (reserve.length ? `<div class="eyebrow" style="color:inherit;opacity:.85">Reserve a table</div><div class="book-row">${reserve.map(pill).join("")}</div>` : "")
@@ -376,6 +389,52 @@ document.addEventListener("click", (e) => {
   const kind = a.dataset.kind || "maps";
   haptic("light");
   try { navigator.sendBeacon("/api/click", new Blob([JSON.stringify({ code: S.code, kind })], { type: "application/json" })); } catch {}
+});
+
+// ---------- saved places (this device only) ----------
+function favs() { try { return JSON.parse(store.get("mb.favs") || "[]"); } catch { return []; } }
+const favKey = (p) => p.gid || p.key || `${p.name}|${p.address}`;
+const isFav = (p) => !!p && favs().some((f) => f.key === favKey(p));
+function toggleFav(p, ctx = S.session) {
+  let list = favs(); const key = favKey(p);
+  const saved = !list.some((f) => f.key === key);
+  if (saved) {
+    list.unshift({ key, gid: p.gid || "", name: p.name, kind: p.kind || "", address: p.address || "", price: p.price || "", maps: p.maps || "",
+      website: p.website || "", phone: p.phone || "", lat: p.lat ?? null, lng: p.lng ?? null,
+      ctx: { category: ctx?.category || "any", area: ctx?.area || "", center: ctx?.center || null }, at: Date.now() });
+    haptic("light"); toast("Saved to your places");
+  } else { list = list.filter((f) => f.key !== key); toast("Removed from saved places"); }
+  store.set("mb.favs", JSON.stringify(list.slice(0, 200)));
+  return saved;
+}
+// A place row with Save and a Book button that opens the same buttons as the winner.
+function placeRow(p, i, ctx) {
+  if (!p) return "";
+  const key = p.id || p.key;
+  return `<li class="mitem" data-row="${esc(key)}"><span class="sw ${coverFor({ id: key, name: p.name })}"><span>${i != null ? i + 1 : ""}</span></span>
+    <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.kind, p.price, p.distance != null ? p.distance + " mi" : ctx?.area].filter(Boolean).join(" · "))}</span></span>
+    <span class="handle"><button type="button" class="star${isFav(p) ? " on" : ""}" data-fav="${esc(key)}" aria-pressed="${isFav(p)}" aria-label="Save">${ICON.star}</button>
+    <button type="button" class="btn small-btn" data-book="${esc(key)}" aria-expanded="false">Book</button></span></li>
+    <li class="book-panel" data-panel="${esc(key)}" hidden>${bookingRow(p, ctx)}</li>`;
+}
+// One handler for every Save and Book button, wherever it's drawn.
+document.addEventListener("click", (e) => {
+  const book = e.target.closest("[data-book]");
+  if (book) {
+    const panel = document.querySelector(`[data-panel="${CSS.escape(book.dataset.book)}"]`);
+    if (panel) { panel.hidden = !panel.hidden; book.setAttribute("aria-expanded", String(!panel.hidden)); book.textContent = panel.hidden ? "Book" : "Close"; }
+    return;
+  }
+  const fav = e.target.closest("[data-fav]"); if (!fav) return;
+  e.preventDefault(); e.stopPropagation();
+  const id = fav.dataset.fav;
+  const fromDeck = S.session && placeById(id);
+  const saved = fromDeck ? toggleFav(fromDeck) : (() => { const f = favs().find((x) => x.key === id); return f ? toggleFav(f, f.ctx) : false; })();
+  document.querySelectorAll(`[data-fav="${CSS.escape(id)}"]`).forEach((b) => {
+    b.setAttribute("aria-pressed", String(saved)); b.classList.toggle("on", saved);
+    const label = b.querySelector("span"); if (label) label.textContent = saved ? "Saved" : "Save";
+  });
+  if (S.view === "home" && !saved) render();
 });
 
 // ---------- recent decks (this device only) ----------
@@ -517,6 +576,11 @@ function viewHome() {
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
   }
+  const saved = favs();
+  if (saved.length) {
+    root.append(el(`<section class="panel"><div class="row spread"><div class="eyebrow">Saved places</div><span class="count">${saved.length}</span></div>
+      <ul class="mlist">${saved.slice(0, 30).map((f) => placeRow(f, null, f.ctx)).join("")}</ul></section>`));
+  }
   root.append(el(`<p class="attrib">Places, photos and ratings from Google Maps · <a href="/privacy.html" style="color:inherit">Privacy</a></p>`));
   return root;
 }
@@ -557,6 +621,7 @@ function cardHtml(p, cls = "") {
   ].filter(Boolean);
   return `<article class="card ${coverFor(p)} ${cls}" data-id="${esc(p.id)}">
     <div class="stamp yes">YES</div><div class="stamp no">NOPE</div>
+    <button type="button" class="fav-btn" data-fav="${esc(p.id)}" aria-pressed="${isFav(p)}" aria-label="Save to favorites">${ICON.star}</button>
     ${p.photo ? `<div class="photo"><img src="${esc(photoUrl(p))}" alt="" loading="eager" draggable="false" onerror="this.parentNode.remove()">${p.photoBy ? `<span class="credit">Photo: ${esc(p.photoBy)}</span>` : ""}</div>` : ""}
     <div class="cover">
       <div class="kicker"><span>${esc(p.kind || S.session.label)}</span></div>
@@ -892,8 +957,15 @@ function viewResults() {
     <div>${esc(top.address)}</div>
     ${tied.length ? `<p style="font-weight:600">Tied with ${esc(tied.join(" and "))}. It's listed first only because it had more yeses or came up earlier. Talk it out or flip a coin.</p>` : ""}
     ${bookingRow(top)}
-    <a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
+    <div class="row spread"><a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
+    <button type="button" class="fav-inline" data-fav="${esc(top.id)}" aria-pressed="${isFav(top)}">${ICON.star}<span>${isFav(top) ? "Saved" : "Save"}</span></button></div>
   </div></section>`));
+  if (ranked.length > 1) {
+    const opts = el(`<section class="panel"><div class="eyebrow">Book any of them</div>
+      <p class="small muted">Winner booked up? Go down the list.</p>
+      <ul class="mlist">${ranked.map((id, i) => placeRow(placeById(id), i)).join("")}</ul></section>`);
+    root.append(opts);
+  }
   // A column per person stops fitting past a few people, so big groups get points plus my own pick.
   const wide = rankers.length <= 4;
   root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><div class="table-wrap"><table class="scores">
