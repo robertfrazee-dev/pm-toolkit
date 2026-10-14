@@ -65,6 +65,7 @@ th { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; let
 </section>
 <section class="panel" id="summary" hidden><h2>How groups are doing</h2><div class="wrap"><table class="summary" id="sumTable"></table></div>
   <p class="muted">Finish rate is decks that reached a winner out of decks started. Google searches and photos are what cost money.</p></section>
+<section class="panel" id="comments" hidden><h2>What people said</h2><div id="fbList"></div></section>
 <section class="panel" id="daily" hidden><h2>By day</h2><div class="wrap"><table id="dayTable"></table></div></section>
 </main>
 <script>
@@ -79,6 +80,10 @@ const COLS = [
   ["Booking taps", (d) => Object.keys(d).filter((k) => k.startsWith("tap_")).reduce((a, k) => a + d[k], 0)],
   ["Google searches", (d) => d.google_searches || 0],
   ["Photos", (d) => d.photos || 0],
+  ["More cards dealt", (d) => d.deals || 0],
+  ["Nudges", (d) => d.nudges || 0],
+  ["Would use again", (d) => d.fb_up || 0],
+  ["Wouldn't", (d) => d.fb_down || 0],
 ];
 const fmt = (n) => n.toLocaleString();
 function sum(days, f) { return days.reduce((a, d) => a + f(d), 0); }
@@ -94,7 +99,11 @@ async function load(key) {
     + `<tr><td>Finish rate</td>${periods.map(([, ds]) => { const a = sum(ds, COLS[0][1]), w = sum(ds, COLS[3][1]); return `<td>${a ? Math.round((w / a) * 100) + "%" : "–"}</td>`; }).join("")}</tr>`;
   $("#dayTable").innerHTML = `<tr><th>Date</th>${COLS.map(([n]) => `<th>${n}</th>`).join("")}</tr>`
     + days.map((d) => `<tr><td>${d.date}</td>${COLS.map(([, f]) => `<td>${fmt(f(d))}</td>`).join("")}</tr>`).join("");
-  $("#summary").hidden = $("#daily").hidden = false;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  $("#fbList").innerHTML = (j.feedback || []).length
+    ? j.feedback.map((f) => `<p><b>${f.vote === "up" ? "Would use again" : "Wouldn't"}</b> · <span class="muted">${new Date(f.at).toLocaleDateString()} · deck ${esc(f.code)}</span><br>${esc(f.text)}</p>`).join("")
+    : `<p class="muted">No written feedback yet.</p>`;
+  $("#summary").hidden = $("#daily").hidden = $("#comments").hidden = false;
 }
 $("#keyForm").addEventListener("submit", (e) => { e.preventDefault(); const k = $("#key").value.trim(); if (k) load(k); });
 const saved = get("mb.statsKey"); if (saved) { $("#key").value = saved; load(saved); }

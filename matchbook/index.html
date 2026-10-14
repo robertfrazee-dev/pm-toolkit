@@ -226,6 +226,19 @@ a { color: inherit; }
 .book-panel .eyebrow { color: var(--muted) !important; opacity: 1 !important; }
 .panel .book { color: var(--ink); background: var(--sunk); border-color: var(--line); }
 .panel .book.primary { background: var(--match); color: var(--match-ink); border-color: var(--match); }
+.quick { flex-direction: column; gap: 2px; padding-block: 14px; }
+.quick span { font-size: 12px; font-weight: 600; opacity: .85; text-transform: uppercase; letter-spacing: .08em; }
+.quick b { font-size: 17px; }
+.moment { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; color: var(--cov-ink); padding: 24px; animation: pop .28s ease-out; transition: opacity .3s; }
+.moment.out { opacity: 0; }
+.moment-inner { text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 420px; position: relative; z-index: 1; }
+.moment-kicker { font-family: var(--f-mono); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .9; }
+.moment h2 { font-size: clamp(38px, 11vw, 60px); line-height: 1; transition: opacity .35s; }
+.moment p { font-size: 17px; opacity: .9; }
+.confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+@keyframes pop { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .moment { animation: none; } }
+textarea.input { resize: vertical; font: inherit; }
 .mood-row { position: relative; }
 .mood-row .input { padding-right: 44px; }
 .mood-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--sunk); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
@@ -282,7 +295,7 @@ const S = {
   me: playerId(), name: store.get("mb.name") || "",
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
-  form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 20, openNow: false, maxPrice: 0 },
+  form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, ...lastForm() },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [],
 };
 
@@ -443,6 +456,135 @@ document.addEventListener("click", (e) => {
   if (S.view === "home" && !saved) render();
 });
 
+// ---------- deal more, nudge ----------
+const canDealMore = () => isHost() && !!S.session.search && (S.session.deals || 0) < 2 && S.session.places.length < 40;
+async function dealMore(btn) {
+  btn.disabled = true; btn.textContent = "Dealing…";
+  try {
+    const r = await api("/api/action", { type: "more", code: S.code, playerId: S.me, name: S.name });
+    toast(`${r.added} new cards dealt`); haptic("medium");
+    await refresh(true);
+  } catch (e) { btn.disabled = false; btn.textContent = "Deal 10 more cards"; toast(e.message); }
+}
+async function nudgeOthers(btn) {
+  btn.disabled = true;
+  try {
+    const r = await api("/api/action", { type: "nudge", code: S.code, playerId: S.me, name: S.name });
+    if (!r.waiting.length) { toast("Everyone's done!"); return; }
+    if (r.pushed >= r.waiting.length) { toast(`Nudged ${r.waiting.join(", ")}`); return; }
+    // Not everyone has notifications on, so hand over a message to drop in the group chat.
+    const text = `${r.waiting.join(", ")}: we're waiting on you to finish swiping 👀 ${inviteUrl(S.code)}`;
+    if (NATIVE && Plug.Share) await Plug.Share.share({ text }).catch(() => {});
+    else if (navigator.share) await navigator.share({ text }).catch(() => {});
+    else { await navigator.clipboard.writeText(text).catch(() => {}); toast("Nudge copied. Paste it in your group chat."); }
+  } catch (e) { toast(e.message); }
+  finally { setTimeout(() => (btn.disabled = false), 4000); }
+}
+
+// ---------- remembered search for one-tap starts ----------
+function lastForm() {
+  try { const f = JSON.parse(store.get("mb.form") || "null"); return f && typeof f === "object" ? f : {}; } catch { return {}; }
+}
+function rememberForm(f) {
+  store.set("mb.form", JSON.stringify({ cat: f.cat, mood: f.mood, area: f.lat != null ? "" : f.area, radius: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, nearMe: f.lat != null }));
+}
+
+// ---------- moments: match, winner, share card, feedback ----------
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function showMatch(p, others) {
+  if (!p) return;
+  const who = others.length <= 2 ? others.join(" & ") : `${others.length} others`;
+  const o = el(`<div class="moment ${coverFor(p)}" role="status"><div class="moment-inner">
+    <div class="moment-kicker">It's a match</div><h2>${esc(p.name)}</h2><p>You and ${esc(who)} said yes</p></div></div>`);
+  document.body.append(o);
+  const close = () => { o.classList.add("out"); setTimeout(() => o.remove(), 300); };
+  o.addEventListener("click", close); setTimeout(close, 1400);
+}
+function revealWinner(top) {
+  if (!top) return;
+  const o = el(`<div class="moment ${coverFor(top)}" role="status"><div class="moment-inner">
+    <div class="moment-kicker">And you're going to…</div><h2 class="reveal-name" style="opacity:0">${esc(top.name)}</h2></div>
+    <canvas class="confetti" aria-hidden="true"></canvas></div>`);
+  document.body.append(o);
+  const close = () => { o.classList.add("out"); setTimeout(() => o.remove(), 300); };
+  o.addEventListener("click", close);
+  setTimeout(() => { $(".reveal-name", o).style.opacity = 1; haptic("win"); if (!reduceMotion()) confetti($(".confetti", o)); }, reduceMotion() ? 0 : 900);
+  setTimeout(close, 3400);
+}
+function confetti(canvas) {
+  const dpr = devicePixelRatio || 1, w = (canvas.width = innerWidth * dpr), h = (canvas.height = innerHeight * dpr), ctx = canvas.getContext("2d");
+  const css = getComputedStyle(document.documentElement), colors = ["--sulfur", "--cov-ink", "--like", "--match"].map((v) => css.getPropertyValue(v).trim() || "#fff");
+  const bits = Array.from({ length: 140 }, () => ({ x: Math.random() * w, y: -Math.random() * h * 0.5, vx: (Math.random() - 0.5) * 6 * dpr, vy: (2 + Math.random() * 5) * dpr, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3, s: (6 + Math.random() * 8) * dpr, c: colors[(Math.random() * colors.length) | 0] }));
+  const t0 = performance.now();
+  (function frame(t) {
+    ctx.clearRect(0, 0, w, h);
+    for (const b of bits) { b.x += b.vx; b.y += b.vy; b.vy += 0.12 * dpr; b.r += b.vr; ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c; ctx.fillRect(-b.s / 2, -b.s / 4, b.s, b.s / 2); ctx.restore(); }
+    if (t - t0 < 2400 && canvas.isConnected) requestAnimationFrame(frame);
+  })(t0);
+}
+
+// A 1080×1350 image of the plan for the group chat (no Google photo: it can't be drawn into an image).
+async function planImage(p) {
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d"), css = getComputedStyle(document.documentElement);
+  const bg = css.getPropertyValue("--" + coverFor(p)).trim() || "#1F3A5F", ink = css.getPropertyValue("--cov-ink").trim() || "#FFF7EA";
+  try { await Promise.all([document.fonts.load('800 120px "Bricolage Grotesque"'), document.fonts.load('700 36px "JetBrains Mono"'), document.fonts.load('600 40px Figtree')]); } catch {}
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  x.fillStyle = "rgba(255,255,255,.05)"; for (let i = -H; i < W; i += 60) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + H, H); x.lineTo(i + H + 30, H); x.lineTo(i + 30, 0); x.fill(); }
+  for (let i = 0; i < W; i += 12) { x.fillStyle = i % 24 ? "#5d4a3c" : "#8A7462"; x.fillRect(i, H - 110, 12, 110); }
+  x.fillStyle = ink; x.textBaseline = "top";
+  x.font = '700 34px "JetBrains Mono", monospace'; x.fillText("WE'RE GOING TO", 80, 120);
+  let size = 132; x.font = `800 ${size}px "Bricolage Grotesque", sans-serif`;
+  const words = p.name.split(" "), lines = []; let line = "";
+  for (const w of words) { const t = line ? line + " " + w : w; if (x.measureText(t).width > W - 160 && line) { lines.push(line); line = w; } else line = t; }
+  lines.push(line);
+  if (lines.length > 4) { size = 96; x.font = `800 ${size}px "Bricolage Grotesque", sans-serif`; }
+  lines.slice(0, 5).forEach((l, i) => x.fillText(l, 80, 200 + i * size * 1.02));
+  const y = 200 + Math.min(lines.length, 5) * size * 1.02 + 40;
+  x.font = '600 42px Figtree, sans-serif'; x.globalAlpha = .9;
+  x.fillText([p.kind, p.rating ? "★ " + p.rating.toFixed(1) : "", p.price].filter(Boolean).join("  ·  "), 80, y);
+  x.fillText(p.address || "", 80, y + 62, W - 160); x.globalAlpha = 1;
+  x.font = '700 30px "JetBrains Mono", monospace'; x.fillText("PICKED TOGETHER WITH MATCHBOOK", 80, H - 200);
+  return new Promise((ok) => c.toBlob(ok, "image/png"));
+}
+async function sharePlan(p, btn) {
+  btn.disabled = true;
+  const text = `We're going to ${p.name}! ${mapsUrl(p)}`;
+  try {
+    const blob = await planImage(p), file = blob && new File([blob], "matchbook-plan.png", { type: "image/png" });
+    if (NATIVE && Plug.Share) await Plug.Share.share({ title: "Matchbook", text, url: SITE });
+    else if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+    else if (navigator.share) await navigator.share({ text });
+    else if (blob) { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "matchbook-plan.png" }); a.click(); toast("Saved the image. Send it to your group."); }
+  } catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard?.writeText(text).catch(() => {}); toast("Copied the plan. Paste it in your group chat."); } }
+  finally { btn.disabled = false; }
+}
+
+function feedbackPanel() {
+  const panel = el(`<section class="panel"><div class="eyebrow">Quick question</div>
+    <h3 style="font-size:20px">Would you use Matchbook again?</h3>
+    <div class="row"><button class="btn" type="button" data-vote="up">Yes</button><button class="btn" type="button" data-vote="down">Not really</button></div></section>`);
+  let vote = "";
+  const send = async (text) => {
+    store.set("mb.fb." + S.code, vote);
+    panel.innerHTML = `<p class="muted">Thanks, that helps.</p>`;
+    api("/api/feedback", { code: S.code, playerId: S.me, vote, text }).catch(() => {});
+  };
+  panel.addEventListener("click", (e) => {
+    const v = e.target.closest("[data-vote]");
+    if (v) {
+      vote = v.dataset.vote;
+      panel.innerHTML = `<div class="field"><label for="fbText">${vote === "up" ? "What would make it even better?" : "What got in the way?"} <span class="muted">(optional)</span></label>
+        <textarea class="input" id="fbText" rows="3" maxlength="300"></textarea></div>
+        <div class="row"><button class="btn primary" type="button" data-send>Send</button><button class="btn ghost" type="button" data-skip>Skip</button></div>`;
+      return;
+    }
+    if (e.target.closest("[data-send]")) send($("#fbText", panel).value);
+    if (e.target.closest("[data-skip]")) send("");
+  });
+  return panel;
+}
+
 // ---------- recent decks (this device only) ----------
 function recents() { try { return JSON.parse(store.get("mb.recent") || "[]"); } catch { return []; } }
 function remember(d) {
@@ -500,6 +642,13 @@ function viewHome() {
       <div class="mini"><span>Example</span>The Velvet Fox</div>
     </div></section>`));
 
+  const last = lastForm();
+  if (S.name && (last.mood || last.cat) && (last.area || last.nearMe)) {
+    const lastWhat = last.mood || CATS.find((c) => c.id === last.cat)?.label || "Places";
+    const quick = el(`<button class="btn primary block quick" type="button"><span>Same as last time</span><b>${esc(lastWhat)} ${last.nearMe ? "near me" : "near " + esc(last.area)}</b></button>`);
+    quick.addEventListener("click", () => quickStart(last));
+    root.append(quick);
+  }
   const form = el(`<form class="panel" id="newForm" novalidate>
     <div class="eyebrow">New deck</div>
     ${nameField("nameNew")}
@@ -519,7 +668,7 @@ function viewHome() {
       <div class="chips" role="group" aria-labelledby="priceLbl">${["Any", "$", "$$", "$$$"].map((p, i) => `<button type="button" class="chip" data-price="${i}" aria-pressed="${f.maxPrice === i}">${p}</button>`).join("")}</div></div>
     <label class="toggle"><input type="checkbox" id="openNow" ${f.openNow ? "checked" : ""}> Open now only</label>
     <div class="field"><span class="label" id="cntLbl">Cards in the deck</span>
-      <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
+      <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 15, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
     ${S.error ? `<p class="err">${esc(S.error)}</p>` : ""}
     <button class="btn primary block" type="submit">Find places</button>
   </form>`);
@@ -596,10 +745,15 @@ function viewHome() {
 }
 
 function viewName() {
-  const root = el(`<form class="panel" novalidate>
-    <div><div class="eyebrow">Joining deck ${esc(S.pendingCode)}</div><h2 style="font-size:24px;margin-top:4px">What should we call you?</h2></div>
+  const pv = S.preview, d = pv?.deck;
+  const what = !d ? "" : d.category === "saved" ? "from their saved places" : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
+  const root = el(`<form class="panel invite-page" novalidate>
+    <div><div class="eyebrow">You're invited · deck ${esc(S.pendingCode)}</div>
+    <h2 style="font-size:28px;margin-top:6px">${d ? `${esc(pv.host || "A friend")} wants to pick ${what} with you` : "Join this deck"}</h2>
+    ${d ? `<p class="muted" style="margin-top:8px">${d.places.length} places to swipe${pv.people > 1 ? ` · ${pv.people} people in so far` : ""}. Swipe right on places you'd go, left on ones you wouldn't. Places most of you like go to a final vote.</p>` : ""}</div>
     ${nameField("nameJoin")}
-    <button class="btn primary block" type="submit">Start swiping</button>
+    <button class="btn primary block" type="submit">Join and start swiping</button>
+    <p class="small muted">No account or app needed.</p>
   </form>`);
   root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameJoin", root))) openSession(S.pendingCode); });
   setTimeout(() => $("#nameJoin")?.focus(), 50);
@@ -715,8 +869,7 @@ function decide(id, liked) {
   if (liked) m.likes = [...m.likes, id]; else m.passes = [...m.passes, id];
   if (liked) {
     const others = Object.entries(S.swipes).filter(([pid, s]) => pid !== S.me && (s.likes || []).includes(id)).map(([pid]) => nameOf(pid));
-    if (others.length) haptic("match");
-    if (others.length) toast(others.length <= 2 ? `${others.join(" & ")} said yes too` : `You and ${others.length} others said yes`, "match");
+    if (others.length) { haptic("match"); showMatch(placeById(id), others); }
   }
   m.done = remaining().length === 0;
   S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: m.done };
@@ -844,13 +997,21 @@ function viewWaiting() {
   const go = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (host) {
     const left = n - doneCount;
-    const label = `Start ranking ${Math.min(ids.length, 10)} place${ids.length === 1 ? "" : "s"}`;
+    const label = ids.length === 1 ? `Go with ${placeById(ids[0])?.name}` : `Start ranking ${Math.min(ids.length, 10)} places`;
     const btn = el(`<button class="btn primary block" type="button"></button>`);
     if (n < 2) {
       btn.textContent = ids.length ? label : "Nothing to rank yet";
       btn.disabled = !ids.length;
       btn.addEventListener("click", () => startRanking(minYes, btn));
       go.append(btn);
+    } else if (allDone && (S.session.needsMore || canDealMore())) {
+      go.append(el(`<div class="notice">${ids.length ? `Only ${ids.length} match${ids.length === 1 ? "" : "es"} so far.` : "No matches yet."} Deal 10 more places to swipe${ids.length ? ", or rank what you have" : ""}.</div>`));
+      if (canDealMore()) {
+        const more = el(`<button class="btn primary block" type="button">Deal 10 more cards</button>`);
+        more.addEventListener("click", () => dealMore(more)); go.append(more);
+      }
+      const rank = el(`<button class="btn block" type="button">${ids.length ? esc(label) : "Lower the bar to rank"}</button>`);
+      rank.disabled = !ids.length; rank.addEventListener("click", () => startRanking(minYes, rank)); go.append(rank);
     } else if (allDone) {
       const anyYes = Object.keys(counts).length > 0;
       go.append(el(`<div class="notice">${anyYes ? "Getting the ranking round ready…" : "Nobody said yes to anything in this deck. Start a new one with a different category or area."}</div>`));
@@ -868,7 +1029,11 @@ function viewWaiting() {
       }
     }
   } else {
-    go.append(el(`<div class="notice">${allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
+    go.append(el(`<div class="notice">${S.session.needsMore ? `Only a few matches. ${esc(hostName())} can deal more cards or start ranking.` : allDone ? "Getting the ranking round ready…" : "Ranking starts for everyone as soon as the last person finishes. This page updates on its own."}</div>`));
+  }
+  if (!allDone && n >= 2 && S.mine.done) {
+    const nudge = el(`<button class="btn block" type="button">Nudge the others</button>`);
+    nudge.addEventListener("click", () => nudgeOthers(nudge)); go.append(nudge);
   }
   if (S.history.length && S.session.phase === "swiping") {
     const u = el(`<button class="btn ghost block" type="button">Undo my last swipe</button>`); u.addEventListener("click", undo); go.append(u);
@@ -892,8 +1057,9 @@ async function startRanking(minYes, btn) {
   btn.disabled = true;
   try {
     const r = await api("/api/action", { type: "phase", code: S.code, playerId: S.me, name: S.name, minYes });
-    S.session = { ...S.session, phase: "ranking", matches: r.matches };
-    setView("rank");
+    const single = r.matches.length === 1;
+    S.session = { ...S.session, phase: single ? "done" : "ranking", matches: r.matches };
+    setView(single ? "results" : "rank");
   } catch (e) { btn.disabled = false; toast(e.message); }
 }
 
@@ -969,7 +1135,7 @@ function viewResults() {
   const { ranked, pts, per } = tally();
   const top = placeById(ranked[0]);
   const final = S.session.phase === "done" || (waiting.length === 0 && rankers.length > 0);
-  if (final && S.celebrated !== S.code) { S.celebrated = S.code; haptic("win"); }
+  if (final && S.celebrated !== S.code) { S.celebrated = S.code; haptic("win"); setTimeout(() => revealWinner(top), 0); }
   const tied = ranked.slice(1).filter((id) => pts[id] === pts[ranked[0]]).map((id) => placeById(id)?.name);
   const waitingText = waiting.length <= 3 ? waiting.map(nameOf).join(", ") : `${waiting.slice(0, 2).map(nameOf).join(", ")} and ${waiting.length - 2} more`;
   const root = el(`<div class="app" style="padding:0">
@@ -979,7 +1145,7 @@ function viewResults() {
   if (top) root.append(el(`<section class="winner ${coverFor(top)}">
     ${top.photo ? `<img src="${esc(photoUrl(top))}" alt="" style="width:calc(100% + 44px);margin:-22px -22px 4px;height:180px;object-fit:cover;display:block" onerror="this.remove()">` : ""}
     <div class="pad">
-    <div class="eyebrow" style="color:inherit;opacity:.85">${final ? "Winner" : "Leading"} · ${pts[top.id]} pts</div>
+    <div class="eyebrow" style="color:inherit;opacity:.85">${final ? "Winner" : "Leading"}${ranked.length > 1 ? ` · ${pts[top.id]} pts` : " · the only place you all agreed on"}</div>
     <h2>${esc(top.name)}</h2>
     <div>${esc([top.kind, top.rating ? "★ " + top.rating.toFixed(1) : "", top.price].filter(Boolean).join(" · "))}</div>
     <div>${esc(top.address)}</div>
@@ -996,12 +1162,14 @@ function viewResults() {
   }
   // A column per person stops fitting past a few people, so big groups get points plus my own pick.
   const wide = rankers.length <= 4;
-  root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><div class="table-wrap"><table class="scores">
+  if (ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><div class="table-wrap"><table class="scores">
     <thead><tr><th>#</th><th>Place</th>${wide ? rankers.map((u) => `<th class="n">${esc(nameOf(u))}</th>`).join("") : S.ranks[S.me] ? `<th class="n">You</th>` : ""}<th class="n">Pts</th></tr></thead>
     <tbody>${ranked.map((id, i) => `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}</td>${wide ? rankers.map((u) => `<td class="n">${per[id]?.[u] ?? "–"}</td>`).join("") : S.ranks[S.me] ? `<td class="n">${per[id]?.[S.me] ?? "–"}</td>` : ""}<td class="n">${pts[id]}</td></tr>`).join("")}</tbody>
   </table></div><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
-  const pp = el(`<section class="panel"><div class="eyebrow">Rankings in (${rankers.length}/${everyone.length})</div></section>`);
-  pp.append(peopleBlock("rank")); root.append(pp);
+  if (ranked.length > 1) {
+    const pp = el(`<section class="panel"><div class="eyebrow">Rankings in (${rankers.length}/${everyone.length})</div></section>`);
+    pp.append(peopleBlock("rank")); root.append(pp);
+  }
   const row = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (!final && isHost()) {
     const close = el(`<button class="btn primary block" type="button">Close voting and pick the winner</button>`);
@@ -1017,8 +1185,14 @@ function viewResults() {
     const edit = el(`<button class="btn block" type="button">Change my ranking</button>`); edit.addEventListener("click", () => setView("rank"));
     row.append(edit);
   }
+  if (final && top) {
+    const share = el(`<button class="btn primary block" type="button">Share the plan with the group</button>`);
+    share.addEventListener("click", () => sharePlan(top, share));
+    row.prepend(share);
+  }
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`); again.addEventListener("click", leave);
   row.append(again); root.append(row);
+  if (final && !store.get("mb.fb." + S.code)) root.append(feedbackPanel());
   return root;
 }
 
@@ -1033,8 +1207,22 @@ async function createDeck() {
       category: f.cat, mood: f.mood, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
       playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice,
     });
+    rememberForm(f);
     openSession(code);
   } catch (e) { S.error = e.message; setView("home"); }
+}
+
+// One tap: rerun the last search (asking for location again if it was "near me").
+function quickStart(last) {
+  Object.assign(S.form, { cat: last.cat, mood: last.mood || "", area: last.area || "", radius: last.radius || 3, count: last.count || 15, openNow: !!last.openNow, maxPrice: last.maxPrice || 0, lat: null, lng: null });
+  if (!last.nearMe) return createDeck();
+  if (!navigator.geolocation) { toast("Location isn't available here. Type an area instead."); return render(); }
+  setView("loading");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { S.form.lat = pos.coords.latitude; S.form.lng = pos.coords.longitude; createDeck(); },
+    () => { toast("Couldn't get your location. Type an area instead."); setView("home"); },
+    { timeout: 15000, maximumAge: 300000 },
+  );
 }
 
 async function createSavedDeck(btn) {
@@ -1062,6 +1250,7 @@ async function refresh() {
   try {
     const r = await api("/api/deck?code=" + S.code);
     S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+    if (remaining().length) S.mine.done = false; // more cards were dealt
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
     route();
   } catch { /* keep showing what we have; the next poll tries again */ }
@@ -1080,7 +1269,12 @@ function route() {
 async function openSession(raw) {
   const code = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
   if (!code) return;
-  if (!S.name) { S.pendingCode = code; return setView("name"); }
+  if (!S.name) {
+    S.pendingCode = code;
+    try { const r = await api("/api/deck?code=" + code); S.preview = { deck: r.deck, host: r.swipes[r.deck.hostId]?.name || "", people: Object.keys(r.swipes).length }; }
+    catch (e) { S.error = e.message; return setView("missing"); }
+    return setView("name");
+  }
   stopPolling();
   Object.assign(S, { code, session: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/#" + code); } catch {}
