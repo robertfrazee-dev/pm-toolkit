@@ -49,8 +49,8 @@ a { color: inherit; }
 
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 16px 2px; }
 .brand { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; cursor: pointer; }
-.brand-mark { width: 24px; height: 42px; }
-.bm-stick { fill: #C9A37A; } .bm-head { fill: var(--match); } .bm-flame { fill: var(--sulfur); }
+.brand-mark { width: 21px; height: 44px; }
+.bm-stick { fill: #C9A37A; } .bm-head { fill: var(--match); } .bm-flame { fill: var(--sulfur); } .bm-core { fill: #FFE08A; }
 .brand h1 { font-size: 24px; font-weight: 800; }
 .code-pill { font-family: var(--f-mono); font-size: 12px; font-weight: 700; letter-spacing: .12em; padding: 6px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); border: 0; cursor: pointer; }
 
@@ -248,7 +248,7 @@ textarea.input { resize: vertical; font: inherit; }
 <body>
 <div class="app" id="app">
   <header class="top">
-    <button class="brand" id="homeBtn" type="button" aria-label="Matchbook home"><svg class="brand-mark" viewBox="24 8 52 92" aria-hidden="true"><g transform="rotate(-11 50 96)"><rect x="45" y="46" width="10" height="46" rx="3" class="bm-stick"/><ellipse cx="50" cy="45" rx="7" ry="8" class="bm-head"/></g><g transform="rotate(11 50 96)"><rect x="45" y="46" width="10" height="46" rx="3" class="bm-stick"/><ellipse cx="50" cy="45" rx="7" ry="8" class="bm-head"/></g><path d="M50 42 C36 33 34 19 42 15 C46.5 13.5 50 16.5 50 19.5 C50 16.5 53.5 13.5 58 15 C66 19 64 33 50 42Z" class="bm-flame"/></svg><h1>Matchbook</h1></button>
+    <button class="brand" id="homeBtn" type="button" aria-label="Matchbook home"><svg class="brand-mark" viewBox="31 12 38 80" aria-hidden="true"><path d="M50 44 C36 35 33 21 42 17 C47 15 50 19 50 22 C50 19 53 15 58 17 C67 21 64 35 50 44Z" class="bm-flame"/><path d="M50 40 C42 34 41 26 45 24 C48 23 50 26 50 27 C50 26 52 23 55 24 C59 26 58 34 50 40Z" class="bm-core"/><rect x="45" y="50" width="10" height="40" rx="3" class="bm-stick"/><ellipse cx="50" cy="50" rx="8" ry="9" class="bm-head"/></svg><h1>Matchbook</h1></button>
     <button class="code-pill" id="codePill" type="button" hidden></button>
   </header>
   <main id="view"><p class="muted">Loading…</p></main>
