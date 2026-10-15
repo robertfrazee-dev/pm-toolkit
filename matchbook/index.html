@@ -534,6 +534,13 @@ button.pill { cursor: pointer; }
 .share-sheet { border: 2px solid var(--match); }
 .pay-back a.btn { text-decoration: none; text-align: center; }
 .receipt-btn { cursor: pointer; text-align: center; }
+.trend-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
+.trend-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.trend-row:first-child { border-top: 0; }
+.trend-row .tr-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.trend-row a { color: var(--match); font-weight: 700; text-decoration: none; }
+.trend-tabs { margin-top: 6px; }
+.hot-hoods { margin: 8px 0; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -1264,7 +1271,7 @@ const thumb = (p, cls = "pthumb") => `<span class="${cls} ${COVERS[hash(p.gid ||
 
 function homeTop() {
   const d = S.topData;
-  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of ${esc(S.hood || "Manhattan")}</h2><p class="muted">Ranked by Google ratings and reviews to start, then by Matchbook matchups and the places groups actually pick.</p></div></div>`);
+  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of ${esc(S.hood || "Manhattan")}</h2><p class="muted">Ranked by Google ratings and reviews to start, then by the places groups actually pick.</p></div></div>`);
   if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
   wrap.append(whereBar(() => { S.topData = null; render(); }));
@@ -1272,7 +1279,7 @@ function homeTop() {
   const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
   ci.addEventListener("click", () => openCheckin());
   wrap.append(ci);
-  if (d.tonight?.length) wrap.append(el(`<section class="panel tonight"><div class="eyebrow">🔥 Out tonight${S.hood ? ` · ${esc(S.hood)}` : ""}</div>${d.tonight.map((p) => `<div class="row spread"><span><b>${esc(p.name)}</b> <span class="small muted">${esc(p.hood || "")}</span></span><span class="small hot">${p.tonight} here</span></div>`).join("")}<p class="small muted">Anonymous counts from check-ins.</p></section>`));
+  wrap.append(trendingPanel(d.trending));
   for (const [sec, title] of d.sections) {
     const list = d.boards.filter((x) => x.sec === sec);
     wrap.append(el(`<h3 class="sec-h">${esc(title)}</h3>`));
@@ -1288,11 +1295,44 @@ function homeTop() {
   wrap.append(el(`<p class="attrib">Ratings and photos from Google Maps · Rankings by Matchbook</p>`));
   return wrap;
 }
+// Trending: tonight / this week / this month, from real activity only (swipe yeses, final-vote picks, group wins,
+// check-ins). Never ratings, never paid.
+const WIN_LABEL = { tonight: "Tonight", week: "This week", month: "This month" };
+function trendLine(p) {
+  const bits = [];
+  if (p.win) bits.push(`picked by ${p.win} group${p.win === 1 ? "" : "s"}`);
+  if (p.checkin) bits.push(`${p.checkin} checked in`);
+  if (p.match > p.win) bits.push(`on ${p.match} shortlist${p.match === 1 ? "" : "s"}`);
+  if (p.yes) bits.push(`${p.yes} swipe yes${p.yes === 1 ? "" : "es"}`);
+  return bits.join(" · ");
+}
+function trendingPanel(t) {
+  const win = t?.window || S.trendWin || "tonight", places = t?.places || [];
+  const box = el(`<section class="panel trending"><div class="row spread"><div class="eyebrow">🔥 Trending${S.hood ? ` · ${esc(S.hood)}` : S.near ? " near you" : ""}</div></div>
+    <div class="chips trend-tabs" role="group" aria-label="When">${["tonight", "week", "month"].map((w) => `<button type="button" class="chip" data-win="${w}" aria-pressed="${win === w}">${WIN_LABEL[w]}</button>`).join("")}</div>
+    ${places.length ? `${t.window !== (S.trendWin || "tonight") ? `<p class="small muted">Quiet ${S.trendWin === "week" ? "this week" : "tonight"} so far. Showing ${WIN_LABEL[t.window].toLowerCase()}.</p>` : ""}
+      <ol class="trend-list">${places.map((p, i) => `<li class="trend-row">${thumb(p, "pthumb sm2")}<span class="tr-info"><b>${i + 1}. ${esc(p.name)}</b><span class="small muted">${esc([p.hood, trendLine(p)].filter(Boolean).join(" · "))}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`).join("")}</ol>
+      ${t.hoods?.length > 1 && !S.hood ? `<p class="small hot-hoods"><b>Hottest neighborhoods:</b> ${t.hoods.map((h) => esc(h.hood)).join(" · ")}</p>` : ""}
+      ${places.length >= 2 ? `<button class="btn primary block" type="button" data-swipe-hot>Swipe ${WIN_LABEL[t.window].toLowerCase()}'s hottest ${places.length}</button>` : ""}`
+    : `<p class="small muted">Nothing yet. When groups swipe, pick and check in ${S.hood ? "in " + esc(S.hood) : S.near ? "near you" : "in Manhattan"}, it shows up here. Ranked only by what people actually do, never paid.</p>`}</section>`);
+  box.addEventListener("click", async (e) => {
+    const w = e.target.closest("[data-win]")?.dataset.win;
+    if (w) { S.trendWin = w; const r = await api(`/api/boards?op=trending&window=${w}${nearQS()}`).catch(() => null); if (S.topData && r) { S.topData.trending = r; render(); } return; }
+    const go = e.target.closest("[data-swipe-hot]"); if (!go) return;
+    if (!S.name) return toast("Add your name on the Pick tab first.");
+    go.disabled = true;
+    try {
+      const { code } = await api("/api/deck", { playerId: S.me, source: "hot", area: S.hood || (S.near ? "you" : "Manhattan"), label: `Trending ${t.window === "tonight" ? "tonight" : WIN_LABEL[t.window].toLowerCase()}${S.hood ? " in " + S.hood : ""}`, saved: places.map((p) => ({ name: p.name, maps: p.maps, gid: p.gid, lat: p.lat, lng: p.lng, kind: p.kind })), swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+      openSession(code);
+    } catch (err) { toast(err.message); go.disabled = false; }
+  });
+  return box;
+}
 async function loadTop() {
   if (S.topLoading) return; S.topLoading = true;
   try {
-    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=tonight${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
-    b.tonight = t?.places || []; S.ciStats = m; S.hoodList = b.hoods; store.set("mb.hoods", JSON.stringify(b.hoods));
+    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=trending&auto=1&window=${S.trendWin || "tonight"}${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
+    b.trending = t; S.ciStats = m; S.hoodList = b.hoods; store.set("mb.hoods", JSON.stringify(b.hoods));
     S.topData = b;
   } catch (e) { S.topData = { error: e.message }; }
   S.topLoading = false;
