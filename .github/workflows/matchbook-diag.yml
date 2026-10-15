@@ -7,11 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Boards load
-        run: |
-          S=https://pm-toolkit-matchbook.vercel.app
-          curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S/api/boards?op=boards&me=diagdiagdiag" | cut -c1-300
-      - name: Build the NYC list (same calls the Top tab makes)
+      - name: Status before
+        run: curl -s -m 70 "https://pm-toolkit-matchbook.vercel.app/api/boards?op=status"
+      - name: Repair missing parts (same calls the Top tab makes)
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
           for i in $(seq 1 80); do
