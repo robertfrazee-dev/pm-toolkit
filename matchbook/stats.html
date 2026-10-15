@@ -65,10 +65,7 @@ th { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; let
 </section>
 <section class="panel" id="summary" hidden><h2>How groups are doing</h2><div class="wrap"><table class="summary" id="sumTable"></table></div>
   <p class="muted">Finish rate is decks that reached a winner out of decks started. Google searches and photos are what cost money.</p></section>
-<section class="panel" id="nyc" hidden><h2>Best of NYC list</h2>
-  <p class="muted">Pulls all five boroughs' bars, restaurants, cafés and more from OpenStreetMap into the boards. Run it once to start, then every month or so to pick up new places. Votes and rankings are kept.</p>
-  <p id="nycStatus" class="muted">Checking…</p>
-  <button type="button" id="nycBuild">Build the list</button></section>
+
 <section class="panel" id="comments" hidden><h2>What people said</h2><div id="fbList"></div></section>
 <section class="panel" id="daily" hidden><h2>By day</h2><div class="wrap"><table id="dayTable"></table></div></section>
 </main>
@@ -107,29 +104,8 @@ async function load(key) {
   $("#fbList").innerHTML = (j.feedback || []).length
     ? j.feedback.map((f) => `<p><b>${f.vote === "up" ? "Would use again" : "Wouldn't"}</b> · <span class="muted">${new Date(f.at).toLocaleDateString()} · deck ${esc(f.code)}</span><br>${esc(f.text)}</p>`).join("")
     : `<p class="muted">No written feedback yet.</p>`;
-  $("#summary").hidden = $("#daily").hidden = $("#comments").hidden = $("#nyc").hidden = false;
-  nycStatus();
+  $("#summary").hidden = $("#daily").hidden = $("#comments").hidden = false;
 }
-async function nycStatus() {
-  const r = await fetch("/api/boards?op=status").then((x) => x.json()).catch(() => null);
-  $("#nycStatus").textContent = r?.places ? `${r.places.toLocaleString()} places, built ${new Date(r.builtAt).toLocaleString()}.` : "Not built yet.";
-}
-$("#nycBuild").addEventListener("click", async () => {
-  const btn = $("#nycBuild"), key = get("mb.statsKey"); btn.disabled = true;
-  const call = (b) => fetch("/api/boards", { method: "POST", headers: { "Content-Type": "application/json", "x-stats-key": key }, body: JSON.stringify(b) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Failed"); return j; });
-  try {
-    let parts = 1;
-    for (let i = 0; i < parts; i++) {
-      $("#nycStatus").textContent = `Pulling part ${i + 1}${parts > 1 ? ` of ${parts}` : ""} from OpenStreetMap…`;
-      let r; for (let tries = 0; ; tries++) { try { r = await call({ op: "build", part: i }); break; } catch (e) { if (tries >= 2) throw e; await new Promise((ok) => setTimeout(ok, 5000)); } }
-      parts = r.parts;
-    }
-    $("#nycStatus").textContent = "Sorting places into boards…";
-    const f = await call({ op: "finish" });
-    $("#nycStatus").textContent = `Done: ${f.places.toLocaleString()} places. ` + Object.entries(f.boards).map(([k, v]) => `${k} ${v}`).join(" · ");
-  } catch (e) { $("#nycStatus").textContent = "Stopped: " + e.message + " Tap Build again to retry."; }
-  btn.disabled = false;
-});
 $("#keyForm").addEventListener("submit", (e) => { e.preventDefault(); const k = $("#key").value.trim(); if (k) load(k); });
 const saved = get("mb.statsKey"); if (saved) { $("#key").value = saved; load(saved); }
 </script>
