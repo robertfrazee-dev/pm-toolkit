@@ -10,6 +10,7 @@
 <title>Matchbook</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -436,6 +437,16 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .big-status h2 { font-size: 30px; letter-spacing: -.02em; }
 .meter { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--like); border-radius: 4px; transition: width .3s; }
+/* Timers, live status, removing people */
+.timer { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 700; padding: 5px 11px; border-radius: 999px; background: var(--sunk); color: var(--ink); font-variant-numeric: tabular-nums; }
+.timer.urgent { background: color-mix(in srgb, var(--match) 18%, var(--surface)); color: var(--match); }
+.timer-line { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.av.away span { opacity: .55; } .av.away em { color: var(--muted); font-style: italic; }
+.av.live em { color: var(--sulfur); font-weight: 700; }
+.av[data-rm] { cursor: pointer; }
+.scores.who th { white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.scores.who td:first-child, .scores.who th:first-child { position: sticky; left: 0; background: var(--surface); font-weight: 700; }
+.claim h2 { font-size: 26px; }
 </style>
 </head>
 <body>
@@ -483,11 +494,14 @@ function playerId() {
   return id;
 }
 
+// This device's id. In a deck where they said "that's me" to an earlier entry, S.me is that entry's id instead.
+const ME = playerId();
+const aliasFor = (code) => { const a = store.get("mb.as." + code); return /^[A-Za-z0-9]{8,40}$/.test(a || "") ? a : null; };
 const S = {
-  me: playerId(), name: store.get("mb.name") || "",
+  me: ME, name: store.get("mb.name") || "",
   view: "home", code: null, session: null, swipes: {}, ranks: {}, rankOrder: null,
   mine: { likes: [], passes: [], done: false },
-  form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, ...lastForm() },
+  form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, swipeMin: 15, rankMin: 5, ...lastForm() },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [], tab: store.get("mb.tab") || "pick", filtersOpen: false, editName: false,
   hot: {}, hotCat: "all", hotList: null,
   offers: [], ads: [], adPending: null, adSeen: new Set(), adCount: 0, sinceAd: 0, deals: null, offerData: null, offerForm: null, offerFrom: "", booking: null, bookingTimer: null,
@@ -557,11 +571,60 @@ if (NATIVE) {
   // Keep the token fresh on each launch once someone has opted in.
   if (pushOn()) Plug.PushNotifications?.register().catch(() => {});
 }
+// Web push: browsers, and iPhones that opened Matchbook from the Home Screen (iOS only allows it there).
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const webPushable = () => !NATIVE && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+let swReady = null;
+if (!NATIVE && "serviceWorker" in navigator) swReady = navigator.serviceWorker.register("/sw.js").then(() => navigator.serviceWorker.ready).catch(() => null);
+const myIds = () => [...new Set([ME, S.me, ...Object.keys(localStorageSafe()).filter((k) => k.startsWith("mb.as.")).map((k) => store.get(k))].filter((id) => /^[A-Za-z0-9]{8,40}$/.test(id || "")))];
+function localStorageSafe() { try { return localStorage; } catch { return {}; } }
+const u8 = (b64) => { const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (b64.length % 4)) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+// Subscribes this browser and tells the server which player ids it speaks for. Quiet = no toasts (used on every open).
+async function subscribeWebPush(quiet = false) {
+  try {
+    const reg = await swReady; if (!reg) return false;
+    const { publicKey } = await api("/api/push");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(publicKey) });
+    await api("/api/push", { playerIds: myIds(), sub: sub.toJSON() });
+    store.set("mb.push", "on");
+    if (!quiet) { toast("Notifications on"); haptic("medium"); }
+    return true;
+  } catch (e) { if (!quiet) toast("Couldn't turn on notifications. Check your browser settings."); return false; }
+}
+// Ask right inside a tap (join, find places): browsers only show the prompt for a tap.
+function askForPush() {
+  if (!webPushable() || Notification.permission !== "default") return;
+  Notification.requestPermission().then((p) => { if (p === "granted") subscribeWebPush(true).then((ok) => ok && render()); }).catch(() => {});
+}
+const pushOnHere = () => (NATIVE ? pushOn() : webPushable() && Notification.permission === "granted" && pushOn());
 function pushPrompt(text) {
-  if (!NATIVE || pushOn()) return null;
-  const b = el(`<button class="btn block" type="button">${esc(text)}</button>`);
-  b.addEventListener("click", enablePush);
-  return b;
+  if (NATIVE) {
+    if (pushOn()) return null;
+    const b = el(`<button class="btn block" type="button">🔔 ${esc(text)}</button>`);
+    b.addEventListener("click", enablePush);
+    return b;
+  }
+  if (webPushable()) {
+    if (Notification.permission === "denied" || pushOnHere()) return null;
+    const b = el(`<button class="btn block bell" type="button">🔔 ${esc(text)}</button>`);
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      const p = await Notification.requestPermission().catch(() => "default");
+      if (p === "granted") await subscribeWebPush(); else toast("Notifications are blocked. Turn them on in your browser settings.");
+      render();
+    });
+    return b;
+  }
+  // iPhone in a Safari tab: push only works from the Home Screen.
+  if (IOS && !STANDALONE && store.get("mb.iostip") !== "hide") {
+    const n = el(`<div class="notice bell-tip"><b>🔔 Get reminders on your iPhone</b><br><span class="small">Tap Share, then <b>Add to Home Screen</b>. Open Matchbook from your Home Screen, open this deck, and tap Turn on notifications.</span>
+      <button type="button" class="link small" style="display:block;margin-top:6px">Not now</button></div>`);
+    $("button", n).addEventListener("click", () => { store.set("mb.iostip", "hide"); n.remove(); });
+    return n;
+  }
+  return null;
 }
 
 // ---------- booking buttons on the winner ----------
@@ -667,7 +730,7 @@ async function nudgeOthers(btn) {
     if (!r.waiting.length) { toast("Everyone's done!"); return; }
     if (r.pushed >= r.waiting.length) { toast(`Nudged ${r.waiting.join(", ")}`); return; }
     // Not everyone has notifications on, so hand over a message to drop in the group chat.
-    const text = `${r.waiting.join(", ")}: we're waiting on you to finish swiping 👀 ${inviteUrl(S.code)}`;
+    const text = `${r.waiting.join(", ")}: we're waiting on you to ${S.session.phase === "ranking" ? "rank the places" : "finish swiping"} 👀 ${inviteUrl(S.code)}`;
     if (NATIVE && Plug.Share) await Plug.Share.share({ text }).catch(() => {});
     else if (navigator.share) await navigator.share({ text }).catch(() => {});
     else { await navigator.clipboard.writeText(text).catch(() => {}); toast("Nudge copied. Paste it in your group chat."); }
@@ -680,7 +743,7 @@ function lastForm() {
   try { const f = JSON.parse(store.get("mb.form") || "null"); return f && typeof f === "object" ? f : {}; } catch { return {}; }
 }
 function rememberForm(f) {
-  store.set("mb.form", JSON.stringify({ cat: f.cat, mood: f.mood, area: f.lat != null ? "" : f.area, radius: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, nearMe: f.lat != null }));
+  store.set("mb.form", JSON.stringify({ cat: f.cat, mood: f.mood, area: f.lat != null ? "" : f.area, radius: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, nearMe: f.lat != null, swipeMin: f.swipeMin, rankMin: f.rankMin }));
 }
 
 // ---------- moments: match, winner, share card, feedback ----------
@@ -1093,12 +1156,88 @@ function remaining() {
   return (S.session?.places || []).filter((p) => !done.has(p.id));
 }
 
+// ---------- timers ----------
+// The server's clock is the one that counts; S.skew corrects for a phone that's a little off.
+const serverNow = () => Date.now() + (S.skew || 0);
+const mmss = (ms) => { const t = Math.max(0, Math.ceil(ms / 1000)); return t >= 3600 ? `${Math.floor(t / 3600)}:${String(Math.floor((t % 3600) / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+const timerChip = (endsAt, what) => !endsAt ? "" : `<span class="timer${endsAt - serverNow() <= 120e3 ? " urgent" : ""}" data-ends="${endsAt}">⏱ <b>${mmss(endsAt - serverNow())}</b> left to ${what}</span>`;
+setInterval(() => {
+  let expired = false;
+  document.querySelectorAll(".timer[data-ends]").forEach((t) => {
+    const left = +t.dataset.ends - serverNow();
+    t.querySelector("b").textContent = mmss(left); t.classList.toggle("urgent", left <= 120e3);
+    if (left <= 0) expired = true;
+  });
+  // Time's up: ask the server right away (it closes the step) instead of waiting for the next refresh.
+  if (expired && S.code && !S.timerKick) { S.timerKick = true; setTimeout(() => { S.timerKick = false; }, 4000); S.lastSig = null; refresh(); }
+}, 1000);
+function timerControls(stage) {
+  const s = S.session, opts = stage === "swipe" ? [0, 5, 10, 15, 30, 60] : [0, 2, 5, 10, 15];
+  const cur = stage === "swipe" ? (s.swipeEndsAt ? s.swipeMinutes : 0) : s.phase === "ranking" ? (s.rankEndsAt ? s.rankMinutes : 0) : (s.rankMinutes ?? 5);
+  const label = stage === "swipe" ? "Swiping closes in" : s.phase === "ranking" ? "Ranking closes in" : "Ranking gets";
+  const note = stage === "swipe" || s.phase === "ranking" ? "Picking a time starts the clock from now. Everyone gets a reminder 2 minutes before it closes." : "Starts when swiping closes.";
+  const box = el(`<div class="field timer-ctl"><span class="label">${label}</span>
+    <div class="chips">${opts.map((m) => `<button type="button" class="chip" data-timer="${m}" aria-pressed="${cur === m}">${minLabel(m)}</button>`).join("")}</div>
+    <span class="small muted">${note}</span></div>`);
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-timer]"); if (!b) return;
+    b.disabled = true;
+    try {
+      await api("/api/action", { type: "timer", stage, minutes: +b.dataset.timer, code: S.code, playerId: S.me, name: S.name });
+      toast(+b.dataset.timer ? `${stage === "swipe" ? "Swiping" : "Ranking"} timer set` : "Timer off"); haptic("light");
+      S.lastSig = null; await refresh();
+    } catch (err) { b.disabled = false; toast(err.message); }
+  });
+  return box;
+}
+
+// ---------- who's here ----------
+// A phone checks in every few refreshes; anyone seen in the last 40 seconds is "here".
+const isHere = (pid, view) => {
+  if (pid === S.me) return !view || S.view === view;
+  const x = S.seen?.[pid];
+  return !!x && serverNow() - x.at < 40e3 && (!view || x.view === view);
+};
+const byName = (a, b) => (a === S.me ? -1 : b === S.me ? 1 : nameOf(a).localeCompare(nameOf(b)));
+document.addEventListener("click", async (e) => {
+  const av = e.target.closest(".av[data-rm]"); if (!av || !S.code || !isHost()) return;
+  const name = av.querySelector("small").textContent;
+  if (!confirm(`Remove ${name} from this deck? Use this for a duplicate or someone who isn't coming. Their swipes and ranking won't count.`)) return;
+  try { await api("/api/action", { type: "remove", target: av.dataset.rm, code: S.code, playerId: S.me, name: S.name }); toast(`Removed ${name}`); S.lastSig = null; refresh(); }
+  catch (err) { toast(err.message); }
+});
+
+// "Is this you?" A second browser (or the Home Screen app vs Safari) looks like a new person; this joins them back up.
+function viewClaim() {
+  const c = S.claim;
+  const root = el(`<form class="panel claim" novalidate>
+    <div><div class="eyebrow">Deck ${esc(c.code)}</div><h2 style="margin-top:6px">Are you the ${esc(c.name)} already in this deck?</h2>
+    <p class="muted" style="margin-top:8px">Someone named ${esc(c.name)} joined from another browser or the Home Screen app. If that was you, carry on as them so your swipes and ranking only count once.</p></div>
+    <button class="btn primary block big" type="button" data-me>Yes, that's me</button>
+    <div class="field"><label for="otherName">Not you? Use a different name</label><input class="input" id="otherName" maxlength="30" value="${esc(c.name)} "></div>
+    <button class="btn block" type="submit">Join as someone new</button>
+  </form>`);
+  $("[data-me]", root).addEventListener("click", () => {
+    store.set("mb.as." + c.code, c.pid); S.claim = null;
+    if (pushOnHere()) subscribeWebPush(true);
+    openSession(c.code);
+  });
+  root.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#otherName", root);
+    if (input.value.trim().toLowerCase() === c.name.trim().toLowerCase()) { toast("Add something to tell you apart, like a last initial."); input.focus(); return; }
+    if (!takeName(input)) return;
+    (S.claimSkip ||= new Set()).add(c.code); S.claim = null; openSession(c.code);
+  });
+  return root;
+}
+
 // ---------- render ----------
 function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -1143,7 +1282,8 @@ function tabBar() {
   return bar;
 }
 
-const filterSummary = (f) => [`${f.radius} mi`, ["Any price", "$", "$$ and under", "$$$ and under"][f.maxPrice] || "Any price", f.openNow ? "Open now" : "", `${f.count} cards`].filter(Boolean).join(" · ");
+const filterSummary = (f) => [`${f.radius} mi`, ["Any price", "$", "$$ and under", "$$$ and under"][f.maxPrice] || "Any price", f.openNow ? "Open now" : "", `${f.count} cards`, f.swipeMin ? `${f.swipeMin} min to swipe` : "No time limit"].filter(Boolean).join(" · ");
+const minLabel = (m) => (m ? (m === 60 ? "1 hr" : `${m} min`) : "No limit");
 
 function homePick() {
   const f = S.form;
@@ -1197,6 +1337,11 @@ function homePick() {
       <label class="toggle"><input type="checkbox" id="openNow" ${f.openNow ? "checked" : ""}> Open now only</label>
       <div class="field"><span class="label" id="cntLbl">Cards in the deck</span>
         <div class="chips" role="group" aria-labelledby="cntLbl">${[10, 15, 20, 30, 40].map((n) => `<button type="button" class="chip" data-count="${n}" aria-pressed="${f.count === n}">${n}</button>`).join("")}</div></div>
+      <div class="field"><span class="label" id="swLbl">Time to swipe</span>
+        <div class="chips" role="group" aria-labelledby="swLbl">${[0, 5, 10, 15, 30, 60].map((n) => `<button type="button" class="chip" data-swmin="${n}" aria-pressed="${f.swipeMin === n}">${minLabel(n)}</button>`).join("")}</div>
+        <span class="small muted">When time's up, swiping closes on its own and everyone ranks. Everyone gets a heads-up 2 minutes before.</span></div>
+      <div class="field"><span class="label" id="rkLbl">Time to rank</span>
+        <div class="chips" role="group" aria-labelledby="rkLbl">${[0, 2, 5, 10].map((n) => `<button type="button" class="chip" data-rkmin="${n}" aria-pressed="${f.rankMin === n}">${minLabel(n)}</button>`).join("")}</div></div>
     </div>
     ${S.error ? `<p class="err">${esc(S.error)}</p>` : ""}
     <div class="cta-bar"><button class="btn primary block big" type="submit">Find places</button></div>
@@ -1217,6 +1362,9 @@ function homePick() {
     if (e.target.closest("#moodClear")) { setMood(""); $("#mood", form).focus(); }
     if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); sum(); }
     if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); sum(); }
+    const sw = e.target.closest("[data-swmin]"), rk = e.target.closest("[data-rkmin]");
+    if (sw) { f.swipeMin = +sw.dataset.swmin; pressOnly("data-swmin", sw); sum(); }
+    if (rk) { f.rankMin = +rk.dataset.rkmin; pressOnly("data-rkmin", rk); }
     if (e.target.closest("#filtersBtn")) {
       S.filtersOpen = !S.filtersOpen; $("#filters", form).hidden = !S.filtersOpen;
       $("#filtersBtn", form).setAttribute("aria-expanded", S.filtersOpen); $("#filtersBtn i", form).textContent = S.filtersOpen ? "−" : "+";
@@ -1247,7 +1395,7 @@ function homePick() {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const input = $("#nameNew", form);
-    if (input ? takeName(input) : S.name) { S.editName = false; createDeck(); }
+    if (input ? takeName(input) : S.name) { S.editName = false; askForPush(); createDeck(); }
     else { S.error = "Add your name first."; render(); }
   });
   return wrap;
@@ -1304,9 +1452,9 @@ function viewName() {
       : `<p class="muted" style="margin-top:8px">${d.places.length} places to swipe${pv.people > 1 ? ` · ${pv.people} people in so far` : ""}. Swipe right on places you'd go, left on ones you wouldn't. When ${esc(pv.host || "they")} closes swiping, everyone ranks the places most of you liked.</p>`}</div>
     ${nameField("nameJoin")}
     <button class="btn primary block" type="submit">${d?.phase === "ranking" ? "Join and rank" : d?.phase === "done" ? "See the pick" : "Join and start swiping"}</button>
-    <p class="small muted">No account or app needed.</p>
+    <p class="small muted">No account or app needed.${webPushable() ? " We'll ask to send you a heads-up when it's time to rank." : ""}</p>
   </form>`);
-  root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameJoin", root))) openSession(S.pendingCode); });
+  root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#nameJoin", root))) { askForPush(); openSession(S.pendingCode); } });
   setTimeout(() => $("#nameJoin")?.focus(), 50);
   return root;
 }
@@ -1358,6 +1506,7 @@ function viewSwipe() {
   const where = s.category === "saved" ? (fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
   const root = el(`<div class="app swipe-view">
     <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
+    ${s.swipeEndsAt ? `<div>${timerChip(s.swipeEndsAt, "swipe")}</div>` : ""}
     <div class="bar" aria-hidden="true"><i style="width:${(seen / total) * 100}%"></i></div>
     <div class="stack" id="stack"></div>
     <div class="actions">
@@ -1476,22 +1625,35 @@ function inviteBlock() {
 // Everyone in the deck, still-swiping first so it's obvious who the group is waiting on. Wraps, so a group of 12 all fits.
 // In the ranking round, "done" means their ranking is in. Everyone in the deck counts, swiped or not.
 const rankPeople = () => [...new Set([...participants(), ...Object.keys(S.ranks)])];
+// People still going first, then alphabetical, so nobody jumps around between refreshes.
 function avatarRow(kind = "swipe") {
   const total = S.session.places.length, ppl = kind === "rank" ? rankPeople() : participants();
   const done = (pid) => (kind === "rank" ? !!S.ranks[pid] : !!S.swipes[pid]?.done);
-  const order = [...ppl].sort((a, b) => (done(a) ? 1 : 0) - (done(b) ? 1 : 0));
+  const order = [...ppl].sort((a, b) => (done(a) ? 1 : 0) - (done(b) ? 1 : 0) || byName(a, b));
+  const host = isHost();
   return el(`<div class="avatars${ppl.length > 6 ? " many" : ""}" aria-label="${kind === "rank" ? "Who has ranked" : "Who's done swiping"}">${order.map((pid) => {
     const sw = S.swipes[pid] || {}, n = (sw.likes?.length || 0) + (sw.passes?.length || 0);
-    const label = kind === "rank" ? (done(pid) ? "Ranked" : "Ranking…") : done(pid) ? "Done" : `${n}/${total}`;
-    return `<div class="av${done(pid) ? " done" : ""}"><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
+    let label, cls = "";
+    if (done(pid)) { label = kind === "rank" ? "Ranked" : "Done"; cls = " done"; }
+    else if (kind === "rank") [label, cls] = isHere(pid, "rank") ? ["Ranking now", " live"] : ["Hasn't ranked", " away"];
+    else if (isHere(pid, "swipe")) { label = `Swiping ${n}/${total}`; cls = " live"; }
+    else { label = n ? `${n}/${total} · away` : "Hasn't started"; cls = " away"; }
+    const rm = host && pid !== S.me && S.session.phase !== "done" ? ` data-rm="${esc(pid)}" role="button" tabindex="0" title="Tap to remove"` : "";
+    return `<div class="av${cls}"${rm}><span class="${COVERS[hash(pid) % COVERS.length]}">${esc(nameOf(pid).slice(0, 1).toUpperCase())}</span>
       <small>${esc(nameOf(pid))}</small><em>${label}</em></div>`;
   }).join("")}</div>`);
 }
+const removeHint = () => (isHost() && S.session.phase !== "done" ? `<p class="small muted">Tap someone to remove a duplicate or someone who isn't coming.</p>` : "");
 // Who has submitted a ranking, live. Shown on the ranking screen and on the results while votes come in.
 function rankStatus() {
   const ppl = rankPeople(), n = ppl.filter((pid) => S.ranks[pid]).length;
   const box = el(`<section class="panel" id="rankStatus"><div class="row spread"><div class="eyebrow">${n === ppl.length ? "Everyone has ranked" : `${n} of ${ppl.length} ranked`}</div></div></section>`);
   box.append(avatarRow("rank"));
+  if (n < ppl.length && removeHint()) box.append(el(removeHint()));
+  if (S.session.phase === "ranking" && !S.session.announced && ppl.some((pid) => pid !== S.me && !S.ranks[pid])) {
+    const nudge = el(`<button class="btn block" type="button">👀 Nudge everyone who hasn't ranked</button>`);
+    nudge.addEventListener("click", () => nudgeOthers(nudge)); box.append(nudge);
+  }
   return box;
 }
 async function invite(scope) {
@@ -1536,9 +1698,10 @@ function viewWaiting() {
   const pending = ppl.filter((u) => u !== S.me && !S.swipes[u]?.done).map(nameOf);
   const title = n < 2 ? "Invite your people" : allDone ? (host ? "Everyone's done swiping" : `Waiting on ${hostName()}`) : pending.length === 1 ? `Waiting on ${pending[0]}` : pending.length <= 3 ? `Waiting on ${pending.slice(0, -1).join(", ")} & ${pending.at(-1)}` : `Waiting on ${pending.length} people`;
   const root = el(`<div class="app waiting">
-    <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p></div>
+    <div class="status"><h2>${esc(title)}</h2><p class="muted">${n < 2 ? "Send the link so someone can swipe this deck with you." : `${doneCount} of ${n} done swiping`}</p>
+    ${S.session.swipeEndsAt ? `<div class="timer-line">${timerChip(S.session.swipeEndsAt, "swipe")}</div>` : ""}</div>
   </div>`);
-  if (n >= 2) root.append(avatarRow());
+  if (n >= 2) { root.append(avatarRow()); if (removeHint()) root.append(el(removeHint())); }
   root.append(inviteBlock());
 
   const mp = el(`<section class="panel"></section>`);
@@ -1584,6 +1747,9 @@ function viewWaiting() {
     block.append(el(`<p class="small muted">${n < 2 ? "Swiping stays open until you close it, so send the link first." : allDone ? "Everyone who's joined is done. More people can still join until you close swiping." : `${left} ${left === 1 ? "person is" : "people are"} still swiping. Swiping stays open until you close it.`} After that, the same link opens the ranking round for everyone.</p>`));
     // The host's one big decision sits right under who's done.
     root.insertBefore(block, $(".invite", root));
+    const timers = el(`<section class="panel"><div class="eyebrow">Timers</div></section>`);
+    timers.append(timerControls("swipe"), timerControls("rank"));
+    root.append(timers);
   } else {
     go.append(el(`<div class="notice">${allDone && !Object.keys(counts).length ? `Nobody's said yes to anything yet. ${esc(hostName())} can deal more cards.` : `Ranking starts when ${esc(hostName())} closes swiping. This page updates on its own.`}</div>`));
   }
@@ -1594,8 +1760,8 @@ function viewWaiting() {
   if (S.history.length && S.session.phase === "swiping") {
     const u = el(`<button class="btn ghost block" type="button">Undo my last swipe</button>`); u.addEventListener("click", undo); go.append(u);
   }
-  const notify = pushPrompt("Notify me when it's time to rank");
-  if (notify) go.append(notify);
+  const notify = pushPrompt("Turn on notifications for reminders");
+  if (notify) root.insertBefore(notify, $(".invite", root));
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`);
   again.addEventListener("click", leave);
   go.append(again);
@@ -1627,6 +1793,7 @@ function viewRank() {
   const root = el(`<div class="app rank" style="padding:0">
     <div><div class="eyebrow">Round 2 · Rank</div><h2 style="font-size:28px;margin-top:4px">Put your favorite on top</h2>
     <p class="muted" style="margin-top:6px">Drag by the dots, or use the arrows. Everyone's lists combine into one winner.</p></div>
+    ${S.session.rankEndsAt && !S.session.announced ? `<div>${timerChip(S.session.rankEndsAt, "rank")}</div>` : ""}
     <div id="rankStatusSlot"></div>
     <ol class="mlist" id="rankList"></ol>
     <button class="btn primary block" type="button" id="submitRank">Submit my ranking</button>
@@ -1700,7 +1867,9 @@ function viewResults() {
     <div><div class="eyebrow">${final ? "The verdict" : `Results so far · ${rankers.length} of ${everyone.length} ranked`}</div>
     <h2 style="font-size:28px;margin-top:4px">${final ? "You're going to…" : `Waiting on ${esc(waitingText)}`}</h2></div>
   </div>`);
+  if (!final && S.session.rankEndsAt) root.append(el(`<div>${timerChip(S.session.rankEndsAt, "rank")}</div>`));
   if (!final) root.append(rankStatus()); // while votes are coming in, who's ranked is the main thing to see
+
   if (top) root.append(el(`<section class="winner ${coverFor(top)}">
     ${top.photo ? `<img src="${esc(photoUrl(top))}" alt="" style="width:calc(100% + 44px);margin:-22px -22px 4px;height:180px;object-fit:cover;display:block" onerror="this.remove()">` : ""}
     <div class="pad">
@@ -1728,12 +1897,18 @@ function viewResults() {
       <ul class="mlist">${ranked.map((id, i) => placeRow(placeById(id), i)).join("")}</ul></section>`);
     root.append(opts);
   }
-  // A column per person stops fitting past a few people, so big groups get points plus my own pick.
-  const wide = rankers.length <= 4;
-  if (ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><div class="table-wrap"><table class="scores">
-    <thead><tr><th>#</th><th>Place</th>${wide ? rankers.map((u) => `<th class="n">${esc(nameOf(u))}</th>`).join("") : S.ranks[S.me] ? `<th class="n">You</th>` : ""}<th class="n">Pts</th></tr></thead>
-    <tbody>${ranked.map((id, i) => `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}</td>${wide ? rankers.map((u) => `<td class="n">${per[id]?.[u] ?? "–"}</td>`).join("") : S.ranks[S.me] ? `<td class="n">${per[id]?.[S.me] ?? "–"}</td>` : ""}<td class="n">${pts[id]}</td></tr>`).join("")}</tbody>
-  </table></div><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
+  if (ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><table class="scores">
+    <thead><tr><th>#</th><th>Place</th><th class="n">Pts</th></tr></thead>
+    <tbody>${ranked.map((id, i) => `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}</td><td class="n">${pts[id]}</td></tr>`).join("")}</tbody>
+  </table><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
+  // Everyone's own list, one row per person, however big the group. Places run across in the combined order.
+  if (ranked.length > 1 && rankers.length) {
+    const short = (n) => (n.length > 14 ? n.slice(0, 13) + "…" : n);
+    root.append(el(`<section class="panel"><div class="eyebrow">How everyone ranked (${rankers.length})</div><div class="table-wrap"><table class="scores who">
+      <thead><tr><th>Person</th>${ranked.map((id, i) => `<th class="n" title="${esc(placeById(id)?.name)}">${i + 1}. ${esc(short(placeById(id)?.name || ""))}</th>`).join("")}</tr></thead>
+      <tbody>${[...rankers].sort(byName).map((u) => `<tr><td>${esc(nameOf(u))}</td>${ranked.map((id) => `<td class="n">${per[id]?.[u] ? "#" + per[id][u] : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div><p class="small muted">Each number is where that person put the place. Swipe the table sideways if it's wide.</p></section>`));
+  }
   if (final && ranked.length > 1) root.append(rankStatus());
   const row = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
   if (!final && isHost()) {
@@ -1745,7 +1920,8 @@ function viewResults() {
     });
     row.append(close);
   }
-  if (!final) { const notify = pushPrompt("Notify me when the winner is picked"); if (notify) row.append(notify); }
+  if (!final) { const notify = pushPrompt("Turn on notifications for the result"); if (notify) row.append(notify); }
+  if (!final && isHost()) { const t = el(`<section class="panel"></section>`); t.append(timerControls("rank")); row.append(t); }
   if (S.session.phase === "ranking") {
     const edit = el(`<button class="btn block" type="button">Change my ranking</button>`); edit.addEventListener("click", () => setView("rank"));
     row.append(edit);
@@ -1770,7 +1946,7 @@ async function createDeck() {
   try {
     const { code } = await api("/api/deck", {
       category: f.cat, mood: f.mood, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
-      playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice,
+      playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, swipeMinutes: f.swipeMin, rankMinutes: f.rankMin,
     });
     rememberForm(f);
     openSession(code);
@@ -1779,7 +1955,8 @@ async function createDeck() {
 
 // One tap: rerun the last search (asking for location again if it was "near me").
 function quickStart(last) {
-  Object.assign(S.form, { cat: last.cat, mood: last.mood || "", area: last.area || "", radius: last.radius || 3, count: last.count || 15, openNow: !!last.openNow, maxPrice: last.maxPrice || 0, lat: null, lng: null });
+  Object.assign(S.form, { cat: last.cat, mood: last.mood || "", area: last.area || "", radius: last.radius || 3, count: last.count || 15, openNow: !!last.openNow, maxPrice: last.maxPrice || 0, swipeMin: last.swipeMin ?? 15, rankMin: last.rankMin ?? 5, lat: null, lng: null });
+  askForPush();
   if (!last.nearMe) return createDeck();
   if (!navigator.geolocation) { toast("Location isn't available here. Type an area instead."); return render(); }
   setView("loading");
@@ -1797,7 +1974,7 @@ async function createSavedDeck(btn) {
   btn.disabled = true;
   try {
     const saved = favs().slice(0, 40).map((f) => ({ ...f, category: f.ctx?.category }));
-    const { code } = await api("/api/deck", { playerId: S.me, saved });
+    const { code } = await api("/api/deck", { playerId: S.me, saved, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
     openSession(code);
   } catch (e) { btn.disabled = false; toast(e.message); }
 }
@@ -1805,17 +1982,22 @@ async function createSavedDeck(btn) {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling(); clearInterval(S.bookingTimer);
-  Object.assign(S, { code: null, session: null, lastSig: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, lastSig: null, me: ME, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
 
+const presenceView = () => (S.view === "rank" ? "rank" : S.view === "swipe" ? "swipe" : S.view === "results" ? "results" : "waiting");
 async function refresh() {
   if (!S.code || document.hidden) return;
   try {
-    const r = await api("/api/deck?code=" + S.code);
-    // Most polls bring nothing new: leave the screen alone.
-    const sig = JSON.stringify([r.deck, r.swipes, r.ranks]);
+    // Every 4th refresh (about 12 seconds) also says "I'm here, on this screen" for the live status.
+    const ping = (S.polls = (S.polls || 0) + 1) % 4 === 1 ? `&me=${S.me}&v=${presenceView()}` : "";
+    const r = await api("/api/deck?code=" + S.code + ping);
+    S.skew = r.now ? r.now - Date.now() : 0; S.seen = r.seen || {};
+    // Most polls bring nothing new: leave the screen alone. (Who's here counts as news.)
+    const here = Object.keys(S.seen).filter((pid) => isHere(pid)).sort().map((pid) => pid + S.seen[pid].view);
+    const sig = JSON.stringify([r.deck, r.swipes, r.ranks, here]);
     if (sig === S.lastSig) return;
     S.lastSig = sig;
     S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
@@ -1842,17 +2024,26 @@ async function openSession(raw) {
   if (!code) return;
   if (!S.name) {
     S.pendingCode = code;
+    S.me = aliasFor(code) || ME;
     try { const r = await api("/api/deck?code=" + code); S.preview = { deck: r.deck, host: r.swipes[r.deck.hostId]?.name || "", people: Object.keys(r.swipes).length }; }
     catch (e) { S.error = e.message; return setView("missing"); }
     return setView("name");
   }
   stopPolling();
-  Object.assign(S, { code, session: null, lastSig: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code, session: null, lastSig: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "", me: aliasFor(code) || ME, polls: 0 });
   try { history.replaceState(null, "", "/#" + code); } catch {}
   let r;
-  try { r = await api("/api/deck?code=" + code); }
+  try { r = await api(`/api/deck?code=${code}&me=${S.me}&v=waiting`); }
   catch (e) { S.error = e.message; S.code = null; return setView("missing"); }
+  // New on this device, but someone with the same name is already in: probably them in another browser.
+  if (!r.swipes[S.me] && !r.ranks[S.me] && !S.claimSkip?.has(code)) {
+    const norm = (x) => String(x || "").trim().toLowerCase();
+    const twin = Object.entries({ ...r.swipes, ...r.ranks }).find(([pid, x]) => pid !== S.me && norm(x.name) === norm(S.name));
+    if (twin) { S.claim = { code, pid: twin[0], name: twin[1].name }; S.code = null; return setView("claim"); }
+  }
+  S.skew = r.now ? r.now - Date.now() : 0; S.seen = r.seen || {};
   S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+  if (pushOnHere()) subscribeWebPush(true); // keep this browser's subscription pointed at whoever it is in this deck
   remember(r.deck);
   if (r.deck.center && r.deck.category !== "saved") store.set("mb.lastArea", JSON.stringify({ lat: r.deck.center.latitude, lng: r.deck.center.longitude, label: r.deck.area }));
   S.hot = {}; loadHot();

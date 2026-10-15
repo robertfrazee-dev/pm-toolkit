@@ -88,3 +88,8 @@ Group deals need these in Vercel (Settings → Environment Variables), then a re
 - Optional: `MATCHBOOK_FEE_PERCENT`, `BOOST_DAILY_CENTS`, `SITE_URL`.
 
 Without `STRIPE_SECRET_KEY`, venues can still sign up and create offers; booking shows "opens soon".
+## Notifications and timers
+
+- **Web push** works with no setup: the server makes its push keys on first use and keeps them in Redis. Android and desktop browsers can turn notifications on from any deck. iPhones can only get web push after adding Matchbook to the Home Screen and opening it from there (Apple's rule); the app shows a tip for that.
+- **Timers:** the host picks how long swiping stays open (default 15 minutes) and how long ranking gets (default 5). Two minutes before a step closes, everyone who isn't done gets a reminder; when time's up the step closes on its own and everyone is told.
+- **QStash (recommended):** so reminders go out even when nobody has the app open, add `QSTASH_TOKEN` in Vercel (Upstash console → QStash → copy the token; it's free for this volume). Without it, timers still close the step and send reminders, but only when someone in the deck has Matchbook open.

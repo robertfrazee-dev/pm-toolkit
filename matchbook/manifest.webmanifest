@@ -1,0 +1,14 @@
+{
+  "name": "Matchbook",
+  "short_name": "Matchbook",
+  "description": "Swipe on places with friends, then rank your matches.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B0E13",
+  "theme_color": "#D33A2C",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
