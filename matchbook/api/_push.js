@@ -43,13 +43,14 @@ function sendOne(client, token, payload) {
 
 // Send one alert to these players: the iPhone app (APNs) and any browsers they turned notifications on in.
 // Never throws: a failed push must not break the request. Returns how many players were reached.
-export async function pushToPlayers(playerIds, { title, body, code }) {
+// url (optional) opens a page other than a deck, e.g. a crew's page.
+export async function pushToPlayers(playerIds, { title, body, code, url }) {
   if (!playerIds.length) return 0;
-  const [apns, web] = await Promise.all([pushApns(playerIds, { title, body, code }), pushWeb(playerIds, { title, body, code })]);
+  const [apns, web] = await Promise.all([pushApns(playerIds, { title, body, code, url }), pushWeb(playerIds, { title, body, code, url })]);
   return new Set([...apns, ...web]).size;
 }
 
-async function pushApns(playerIds, { title, body, code }) {
+async function pushApns(playerIds, { title, body, code, url }) {
   if (!pushConfigured()) return [];
   let client;
   try {
@@ -57,7 +58,7 @@ async function pushApns(playerIds, { title, body, code }) {
     if (!tokens.length) return [];
     client = http2.connect(HOST());
     client.on("error", () => {});
-    const payload = { aps: { alert: { title, body }, sound: "default" }, code };
+    const payload = { aps: { alert: { title, body }, sound: "default" }, code, ...(url ? { url } : {}) };
     const results = await Promise.all(tokens.map(([, t]) => sendOne(client, t, payload)));
     // Forget phones Apple says are gone (app deleted or token replaced).
     await Promise.all(results.map((r, i) => (r.status === 410 || /BadDeviceToken|Unregistered/.test(r.body) ? redis("DEL", `push:${tokens[i][0]}`) : null)));
@@ -70,14 +71,14 @@ async function pushApns(playerIds, { title, body, code }) {
   }
 }
 
-async function pushWeb(playerIds, { title, body, code }) {
+async function pushWeb(playerIds, { title, body, code, url }) {
   try {
     const rows = await Promise.all(playerIds.map((id) => redis("HGETALL", `wpush:${id}`)));
     const reached = new Set();
     await Promise.all(rows.flatMap((flat, i) => {
       const subs = hashToObject(flat);
       return Object.entries(subs).map(async ([key, sub]) => {
-        const status = await sendWebPush(sub, { title, body, url: code ? `/j/${code}` : "/", tag: code || "matchbook" }).catch(() => 0);
+        const status = await sendWebPush(sub, { title, body, url: url || (code ? `/j/${code}` : "/"), tag: code || url || "matchbook" }).catch(() => 0);
         if (status >= 200 && status < 300) reached.add(playerIds[i]);
         else if (status === 404 || status === 410) await redis("HDEL", `wpush:${playerIds[i]}`, key);
       });

@@ -11,12 +11,17 @@
 // GET  /api/boards?op=crew&crew=ID                        a crew's own top 3 on every board
 // GET  /api/boards?op=search&q=joe                        find a place in the NYC list (to nominate it)
 // POST /api/boards { op: "nominate", me, slug, id }
+// GET  /api/boards?op=nearby&me&lat&lng                 places on the list close enough to check in at
+// POST /api/boards { op: "checkin", me, name, id, lat, lng, tell }  check in (you have to be there); tells your crews
+// GET  /api/boards?op=mine&me=PID                         your points, weekly streak, spots and recent check-ins
+// GET  /api/boards?op=tonight[&lat&lng&mi]                anonymous: where people are out tonight
 // POST /api/boards { op: "build", part } / { op: "finish" }  owner only (x-stats-key): pull NYC from OpenStreetMap
 // Rankings: each place has a chess-style rating from every head-to-head vote (all three games), plus points for being
 // picked by real groups in decks (a group win counts most). A place needs 5 votes or one group win for an official rank.
 // Each vote also counts on the voter's crews' own boards, so every crew has its own top 3.
-import { PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, bump } from "./_lib.js";
-import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween } from "./_nyc.js";
+import { PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
+import { checkIn, CheckinError, myStats, tonight, tonightCounts, VERIFY_M } from "./_checkin.js";
+import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween, nearbyPlaces } from "./_nyc.js";
 import { CREW_RE, getCrew } from "./_crew.js";
 
 const START = 1500, MIN_VOTES = 5, PER_DAY = 5;
@@ -345,6 +350,8 @@ async function board(res, q) {
   const hood = ALL_HOODS.has(q.get("hood")) ? q.get("hood") : "", near = hood ? null : nearFrom(q);
   const me = q.get("me") || "", c = await catalog();
   const out = { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun, sec: b.sec }, hood, near, ...(await ranked(b.slug, { hood, near })) };
+  const counts = await tonightCounts(out.top.map((p) => p.id));
+  for (const p of out.top) if (counts[p.id]) p.tonight = counts[p.id];
   // Your champ (from King of the Hill or a bracket) and your crews' own top 3, next to the city's.
   if (PLAYER_RE.test(me)) {
     const [champRaw, crewIds] = await pipeline([["GET", `champ:${me}:${b.slug}`], ["SMEMBERS", `pcrews:${me}`]]);
@@ -373,6 +380,29 @@ async function nominate(req, res, b) {
   await redis("SADD", `bd:${board.slug}:extra`, b.id);
   await bump("nominations");
   return send(res, 200, { ok: true });
+}
+
+// ---------- check-ins ----------
+const coordsOk = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+async function nearby(res, q) {
+  const lat = Number(q.get("lat")), lng = Number(q.get("lng"));
+  if (!coordsOk(lat, lng)) return send(res, 400, { error: "Bad location." });
+  const found = await nearbyPlaces(lat, lng, VERIFY_M, 25);
+  const counts = await tonightCounts(found.map((f) => f.p.id));
+  return send(res, 200, { places: found.map(({ p, m }) => ({ ...view(p), m, tonight: counts[p.id] || null })), within: VERIFY_M });
+}
+async function doCheckin(req, res, b) {
+  const me = String(b.me || ""), name = cleanName(b.name), lat = Number(b.lat), lng = Number(b.lng);
+  if (!PLAYER_RE.test(me) || !coordsOk(lat, lng)) return send(res, 400, { error: "Bad check-in." });
+  if (!name) return send(res, 400, { error: "Add your name first." });
+  if (!(await allow(`rl:ci:${clientIp(req)}`, 40, 86400))) return send(res, 429, { error: "That's a lot of check-ins for one day." });
+  try { return send(res, 200, await checkIn({ pid: me, name, placeId: String(b.id || ""), lat, lng, tell: b.tell !== false })); }
+  catch (e) { if (e instanceof CheckinError) return send(res, e.status, { error: e.message }); throw e; }
+}
+async function tonightList(res, q) {
+  const c = await catalog(), near = nearFrom(q);
+  const list = (await tonight(100)).map(([id, n]) => [c.byId.get(id), n]).filter(([p]) => p && (!near || milesBetween(near, p) <= near.mi)).slice(0, 10);
+  return send(res, 200, { places: list.map(([p, n]) => ({ ...view(p, near), tonight: n })) });
 }
 
 // ---------- building the list (owner only) ----------
@@ -409,6 +439,9 @@ export default async function handler(req, res) {
       if (op === "bracket") return await getBracket(res, q);
       if (op === "crew") return await crewBoards(res, q);
       if (op === "search") return await search(res, q);
+      if (op === "nearby") return await nearby(res, q);
+      if (op === "tonight") return await tonightList(res, q);
+      if (op === "mine") return PLAYER_RE.test(q.get("me") || "") ? send(res, 200, await myStats(q.get("me"))) : send(res, 400, { error: "Bad request." });
       if (op === "status") { const c = await catalog(); return send(res, 200, { parts: PARTS.length, places: c.places.length, builtAt: c.meta?.builtAt || null }); }
       return send(res, 404, { error: "Unknown." });
     }
@@ -419,6 +452,7 @@ export default async function handler(req, res) {
     if (b.op === "bracket") return await startBracket(req, res, b);
     if (b.op === "bracketvote") return await bracketVote(req, res, b);
     if (b.op === "nominate") return await nominate(req, res, b);
+    if (b.op === "checkin") return await doCheckin(req, res, b);
     if (b.op === "build" || b.op === "finish") return await build(req, res, b);
     return send(res, 400, { error: "Unknown." });
   } catch (e) {
