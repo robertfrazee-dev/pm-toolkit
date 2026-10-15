@@ -2,7 +2,7 @@
 // POST /api/click  { kind: "event", e: "link_opened"|"same_crew", code, pid, crew }  product events seen only in the browser
 import { CODE_RE, PLAYER_RE, redis, send, body, clientIp, allow, missingConfig, bump } from "./_lib.js";
 import { track } from "./_events.js";
-const CLIENT_EVENTS = new Set(["link_opened", "same_crew"]);
+const CLIENT_EVENTS = new Set(["link_opened", "same_crew", "tab_opened"]);
 
 const KINDS = new Set(["reserve", "resy", "tickets", "ride", "website", "call", "maps"]);
 

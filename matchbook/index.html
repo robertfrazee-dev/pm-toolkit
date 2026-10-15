@@ -538,6 +538,37 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .quest-spot a { color: var(--match); font-weight: 700; text-decoration: none; }
 .pthumb.sm2 { width: 40px; height: 40px; border-radius: 10px; }
 .crew-quests .hist > span:first-child { flex: 1; }
+.bill .chip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 8px; }
+.item-chip { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-height: 74px; padding: 10px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: inherit; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.item-chip .ic-name { font-weight: 700; font-size: 14px; line-height: 1.15; }
+.item-chip .ic-price { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item-chip .ic-by { display: flex; gap: 3px; flex-wrap: wrap; margin-top: auto; }
+.item-chip .ic-by i { font-style: normal; font-size: 10px; font-weight: 800; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); }
+.item-chip.taken { border-color: var(--sunk); opacity: .8; }
+.item-chip.mine { border-color: var(--match); background: color-mix(in srgb, var(--match) 10%, var(--surface)); }
+.item-chip.mine .ic-by i { background: var(--match); color: #fff; }
+.item-chip:disabled { cursor: default; }
+.item-chip .ic-by i.all { width: auto; padding: 0 6px; border-radius: 10px; }
+.your-share .ys-amt { font-family: var(--f-display); font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.board-row { padding: 8px 0; border-top: 1px solid var(--line); gap: 10px; }
+.board-row:first-of-type { border-top: 0; }
+.pill { border: 0; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); cursor: default; }
+button.pill { cursor: pointer; }
+.pill.on { background: color-mix(in srgb, var(--like) 20%, var(--surface)); color: var(--like); }
+.ie-row { gap: 6px; align-items: center; }
+.ie-row .ie-name { flex: 1; min-width: 0; }
+.ie-row .ie-price { width: 92px; text-align: right; }
+.tip-row { display: flex; flex-direction: column; gap: 6px; }
+.share-sheet { border: 2px solid var(--match); }
+.pay-back a.btn { text-decoration: none; text-align: center; }
+.receipt-btn { cursor: pointer; text-align: center; }
+.trend-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
+.trend-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.trend-row:first-child { border-top: 0; }
+.trend-row .tr-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.trend-row a { color: var(--match); font-weight: 700; text-decoration: none; }
+.trend-tabs { margin-top: 6px; }
+.hot-hoods { margin: 8px 0; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -714,6 +745,7 @@ if (NATIVE) {
   });
   // Tapping a notification or an invite link opens that deck.
   Plug.PushNotifications?.addListener("pushNotificationActionPerformed", ({ notification }) => {
+    const bill = billFromUrl(notification?.data?.url || ""); if (bill) return openBill(bill);
     const crew = crewFromUrl(notification?.data?.url || ""); if (crew) return openCrew(crew);
     const code = notification?.data?.code; if (code) openSession(code);
   });
@@ -1369,7 +1401,9 @@ function viewCrew() {
     if (navigator.share) { try { await navigator.share({ title: crew.name, text, url }); return; } catch (e) { if (e?.name === "AbortError") return; } }
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast("Crew link copied"); } catch { toast(url); }
   });
-  root.append(start, inv);
+  const settle = el(`<button class="btn block" type="button">💸 Settle up · split a bill</button>`);
+  settle.addEventListener("click", () => startBill({ crew: crew.id }, settle));
+  root.append(start, inv, settle);
   const note = pushPrompt("Turn on notifications for crew decks"); if (note) root.append(note);
 
   if (!stats.decks) root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">📊</span><b>Stats show up after your first night</b><p class="muted">Start a deck for the crew. When it's picked, you'll see who picks best, who's in sync, and the places you keep almost choosing.</p></div>`));
@@ -1494,15 +1528,15 @@ const thumb = (p, cls = "pthumb") => `<span class="${cls} ${COVERS[hash(p.gid ||
 
 function homeTop() {
   const d = S.topData;
-  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of ${esc(S.hood || "Manhattan")}</h2><p class="muted">Ranked by Google ratings and reviews to start, then by Matchbook matchups and the places groups actually pick.</p></div></div>`);
+  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of ${esc(S.hood || "Manhattan")}</h2><p class="muted">Ranked by Google ratings and reviews to start, then by the places groups actually pick.</p></div></div>`);
   if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
   wrap.append(whereBar(() => { S.topData = null; render(); }));
-  const me = S.mine;
+  const me = S.ciStats;
   const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
   ci.addEventListener("click", () => openCheckin());
   wrap.append(ci);
-  if (d.tonight?.length) wrap.append(el(`<section class="panel tonight"><div class="eyebrow">🔥 Out tonight${S.hood ? ` · ${esc(S.hood)}` : ""}</div>${d.tonight.map((p) => `<div class="row spread"><span><b>${esc(p.name)}</b> <span class="small muted">${esc(p.hood || "")}</span></span><span class="small hot">${p.tonight} here</span></div>`).join("")}<p class="small muted">Anonymous counts from check-ins.</p></section>`));
+  wrap.append(trendingPanel(d.trending));
   for (const [sec, title] of d.sections) {
     const list = d.boards.filter((x) => x.sec === sec);
     wrap.append(el(`<h3 class="sec-h">${esc(title)}</h3>`));
@@ -1518,11 +1552,44 @@ function homeTop() {
   wrap.append(el(`<p class="attrib">Ratings and photos from Google Maps · Rankings by Matchbook</p>`));
   return wrap;
 }
+// Trending: tonight / this week / this month, from real activity only (swipe yeses, final-vote picks, group wins,
+// check-ins). Never ratings, never paid.
+const WIN_LABEL = { tonight: "Tonight", week: "This week", month: "This month" };
+function trendLine(p) {
+  const bits = [];
+  if (p.win) bits.push(`picked by ${p.win} group${p.win === 1 ? "" : "s"}`);
+  if (p.checkin) bits.push(`${p.checkin} checked in`);
+  if (p.match > p.win) bits.push(`on ${p.match} shortlist${p.match === 1 ? "" : "s"}`);
+  if (p.yes) bits.push(`${p.yes} swipe yes${p.yes === 1 ? "" : "es"}`);
+  return bits.join(" · ");
+}
+function trendingPanel(t) {
+  const win = t?.window || S.trendWin || "tonight", places = t?.places || [];
+  const box = el(`<section class="panel trending"><div class="row spread"><div class="eyebrow">🔥 Trending${S.hood ? ` · ${esc(S.hood)}` : S.near ? " near you" : ""}</div></div>
+    <div class="chips trend-tabs" role="group" aria-label="When">${["tonight", "week", "month"].map((w) => `<button type="button" class="chip" data-win="${w}" aria-pressed="${win === w}">${WIN_LABEL[w]}</button>`).join("")}</div>
+    ${places.length ? `${t.window !== (S.trendWin || "tonight") ? `<p class="small muted">Quiet ${S.trendWin === "week" ? "this week" : "tonight"} so far. Showing ${WIN_LABEL[t.window].toLowerCase()}.</p>` : ""}
+      <ol class="trend-list">${places.map((p, i) => `<li class="trend-row">${thumb(p, "pthumb sm2")}<span class="tr-info"><b>${i + 1}. ${esc(p.name)}</b><span class="small muted">${esc([p.hood, trendLine(p)].filter(Boolean).join(" · "))}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`).join("")}</ol>
+      ${t.hoods?.length > 1 && !S.hood ? `<p class="small hot-hoods"><b>Hottest neighborhoods:</b> ${t.hoods.map((h) => esc(h.hood)).join(" · ")}</p>` : ""}
+      ${places.length >= 2 ? `<button class="btn primary block" type="button" data-swipe-hot>Swipe ${WIN_LABEL[t.window].toLowerCase()}'s hottest ${places.length}</button>` : ""}`
+    : `<p class="small muted">Nothing yet. When groups swipe, pick and check in ${S.hood ? "in " + esc(S.hood) : S.near ? "near you" : "in Manhattan"}, it shows up here. Ranked only by what people actually do, never paid.</p>`}</section>`);
+  box.addEventListener("click", async (e) => {
+    const w = e.target.closest("[data-win]")?.dataset.win;
+    if (w) { S.trendWin = w; const r = await api(`/api/boards?op=trending&window=${w}${nearQS()}`).catch(() => null); if (S.topData && r) { S.topData.trending = r; render(); } return; }
+    const go = e.target.closest("[data-swipe-hot]"); if (!go) return;
+    if (!S.name) return toast("Add your name on the Pick tab first.");
+    go.disabled = true;
+    try {
+      const { code } = await api("/api/deck", { playerId: S.me, source: "hot", area: S.hood || (S.near ? "you" : "Manhattan"), label: `Trending ${t.window === "tonight" ? "tonight" : WIN_LABEL[t.window].toLowerCase()}${S.hood ? " in " + S.hood : ""}`, saved: places.map((p) => ({ name: p.name, maps: p.maps, gid: p.gid, lat: p.lat, lng: p.lng, kind: p.kind })), swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+      openSession(code);
+    } catch (err) { toast(err.message); go.disabled = false; }
+  });
+  return box;
+}
 async function loadTop() {
   if (S.topLoading) return; S.topLoading = true;
   try {
-    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=tonight${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
-    b.tonight = t?.places || []; S.mine = m; S.hoodList = b.hoods; store.set("mb.hoods", JSON.stringify(b.hoods));
+    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=trending&auto=1&window=${S.trendWin || "tonight"}${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
+    b.trending = t; S.ciStats = m; S.hoodList = b.hoods; store.set("mb.hoods", JSON.stringify(b.hoods));
     S.topData = b;
   } catch (e) { S.topData = { error: e.message }; }
   S.topLoading = false;
@@ -1869,7 +1936,7 @@ function viewCheckin() {
     const nameIn = $("#ciName", root);
     if (!S.name && !(nameIn && takeName(nameIn))) { toast("Add your name first"); return; }
     S.ciBusy = true; row.disabled = true; haptic("medium");
-    try { S.ciResult = await api("/api/boards", { op: "checkin", me: ME, name: S.name, gid: row.dataset.id, lat: S.ciAt.lat, lng: S.ciAt.lng, tell: S.ciTell !== false }); S.mine = S.ciResult.stats; S.topData = null; render(); scrollTo(0, 0); }
+    try { S.ciResult = await api("/api/boards", { op: "checkin", me: ME, name: S.name, gid: row.dataset.id, lat: S.ciAt.lat, lng: S.ciAt.lng, tell: S.ciTell !== false }); S.ciStats = S.ciResult.stats; S.topData = null; render(); scrollTo(0, 0); }
     catch (err) { toast(err.message); row.disabled = false; }
     S.ciBusy = false;
   });
@@ -1896,6 +1963,286 @@ function viewMine() {
   const go = el(`<button class="btn primary block big" type="button">📍 Check in now</button>`); go.addEventListener("click", () => openCheckin());
   root.append(go);
   return root;
+}
+
+// ---------- Settle up ----------
+// Matchbook never touches money: it does the math, and each person pays whoever paid with a pre-filled Venmo or
+// Cash App link. The bill lives at /s/CODE for 30 days and refreshes every 3 seconds like a deck.
+const billFromUrl = (u) => (String(u).match(/\/s\/([A-Za-z0-9]{6})(?:[/?#]|$)/) || [])[1];
+const usd = (c) => "$" + ((c || 0) / 100).toFixed(2);
+const initials = (n) => String(n || "?").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+async function startBill(opts, btn) {
+  if (!S.name) return toast("Add your name on the Pick tab first.");
+  if (btn) btn.disabled = true;
+  try { const { code } = await api("/api/action", { type: "billstart", playerId: ME, name: S.name, ...opts }); openBill(code); }
+  catch (e) { toast(e.message); if (btn) btn.disabled = false; }
+}
+function stopBillPoll() { clearInterval(S.billTimer); S.billTimer = null; }
+async function openBill(code) {
+  code = String(code).toUpperCase();
+  stopPolling(); stopBillPoll();
+  Object.assign(S, { billCode: code, billData: null, billSig: "", billEdit: false, billShare: null, billReading: false });
+  try { history.replaceState(null, "", "/s/" + code); } catch {}
+  if (store.get("mb.tab." + code) !== "1") { store.set("mb.tab." + code, "1"); trackEvent("tab_opened"); }
+  setView("bill");
+  await loadBillData(true);
+  S.billTimer = setInterval(() => { if (S.view !== "bill") return stopBillPoll(); if (!document.hidden) loadBillData(); }, 3000);
+}
+async function loadBillData(force = false) {
+  try {
+    const d = await fetch(`/api/action?bill=${S.billCode}&me=${ME}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || "Couldn't load the bill."); return j; });
+    setBill(d, force);
+  } catch (e) { if (force || !S.billData) { S.billData = { error: e.message }; render(); } }
+}
+// Re-render only when something changed, and never while someone is typing in a field.
+function setBill(d, force = false) {
+  const sig = JSON.stringify(d);
+  if (!force && sig === S.billSig) return;
+  S.billData = d; S.billSig = sig;
+  const typing = document.activeElement?.closest?.(".bill") && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if (S.view === "bill" && (force || !typing)) render();
+}
+async function billAct(type, extra = {}, { quiet = false } = {}) {
+  try { const d = await api("/api/action", { type, code: S.billCode, playerId: ME, ...extra }); if (d?.code) setBill(d, true); return d; }
+  catch (e) { if (!quiet) toast(e.message); return null; }
+}
+// Shrink the photo before sending (a phone photo is several MB; ~1600px is plenty to read a receipt).
+async function receiptData(file) {
+  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+  const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(img.src);
+  return c.toDataURL("image/jpeg", 0.8).split(",")[1];
+}
+const payNote = (d) => `Matchbook · ${d.place || "tonight"}`;
+const venmoUrl = (d, cents) => `https://venmo.com/${encodeURIComponent(d.payer.venmo)}?txn=pay&amount=${(cents / 100).toFixed(2)}&note=${encodeURIComponent(payNote(d))}`;
+const cashUrl = (d, cents) => `https://cash.app/$${encodeURIComponent(d.payer.cashtag)}/${(cents / 100).toFixed(2)}`;
+
+function viewBill() {
+  const d = S.billData;
+  const root = el(`<div class="app stack-y bill"></div>`);
+  root.append(backButton("Home", () => { stopBillPoll(); leave(); }));
+  if (!d) { root.append(el(`<div class="skeleton" style="height:360px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const c = d.calc, mine = c.shares.find((s) => s.k === d.you), payerName = d.payer.name, final = d.status === "final";
+  const itemsMode = d.mode === "items" && d.items.length && !d.even;
+  root.append(el(`<div class="greet"><span class="small muted">💸 Settle up${final ? " · finished" : ""}</span><h2>${esc(d.place || "Tonight's bill")}</h2><p class="muted">${esc(payerName)} paid${c.total ? ` · ${usd(c.total)}` : ""}</p></div>`));
+
+  // Who are you? (a new device on the link)
+  if (!d.you) {
+    const who = el(`<section class="panel"><div class="eyebrow">Which one are you?</div><div class="chips">${d.people.map((p) => `<button type="button" class="chip" data-k="${esc(p.k)}">${esc(p.name)}</button>`).join("")}</div>
+      <form class="row" style="margin-top:10px;gap:8px" novalidate><input class="input" id="billMe" maxlength="30" placeholder="I'm not listed: my name" value="${esc(S.name && !d.people.some((p) => p.k === S.name.toLowerCase()) ? S.name : "")}" style="flex:1;min-width:0"><button class="btn" type="submit">Join</button></form></section>`);
+    who.addEventListener("click", (e) => { const k = e.target.closest("[data-k]")?.dataset.k; if (k) billAct("billjoin", { k }); });
+    $("form", who).addEventListener("submit", (e) => { e.preventDefault(); const n = $("#billMe", who).value.trim(); if (n) { S.name ||= n; store.set("mb.name", S.name); billAct("billjoin", { name: n }); } });
+    root.append(who);
+  }
+
+  // The payer sets the bill up.
+  if (d.isPayer && !final) root.append(billSetup(d));
+
+  // Claim what you had.
+  if (itemsMode) {
+    const grid = el(`<section class="panel claim"><div class="row spread"><div class="eyebrow">${final ? "Who had what" : "Tap what you had"}</div>${c.unclaimed ? `<span class="small hot">${c.unclaimed} unclaimed · ${usd(c.unclaimedCents)}</span>` : `<span class="small muted">All claimed ✓</span>`}</div>
+      ${final ? "" : `<p class="small muted">Tap again to unclaim. Hold an item to split it with others.</p>`}
+      <div class="chip-grid">${d.items.map((it) => { const by = it.by, me = d.you && by.includes(d.you); return `<button type="button" class="item-chip${me ? " mine" : by.length ? " taken" : ""}" data-item="${esc(it.id)}" ${final ? "disabled" : ""}><span class="ic-name">${esc(it.name)}</span><span class="ic-price">${usd(it.cents)}</span><span class="ic-by">${final && !by.length ? `<i class="all" title="Split evenly">All</i>` : ""}${by.map((k) => `<i title="${esc(d.people.find((p) => p.k === k)?.name || k)}">${esc(initials(d.people.find((p) => p.k === k)?.name || k))}</i>`).join("")}</span></button>`; }).join("")}</div>
+      ${d.isPayer && c.unclaimed && !final ? `<button class="btn block" type="button" data-ping style="margin-top:10px">🔔 Ping the group to claim</button>` : ""}</section>`);
+    $("[data-ping]", grid)?.addEventListener("click", async () => { const r = await billAct("billping", { what: "claim" }); if (r) toast(r.pinged ? `Pinged ${r.pinged} ${r.pinged === 1 ? "person" : "people"}` : "Sent (no one has notifications on yet)"); });
+    root.append(grid);
+  }
+  if (S.billShare) root.append(shareSheet(d));
+
+  // Your share.
+  if (mine && c.total) {
+    const owe = d.you !== d.payer.k;
+    root.append(el(`<section class="panel your-share"><div class="eyebrow">${owe ? `You owe ${esc(payerName)}` : "Your part"}${final ? "" : " so far"}</div><div class="ys-amt">${usd(mine.total)}</div>
+      ${mine.items.length ? `<div class="small muted">${mine.items.map((i) => `${esc(i.name)}${i.shared ? " (shared)" : ""} ${usd(i.cents)}`).join(" · ")}${mine.extraCents ? ` · tax & tip ${usd(mine.extraCents)}` : ""}</div>` : c.evenly ? `<div class="small muted">Split evenly ${d.people.length} ways</div>` : `<div class="small muted">Tap what you had above.</div>`}
+      ${final ? "" : `<p class="small muted">Final once ${d.isPayer ? "you tap" : esc(payerName) + " taps"} Finish${c.unclaimed ? ". Anything unclaimed then gets split evenly" : ""}.</p>`}</section>`));
+  }
+
+  // Finish / reopen.
+  if (d.isPayer && c.total) {
+    const fin = el(`<button class="btn ${final ? "ghost" : "primary"} block big" type="button">${final ? "Reopen the bill" : c.unclaimed ? `Finish · split ${usd(c.unclaimedCents)} unclaimed evenly` : "Finish"}</button>`);
+    fin.addEventListener("click", () => billAct("billfinish", final ? { open: true } : {}));
+    root.append(fin);
+  }
+
+  // Pay back.
+  if (final && mine && d.you !== d.payer.k && mine.total) {
+    const paid = !!d.paid[d.you];
+    const pay = el(`<section class="panel pay-back"><div class="eyebrow">Pay ${esc(payerName)} back</div>
+      <div class="stack-y" style="gap:8px">
+        ${d.payer.venmo ? `<a class="btn primary block big pay-venmo" href="${esc(venmoUrl(d, mine.total))}" target="_blank" rel="noopener">Pay ${usd(mine.total)} with Venmo</a>` : ""}
+        ${d.payer.cashtag ? `<a class="btn block big pay-cash" href="${esc(cashUrl(d, mine.total))}" target="_blank" rel="noopener">Pay ${usd(mine.total)} with Cash App</a>` : ""}
+        <button class="btn block" type="button" data-copy>Copy ${usd(mine.total)}${d.payer.venmo ? ` · @${esc(d.payer.venmo)}` : d.payer.cashtag ? ` · $${esc(d.payer.cashtag)}` : ""}</button>
+        ${!d.payer.venmo && !d.payer.cashtag ? `<p class="small muted">${esc(payerName)} hasn't added Venmo or Cash App yet. Pay them however you usually do.</p>` : ""}
+        <button class="btn ${paid ? "" : "ghost"} block" type="button" data-paid>${paid ? "✓ Paid (tap to undo)" : "I paid"}</button></div></section>`);
+    $("[data-copy]", pay).addEventListener("click", async () => { try { await navigator.clipboard.writeText((mine.total / 100).toFixed(2)); toast(`Copied ${usd(mine.total)}${d.payer.venmo ? ` · pay @${d.payer.venmo}` : ""}`); } catch { toast(usd(mine.total)); } });
+    pay.querySelector(".pay-cash")?.addEventListener("click", () => { navigator.clipboard?.writeText(payNote(d)).catch(() => {}); });
+    $("[data-paid]", pay).addEventListener("click", () => billAct("billpaid", { paid: !paid }));
+    root.append(pay);
+  }
+
+  // Who's paid.
+  if (final && c.total && d.people.length > 1) {
+    const rows = c.shares.filter((s) => s.k !== d.payer.k).map((s) => { const p = d.people.find((x) => x.k === s.k), paid = !!d.paid[s.k];
+      return `<div class="row spread board-row"><span><b>${esc(p?.name || s.k)}</b>${s.k === d.you ? " <span class='small muted'>(you)</span>" : ""}${p && !p.joined ? " <span class='small muted'>· hasn't opened it</span>" : ""}</span><span class="row" style="gap:8px"><span>${usd(s.total)}</span>${d.isPayer && final ? `<button type="button" class="pill${paid ? " on" : ""}" data-mark="${esc(s.k)}" data-paid-now="${paid ? 1 : 0}">${paid ? "Paid ✓" : "Not yet"}</button>` : `<span class="pill${paid ? " on" : ""}">${paid ? "Paid ✓" : "Not yet"}</span>`}</span></div>`; }).join("");
+    const owers = c.shares.filter((s) => s.k !== d.payer.k && s.total), paidN = owers.filter((s) => d.paid[s.k]).length, unpaid = owers.length - paidN;
+    const board = el(`<section class="panel status-board"><div class="row spread"><div class="eyebrow">Paying ${esc(payerName)} back</div><span class="small muted">${paidN} of ${owers.length} paid</span></div>${rows}
+      ${d.isPayer && final && unpaid ? `<button class="btn block" type="button" data-remind style="margin-top:10px">🔔 Remind who hasn't paid</button>` : ""}</section>`);
+    board.addEventListener("click", (e) => { const b = e.target.closest("[data-mark]"); if (b) billAct("billpaid", { k: b.dataset.mark, paid: b.dataset.paidNow !== "1" }); });
+    $("[data-remind]", board)?.addEventListener("click", async () => { const r = await billAct("billping", { what: "pay" }); if (r) toast(r.pinged ? `Reminded ${r.pinged}` : "Sent (no one has notifications on yet)"); });
+    root.append(board);
+  }
+
+  // Send the link.
+  const link = `${SITE}/s/${d.code}`;
+  const shareBtn = el(`<button class="btn block" type="button">${ICON.share} Send the bill to the group</button>`);
+  shareBtn.addEventListener("click", async () => {
+    const text = final ? `Here's what everyone owes for ${d.place || "tonight"}:` : `Claim what you had at ${d.place || "dinner"}:`;
+    if (NATIVE && Plug.Share) { try { await Plug.Share.share({ title: "Settle up", text, url: link }); } catch {} return; }
+    if (navigator.share) { try { await navigator.share({ title: "Settle up", text, url: link }); return; } catch (e) { if (e?.name === "AbortError") return; } }
+    try { await navigator.clipboard.writeText(`${text} ${link}`); toast("Link copied"); } catch { toast(link); }
+  });
+  root.append(shareBtn);
+  const note = pushPrompt("Get told when it's time to pay back"); if (note) root.append(note);
+  root.append(el(`<p class="attrib">Matchbook does the math only. Money goes straight between you in Venmo or Cash App.</p>`));
+  return root;
+}
+
+// Tap to claim / unclaim; hold (or right-click) to split an item among people. One set of page-level handlers that
+// always read the current bill (the screen keeps unchanged sections, so per-render handlers could see stale data).
+(() => {
+  let timer = null, held = false;
+  const chipOf = (e) => (S.view === "bill" ? e.target.closest?.(".bill .item-chip[data-item]") : null);
+  const openShare = (id) => { const it = S.billData?.items.find((i) => i.id === id); if (!it) return; held = true; haptic("medium"); S.billShare = { item: id, keys: [...it.by] }; render(); };
+  document.addEventListener("pointerdown", (e) => {
+    const b = chipOf(e); if (!b || b.disabled) return;
+    held = false; clearTimeout(timer);
+    timer = setTimeout(() => openShare(b.dataset.item), 480);
+  });
+  ["pointerup", "pointercancel"].forEach((t) => document.addEventListener(t, () => clearTimeout(timer)));
+  document.addEventListener("pointermove", (e) => { if (timer && (Math.abs(e.movementX) > 6 || Math.abs(e.movementY) > 6)) clearTimeout(timer); });
+  document.addEventListener("contextmenu", (e) => { const b = chipOf(e); if (b) { e.preventDefault(); if (!b.disabled && !S.billShare) openShare(b.dataset.item); } });
+  document.addEventListener("click", (e) => {
+    const b = chipOf(e); if (!b || b.disabled) return;
+    if (held) { held = false; return; }
+    const d = S.billData; if (!d?.you) return toast("Tap which one you are first.");
+    const it = d.items.find((i) => i.id === b.dataset.item); if (!it) return;
+    const on = !it.by.includes(d.you);
+    // Show it right away; the server keeps every claim, even two at once.
+    it.by = on ? [...it.by, d.you] : it.by.filter((k) => k !== d.you);
+    b.classList.toggle("mine", on); haptic("light");
+    billAct("billclaim", { item: it.id, on });
+  });
+})();
+function shareSheet(d) {
+  const sh = S.billShare, it = d.items.find((i) => i.id === sh.item);
+  if (!it) { S.billShare = null; return el(`<span></span>`); }
+  const box = el(`<section class="panel share-sheet"><div class="eyebrow">Split ${esc(it.name)} (${usd(it.cents)})</div>
+    <div class="chips">${d.people.map((p) => `<button type="button" class="chip" data-k="${esc(p.k)}" aria-pressed="${sh.keys.includes(p.k)}">${esc(p.name)}</button>`).join("")}</div>
+    <div class="row" style="gap:8px;margin-top:10px"><button class="btn" type="button" data-all style="flex:1">Split this line evenly</button><button class="btn primary" type="button" data-save style="flex:1">Save</button></div>
+    <button class="link small" type="button" data-cancel>Cancel</button></section>`);
+  box.addEventListener("click", (e) => {
+    const k = e.target.closest("[data-k]")?.dataset.k;
+    if (k) { sh.keys = sh.keys.includes(k) ? sh.keys.filter((x) => x !== k) : [...sh.keys, k]; render(); return; }
+    if (e.target.closest("[data-all]")) { sh.keys = d.people.map((p) => p.k); }
+    if (e.target.closest("[data-save]") || e.target.closest("[data-all]")) { const keys = sh.keys; S.billShare = null; billAct("billshare", { item: it.id, keys }); render(); }
+    if (e.target.closest("[data-cancel]")) { S.billShare = null; render(); }
+  });
+  return box;
+}
+
+// The payer's setup: receipt or total, items, tip, people, handles.
+function billSetup(d) {
+  const c = d.calc, box = el(`<section class="panel bill-setup stack-y"></section>`);
+  const empty = d.mode === "items" && !d.items.length;
+  box.append(el(`<div class="eyebrow">You paid · set up the bill</div>`));
+  const place = el(`<input class="input" maxlength="60" placeholder="Where? (e.g. Wogies)" value="${esc(d.place || "")}" aria-label="Place">`);
+  place.addEventListener("change", () => billAct("billedit", { patch: { place: place.value } }));
+  box.append(place);
+  if (S.billReading) box.append(el(`<div class="empty"><span style="font-size:28px" aria-hidden="true">🧾</span><b>Reading the receipt…</b><p class="muted small">About 10–20 seconds.</p></div>`));
+  else if (empty || S.billRescan) {
+    const pick = el(`<div class="stack-y" style="gap:8px"><label class="btn primary block big receipt-btn">📷 Scan the receipt<input type="file" accept="image/*" capture="environment" hidden></label>
+      <button class="btn block" type="button" data-total>Type the total instead</button>${S.billRescan ? `<button class="link small" type="button" data-keep>Keep the current items</button>` : ""}</div>`);
+    $("input", pick).addEventListener("change", async (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      S.billReading = true; S.billRescan = false; render();
+      try { const image = await receiptData(f); const r = await billAct("billreceipt", { image, mediaType: "image/jpeg" }); if (r) toast(`Found ${r.items.length} items`); }
+      catch { toast("Couldn't use that photo. Try again or type the total."); }
+      S.billReading = false; render();
+    });
+    $("[data-total]", pick).addEventListener("click", () => { S.billRescan = false; billAct("billedit", { patch: { mode: "total" } }); });
+    $("[data-keep]", pick)?.addEventListener("click", () => { S.billRescan = false; render(); });
+    box.append(pick);
+  } else if (d.mode === "total") {
+    const t = el(`<form class="stack-y" style="gap:8px" novalidate><label class="small muted" for="billTotal">Total on the bill, with tax</label><input class="input big" id="billTotal" inputmode="decimal" placeholder="0.00" value="${d.manualTotal != null ? (d.manualTotal / 100).toFixed(2) : ""}">
+      <div class="row" style="gap:8px"><button class="btn primary" type="submit" style="flex:1">Save total</button><button class="btn" type="button" data-scan style="flex:1">📷 Scan instead</button></div></form>`);
+    t.addEventListener("submit", (e) => { e.preventDefault(); const v = parseFloat($("#billTotal", t).value.replace(/[$,]/g, "")); if (!(v > 0)) return toast("Type the total."); billAct("billedit", { patch: { manualTotal: v } }); });
+    $("[data-scan]", t).addEventListener("click", () => { S.billRescan = true; billAct("billedit", { patch: { mode: "items" } }); });
+    box.append(t);
+  } else {
+    // Items from the receipt (or typed). Edit, add, delete; warn when they don't add up.
+    if (c.mismatch) box.append(el(`<div class="notice small">Items add up to ${usd(c.itemsSum)} but the receipt's subtotal is ${usd(d.subtotal)}. Check for a missing or misread item.</div>`));
+    const toggle = el(`<div class="row spread"><span class="small muted">${d.items.length} items · ${usd(c.itemsSum)}${d.tax ? ` · tax ${usd(d.tax)}` : ""}</span><span class="row" style="gap:10px"><button class="link small" type="button" data-edit>${S.billEdit ? "Done editing" : "Edit items"}</button><button class="link small" type="button" data-rescan>Rescan</button></span></div>`);
+    $("[data-edit]", toggle).addEventListener("click", () => { S.billEdit = !S.billEdit; render(); });
+    $("[data-rescan]", toggle).addEventListener("click", () => { S.billRescan = true; render(); });
+    box.append(toggle);
+    if (S.billEdit) {
+      const ed = el(`<form class="item-editor stack-y" novalidate>${d.items.map((i) => `<div class="row ie-row" data-id="${esc(i.id)}"><input class="input ie-name" maxlength="60" value="${esc(i.name)}" aria-label="Item"><input class="input ie-price" inputmode="decimal" value="${(i.cents / 100).toFixed(2)}" aria-label="Price"><button type="button" class="link" data-del aria-label="Delete">✕</button></div>`).join("")}
+        <button type="button" class="link small" data-add style="align-self:flex-start">+ Add an item</button>
+        <div class="row" style="gap:8px"><label class="small muted" style="flex:1">Subtotal<input class="input" name="subtotal" inputmode="decimal" value="${d.subtotal != null ? (d.subtotal / 100).toFixed(2) : ""}"></label><label class="small muted" style="flex:1">Tax<input class="input" name="tax" inputmode="decimal" value="${((d.tax || 0) / 100).toFixed(2)}"></label></div>
+        <button class="btn primary block" type="submit">Save items</button></form>`);
+      ed.addEventListener("click", (e) => {
+        if (e.target.closest("[data-del]")) e.target.closest(".ie-row").remove();
+        if (e.target.closest("[data-add]")) e.target.closest("[data-add]").before(el(`<div class="row ie-row" data-id=""><input class="input ie-name" maxlength="60" placeholder="Item" aria-label="Item"><input class="input ie-price" inputmode="decimal" placeholder="0.00" aria-label="Price"><button type="button" class="link" data-del aria-label="Delete">✕</button></div>`));
+      });
+      ed.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const items = [...ed.querySelectorAll(".ie-row")].map((r) => ({ id: r.dataset.id, name: $(".ie-name", r).value, price: parseFloat($(".ie-price", r).value.replace(/[$,]/g, "")) || 0 }));
+        const num = (n) => { const v = ed.elements[n].value.trim(); return v === "" ? null : parseFloat(v.replace(/[$,]/g, "")) || 0; };
+        S.billEdit = false; billAct("billedit", { patch: { items, subtotal: num("subtotal"), tax: num("tax") || 0 } });
+      });
+      box.append(ed);
+    }
+  }
+  // Tip (when it isn't on the receipt).
+  if ((d.mode === "total" ? d.manualTotal != null : d.items.length) && !(d.receiptRead && d.tip != null && d.tipPct == null && d.mode === "items" && d.tip > 0 && !S.billTipEdit)) {
+    const pct = d.tipPct, custom = d.tip != null && !pct;
+    const tip = el(`<div class="tip-row"><span class="small muted">Tip ${c.tip ? usd(c.tip) : ""}</span><div class="chips">${[18, 20, 22].map((p) => `<button type="button" class="chip" data-pct="${p}" aria-pressed="${pct === p}">${p}%</button>`).join("")}<button type="button" class="chip" data-custom aria-pressed="${custom}">${custom ? usd(d.tip) : "Amount"}</button><button type="button" class="chip" data-none aria-pressed="${!pct && !custom}">None</button></div></div>`);
+    tip.addEventListener("click", (e) => {
+      const p = e.target.closest("[data-pct]")?.dataset.pct;
+      if (p) return billAct("billedit", { patch: { tipPct: Number(p) } });
+      if (e.target.closest("[data-none]")) return billAct("billedit", { patch: { tip: null, tipPct: null } });
+      if (e.target.closest("[data-custom]")) { const v = prompt("Tip amount in dollars", custom ? (d.tip / 100).toFixed(2) : ""); if (v != null && parseFloat(v) >= 0) billAct("billedit", { patch: { tip: parseFloat(v) } }); }
+    });
+    box.append(tip);
+  } else if (d.tip) box.append(el(`<p class="small muted">Tip on the receipt: ${usd(d.tip)}</p>`));
+  // Split evenly instead.
+  if (d.mode === "items" && d.items.length) {
+    const ev = el(`<label class="row ci-tell"><input type="checkbox" ${d.even ? "checked" : ""}> <span>Just split everything evenly</span></label>`);
+    $("input", ev).addEventListener("change", (e) => billAct("billedit", { patch: { even: e.target.checked } }));
+    box.append(ev);
+  }
+  // People.
+  const ppl = el(`<div class="people-edit"><div class="small muted">Splitting with</div><div class="chips">${d.people.map((p) => `<span class="chip" aria-pressed="${p.k === d.payer.k}">${esc(p.name)}${p.k === d.payer.k ? "" : ` <button type="button" class="link small" data-rm="${esc(p.k)}" aria-label="Remove ${esc(p.name)}">✕</button>`}</span>`).join("")}</div>
+    <form class="row" style="gap:8px;margin-top:6px" novalidate><input class="input" id="billAdd" maxlength="30" placeholder="Add someone" style="flex:1;min-width:0"><button class="btn" type="submit">Add</button></form></div>`);
+  ppl.addEventListener("click", (e) => { const k = e.target.closest("[data-rm]")?.dataset.rm; if (k) billAct("billpeople", { remove: k }); });
+  $("form", ppl).addEventListener("submit", (e) => { e.preventDefault(); const n = $("#billAdd", ppl).value.trim(); if (n) billAct("billpeople", { add: n }); });
+  box.append(ppl);
+  // How to pay you back (saved for next time).
+  if (!d.payer.venmo && !d.payer.cashtag || S.billHandles) {
+    const h = el(`<form class="handles stack-y" style="gap:8px" novalidate><div class="small muted">How should people pay you back? (saved for next time)</div>
+      <div class="row" style="gap:8px"><input class="input" name="venmo" placeholder="Venmo @username" value="${esc(d.payer.venmo)}" autocapitalize="off" style="flex:1;min-width:0"><input class="input" name="cashtag" placeholder="Cash App $cashtag" value="${esc(d.payer.cashtag)}" autocapitalize="off" style="flex:1;min-width:0"></div>
+      <button class="btn" type="submit">Save</button></form>`);
+    h.addEventListener("submit", async (e) => { e.preventDefault(); S.billHandles = false; const r = await billAct("billhandles", { venmo: h.elements.venmo.value, cashtag: h.elements.cashtag.value }); if (r) loadBillData(true); });
+    box.append(h);
+  } else {
+    const h = el(`<div class="row spread small"><span class="muted">Paid back to ${[d.payer.venmo && "@" + esc(d.payer.venmo), d.payer.cashtag && "$" + esc(d.payer.cashtag)].filter(Boolean).join(" · ")}</span><button class="link small" type="button">Change</button></div>`);
+    $("button", h).addEventListener("click", () => { S.billHandles = true; render(); });
+    box.append(h);
+  }
+  return box;
 }
 
 // ---------- recent decks (this device only) ----------
@@ -2048,7 +2395,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { board: viewBoard, tier: viewTier, tierlist: viewTierList, quest: viewQuest, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { bill: viewBill, board: viewBoard, tier: viewTier, tierlist: viewTierList, quest: viewQuest, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -2760,6 +3107,7 @@ function viewResults() {
   }
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`); again.addEventListener("click", leave);
   row.append(again); root.append(row);
+  if (final) { const settle = el(`<button class="btn block" type="button">💸 Settle up · split the bill</button>`); settle.addEventListener("click", () => startBill({ deck: S.code, place: top?.name || "" }, settle)); root.append(settle); }
   const cp = crewPanel(); if (cp) root.append(cp);
   if (final && !store.get("mb.fb." + S.code)) root.append(feedbackPanel());
   return root;
@@ -2895,12 +3243,13 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) refr
 
 const fromLink = codeFromUrl(location.pathname) || codeFromUrl(location.hash);
 const crewLink = crewFromUrl(location.pathname);
+const billLink = billFromUrl(location.pathname);
 // Analytics: someone opened a deck link (once per deck per device).
 function trackEvent(e, extra = {}) { fetch("/api/click", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "event", e, pid: ME, ...extra }), keepalive: true }).catch(() => {}); }
 if (fromLink && store.get("mb.opened." + fromLink.toUpperCase()) !== "1") { store.set("mb.opened." + fromLink.toUpperCase(), "1"); trackEvent("link_opened", { code: fromLink.toUpperCase() }); }
 const bookingLink = (location.pathname.match(/^\/b\/([A-Za-z0-9]{6,24})/) || [])[1];
 if (bookingLink) { if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Your card is only charged once everyone's paid."); openBooking(bookingLink); }
-else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
+else if (billLink) openBill(billLink); else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
 </script>
 </body>
 </html>

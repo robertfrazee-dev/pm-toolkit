@@ -3,5 +3,10 @@
   "private": true,
   "type": "module",
   "description": "Swipe on places with friends, then rank your matches.",
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.134.0"
+  }
 }

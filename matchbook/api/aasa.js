@@ -5,5 +5,5 @@ export default function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "public, max-age=3600");
   if (!team) { res.statusCode = 404; return res.end("{}"); }
-  res.end(JSON.stringify({ applinks: { details: [{ appIDs: [`${team}.${bundle}`], components: [{ "/": "/j/*" }, { "/": "/b/*" }, { "/": "/c/*" }] }] } }));
+  res.end(JSON.stringify({ applinks: { details: [{ appIDs: [`${team}.${bundle}`], components: [{ "/": "/j/*" }, { "/": "/b/*" }, { "/": "/c/*" }, { "/": "/s/*" }] }] } }));
 }

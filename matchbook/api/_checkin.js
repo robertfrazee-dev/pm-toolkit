@@ -6,6 +6,7 @@ import { getCrew, memberPids, personKey } from "./_crew.js";
 import { pushToPlayers } from "./_push.js";
 import { details, hoodOf } from "./_best.js";
 import { track } from "./_events.js";
+import { trendCmds } from "./_trending.js";
 
 export const VERIFY_M = 250; // how close you have to be to check in
 const PER_NIGHT = 12;
@@ -110,6 +111,7 @@ export async function checkIn({ pid, name, gid, lat, lng, tell = true }) {
     ["LPUSH", `ci:log:${pid}`, JSON.stringify({ gid, at: Date.now(), pts })], ["LTRIM", `ci:log:${pid}`, 0, 99], ["EXPIRE", `ci:log:${pid}`, KEEP],
     ["SADD", tnKey, pid], ["EXPIRE", tnKey, NIGHT_KEEP],
     ["ZINCRBY", "bx:grp", 2, gid], // a check-in is a small real-world vote on every list the place is on
+    ...trendCmds({ gid, lat: p.lat, lng: p.lng }, "checkin"),
   ];
   for (const cr of crews) {
     cmds.push(["LPUSH", `crew:${cr.id}:feed`, JSON.stringify({ k: pk, name, gid, at: Date.now() })], ["LTRIM", `crew:${cr.id}:feed`, 0, 49], ["EXPIRE", `crew:${cr.id}:feed`, KEEP]);

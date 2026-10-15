@@ -3,6 +3,7 @@
 import { pipeline, hashToObject } from "./_lib.js";
 import { CATEGORIES } from "./_places.js";
 import { inManhattan } from "./_best.js";
+import { trendCmds } from "./_trending.js";
 
 const KEEP = 400 * 86400; // a place's lifetime counts
 const BOARD_KEEP = 70 * 86400; // monthly area boards: this month and last are read
@@ -25,6 +26,7 @@ export async function recordPlaces(deck, changes) {
     cmds.push(["HINCRBY", `place:${p.gid}`, field, n], ["EXPIRE", `place:${p.gid}`, KEEP]);
     // Manhattan places also count on the "Best of Manhattan" lists (a group win counts most).
     if (POINTS[field] && inManhattan(p.lat, p.lng)) cmds.push(["ZINCRBY", "bx:grp", BEST_POINTS[field] * n, p.gid], ["EXPIRE", "bx:grp", KEEP], ...(field === "win" ? [["HINCRBY", "bx:wins", p.gid, n], ["EXPIRE", "bx:wins", KEEP]] : []));
+    cmds.push(...trendCmds(p, field, n)); // tonight / this week, from real activity
     if (POINTS[field] && p.lat != null && p.lng != null) {
       const cell = cellOf(p.lat, p.lng), cat = CATEGORIES[deck.category] ? deck.category : CATEGORIES[p.cat] ? p.cat : null;
       for (const c of cat ? ["all", cat] : ["all"]) {
