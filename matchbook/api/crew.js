@@ -4,7 +4,7 @@
 // POST /api/crew { type: "leave", id, playerId }
 // POST /api/crew { type: "rename", id, playerId, name } the person who made it
 import { CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, bump } from "./_lib.js";
-import { CREW_RE, getCrew, saveCrew, newCrewId, addMember, recordCrewDeck, crewStats } from "./_crew.js";
+import { CREW_RE, getCrew, saveCrew, newCrewId, addMember, isMember, memberPids, recordCrewDeck, crewStats } from "./_crew.js";
 import { winnerOf } from "./action.js";
 
 const crewName = (s) => String(s || "").replace(/[\u0000-\u001f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
@@ -24,6 +24,8 @@ async function read(res, q) {
       if (deck.phase !== "done" && !deck.announced) live = { code: crew.liveCode, phase: deck.phase, label: deck.label, area: deck.area, people: Object.keys(swipes).length, done: deck.phase === "ranking" ? Object.keys(ranks).length : Object.values(swipes).filter((s) => s.done).length, endsAt: deck.phase === "ranking" ? deck.rankEndsAt : deck.swipeEndsAt };
     }
   }
+  // Remembered per person, so their votes on the boards count toward this crew's own top 3.
+  if (PLAYER_RE.test(me) && isMember(crew, me)) await redis("SADD", `pcrews:${me}`, crew.id);
   const members = Object.entries(crew.members).map(([k, m]) => ({ key: k, name: m.name, me: PLAYER_RE.test(me) && m.pids.includes(me) })).sort((a, b) => b.me - a.me || a.name.localeCompare(b.name));
   return send(res, 200, {
     crew: { id: crew.id, name: crew.name, createdAt: crew.createdAt, owner: crew.ownerId === me, decks: history.length },
@@ -56,6 +58,7 @@ async function create(req, res, b, playerId) {
     }
   }
   await saveCrew(crew);
+  await pipeline(memberPids(crew).map((pid) => ["SADD", `pcrews:${pid}`, crew.id]));
   if (fromDeck) {
     const { code, deck, swipes, ranks } = fromDeck;
     if (deck.phase === "done" || deck.announced) await recordCrewDeck(code, deck, winnerOf(deck, Object.values(ranks)), swipes, ranks);
@@ -81,11 +84,13 @@ export default async function handler(req, res) {
     if (b.type === "join") {
       const name = cleanName(b.name); if (!name) return send(res, 400, { error: "Add your name first." });
       if (addMember(crew, playerId, name)) await saveCrew(crew);
+      await redis("SADD", `pcrews:${playerId}`, crew.id);
       return send(res, 200, { ok: true });
     }
     if (b.type === "leave") {
       for (const [k, m] of Object.entries(crew.members)) { m.pids = m.pids.filter((p) => p !== playerId); if (!m.pids.length) delete crew.members[k]; }
       await saveCrew(crew);
+      await redis("SREM", `pcrews:${playerId}`, crew.id);
       return send(res, 200, { ok: true });
     }
     if (b.type === "rename") {

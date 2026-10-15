@@ -90,11 +90,15 @@ A crew is a group that decides together again and again (`api/crew.js`, `api/_cr
 - Each finished crew deck is kept as a short summary (places, winner, each person's yeses and ranking) for 400 days, so stats outlive the decks: best picker (whose #1 won), who's in sync (same yes/no on the same cards), wild card, easiest and hardest to please, most picked places, and "Next time?" (places lots of the crew liked that never won, swipeable as a deck).
 - People are matched by name inside a crew, so someone who used two browsers still counts once.
 
-## Best of Manhattan and This or That
+## Best of NYC: boards and games
 
 `api/boards.js` and `api/_nyc.js`, shown on the app's **Top** tab.
 
-- **The list:** Manhattan's bars, restaurants, cafés, nightlife, music venues, things to do, sights and parks come from OpenStreetMap (free to store, credited on every board). Build it from the stats page ("Best of Manhattan list" → Build the list): it pulls 7 parts from the Overpass API and sorts them into 16 boards (Sports Bars, Happy Hour, Late-Night Hangouts, Bars for a Crazy Night, Italian Dinners, Pizza, Bagels, Brunch, Bars, Restaurants, Coffee, Dessert, Live Music, Things to Do, Sights, Outdoor Spots). Rebuild every month or so; votes and rankings are kept. Optional: `OVERPASS_URL` to use a different Overpass server.
-- **Rankings:** each place has a chess-style rating per board from This or That votes, plus points when real groups pick it in a Manhattan deck (a group win counts most). A place needs 5 votes or one group win before it gets an official rank.
+- **The list:** bars, restaurants, cafés, nightlife, music venues, things to do, sights and parks in all five boroughs come from OpenStreetMap (free to store, credited on every board). Build it from the stats page ("Best of NYC list" → Build the list): it pulls 27 parts from the Overpass API (a few per borough) and sorts them into 33 boards in six sections: the big debates (Pizza, Bars, Buffalo Wings, Burger, Bagels), food (Italian, Thai, Chinese, Sushi, Mexican, Indian, Ramen, Steakhouse, Brunch, Restaurants, Dessert, Coffee), drinks (Espresso Martini, Pint of Guinness, Happy Hour, Dive Bar, Rooftop, Wine Bar), game day (Sports Bars, NFL Game Day Bar), nights out (Date Night Spot, Date Activities, Late-Night, Crazy Night, Live Music) and things to do. Rebuild every month or so; votes and rankings are kept. Optional: `OVERPASS_URL` to use a different Overpass server.
+- **Near me:** every board, and every game, can be All NYC, a radius around you (½, 1, 2 or 5 miles; your location stays on your device and is only sent with board requests), or one neighborhood.
+- **Rankings:** each place has a chess-style rating per board from every head-to-head vote, plus points when real groups pick it in an NYC deck (a group win counts most). A place needs 5 votes or one group win before it gets an official rank.
 - **This or That:** 5 matchups a day per person, one per board, each a close match or a newcomer. Votes are tied to the matchups the server handed out (no stuffing), with a daily streak.
-- People can nominate a missing place from the Manhattan list onto a board, and swipe a board's top list as a deck with friends.
+- **King of the Hill:** the champ stays on until a challenger beats it; every challenger is new to the run. Your longest reign is your record.
+- **Brackets:** 8 or 16 places seeded by rank (near you or all NYC), 1 plays 8, 4 plays 5…, down to a champ.
+- **Your champ and your crew's top 3:** the last place you crowned (on the hill or in a bracket) shows next to the city's #1. Every vote also counts on each of your crews' own boards, a bracket title counts extra and a crew night's winner counts most, so each crew has its own top 3 per board (on the board and on the crew page).
+- People can nominate a missing place from the NYC list onto a board, and swipe a board's top list as a deck with friends.
