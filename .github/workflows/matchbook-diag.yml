@@ -3,23 +3,20 @@ on:
   push:
     branches: [matchbook-diag]
 jobs:
-  build-list:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Status before
-        run: curl -s -m 70 "https://pm-toolkit-matchbook.vercel.app/api/boards?op=status"
-      - name: Repair missing parts (same calls the Top tab makes)
+      - name: Live lists
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          for i in $(seq 1 80); do
-            r=$(curl -s -m 70 -X POST -H 'content-type: application/json' -d '{"op":"buildstep"}' "$S/api/boards")
-            echo "$(date +%T) $r"
-            echo "$r" | grep -q '"done":true' && break
-            echo "$r" | grep -q '"busy":true' && sleep 10 || sleep 1
+          show() { python3 -c "import sys,json; t=sys.stdin.read(); 
+          try:
+            j=json.loads(t)
+          except Exception: print(t[:300]); sys.exit()
+          if 'error' in j: print('ERROR', j['error']); sys.exit()
+          print(j.get('where'), len(j.get('places',[])), 'places')
+          [print(' ', p['rank'], p['name'], '|', p.get('hood'), '|', p.get('rating'), p.get('ratings'), '| photo' if p.get('photo') else '| no photo') for p in j.get('places',[])[:8]]"; }
+          for q in "slug=pizza" "slug=pizza&area=West%20Village" "slug=bars&area=west%20vill" "slug=guinness" "slug=sports-bars&area=Hells%20Kitchen"; do
+            echo "=== $q"; curl -s -m 60 "$S/api/boards?op=board&$q" | show
           done
-      - name: After
-        run: |
-          S=https://pm-toolkit-matchbook.vercel.app
-          curl -s -m 70 "$S/api/boards?op=status"; echo
-          curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S/api/boards?op=boards&me=diagdiagdiag" | python3 -c "import sys,json; t=sys.stdin.read(); j=json.loads(t[:t.rindex('[')]); print('ready', j.get('ready'), 'building', j.get('building')); [print(b['title'], b['size'], (b['first'] or {}).get('name')) for b in j['boards']]; print(t[t.rindex('['):])"
+          echo "=== nearby (Washington Sq)"; curl -s -m 60 "$S/api/boards?op=nearby&lat=40.7308&lng=-73.9973" | head -c 400; echo
