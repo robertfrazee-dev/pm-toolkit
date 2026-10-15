@@ -3,9 +3,10 @@
 // GET  /api/boards?op=boards                         the categories, in sections, and the neighborhood list
 // GET  /api/boards?op=board&slug=pizza&me=PID&<where>  the list: ranked by Google ratings to start, then by Matchbook votes
 //                                                    and group picks; plus your champ and your crews' top 3
-// GET  /api/boards?op=match&slug=pizza&me=PID&<where>[&fresh=1]  Matchups: two places, the one you pick stays
-// POST /api/boards { op: "pick", me, slug, pick: "champ"|"chal", chal }
-// GET  /api/boards?op=crew&crew=ID                   a crew's own top 3 per category (from its members' matchups)
+// GET  /api/boards?op=tier&slug=pizza&me=PID&<where>  Tier It: the next places to tier, and your tier list so far
+// POST /api/boards { op: "tierset", me, slug, gid, t: "S"|"A"|"B"|"C"|"D"|"want"|"skip"|"clear" }
+// GET  /api/boards?op=crewtier&crew=ID&slug=pizza&me=PID  a crew's merged tier list, hot take, and what it says you should try
+// GET  /api/boards?op=crew&crew=ID                   a crew's tier lists across categories (for the crew page)
 // GET  /api/boards?op=nearby&lat&lng                 places close enough to check in at
 // POST /api/boards { op: "checkin", me, name, gid, lat, lng, tell }
 // GET  /api/boards?op=mine&me=PID                    your check-in points, weekly streak, spots
@@ -13,10 +14,10 @@
 import { PLAYER_RE, redis, pipeline, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
 import { BOARDS, SECTIONS, boardBySlug, HOOD_NAMES, whereFrom, candidates, scored, details, MIN_VOTES } from "./_best.js";
 import { checkIn, CheckinError, myStats, tonight, tonightCounts, nearby } from "./_checkin.js";
-import { CREW_RE, getCrew } from "./_crew.js";
+import { CREW_RE, getCrew, memberPids } from "./_crew.js";
+import { TIERS, MARKS, marksOf, setMark, crewTier, checkedIn } from "./_tiers.js";
 import { miles } from "./_places.js";
 
-const KEEP = 400 * 86400, GAME_KEEP = 30 * 86400;
 const boardInfo = (b) => ({ slug: b.slug, sec: b.sec, emoji: b.emoji, title: b.title, short: b.short, noun: b.noun });
 const whereInfo = (w) => ({ kind: w.kind, label: w.label });
 const pairs = (f) => { const o = []; for (let i = 0; i + 1 < (f || []).length; i += 2) o.push([f[i], Number(f[i + 1])]); return o; };
@@ -39,86 +40,93 @@ async function board(res, q) {
   const places = await ranked(b, where);
   const out = { board: boardInfo(b), where: whereInfo(where), places: places.slice(0, 40), minVotes: MIN_VOTES };
   if (PLAYER_RE.test(me)) {
-    const [champRaw, crewIds] = await pipeline([["GET", `champ:${me}:${b.slug}`], ["SMEMBERS", `pcrews:${me}`]]);
-    const champ = JSON.parse(champRaw || "null");
-    if (champ) out.myChamp = places.find((p) => p.gid === champ.gid) || (await details([champ.gid]))[champ.gid] || null;
+    const marks = await marksOf(me, b.slug);
+    for (const p of out.places) if (marks[p.gid]) p.mine = marks[p.gid].t;
+    out.myTiers = Object.fromEntries([...TIERS, "want"].map((t) => [t, Object.values(marks).filter((m) => m.t === t).length]));
     out.crews = [];
-    for (const id of (crewIds || []).slice(0, 4)) {
+    for (const id of ((await redis("SMEMBERS", `pcrews:${me}`)) || []).slice(0, 3)) {
       const crew = await getCrew(id); if (!crew) continue;
-      const top = pairs(await redis("ZREVRANGE", `crewbd:${id}:${b.slug}`, 0, 2, "WITHSCORES"));
-      const names = await details(top.map(([g]) => g).filter((g) => !places.some((p) => p.gid === g)));
-      out.crews.push({ id, name: crew.name, top: top.map(([g, pts]) => ({ ...(places.find((p) => p.gid === g) || names[g]), pts })).filter((x) => x.name) });
+      const ct = await crewTier(crew, b.slug, me);
+      if (!ct.list.length) { out.crews.push({ id, name: crew.name, list: [], hotTake: null, sayGo: [] }); continue; }
+      out.crews.push({ id, name: crew.name, ...(await withPlaces(ct, places)) });
     }
   }
   return send(res, 200, out);
 }
 
-// ---------- Matchups: two places, the one you pick stays ----------
-const matchKey = (me, slug) => `mu:${me}:${slug}`;
-function nextChallenger(list, st) {
-  // Down the list in order (so the champ has to beat the best first), skipping anything already faced.
-  return list.find((p) => p.gid !== st.champ && !st.seen.includes(p.gid))?.gid || null;
+// ---------- Tier It ----------
+// Names and photos for places we know by ID: from the list in hand, else Google's basic details.
+async function placesFor(gids, list = []) {
+  const have = Object.fromEntries(list.map((p) => [p.gid, p]));
+  const missing = gids.filter((g) => !have[g]);
+  const found = missing.length ? await details(missing) : {};
+  return Object.fromEntries(gids.map((g) => [g, have[g] || found[g]]).filter(([, p]) => p));
 }
-async function matchView(st) {
-  const b = boardBySlug[st.slug], list = await ranked(b, st.where);
-  const find = (g) => list.find((p) => p.gid === g) || null;
-  return { board: boardInfo(b), where: whereInfo(st.where), champ: find(st.champ), chal: st.chal ? find(st.chal) : null, reign: st.reign, best: st.best, rounds: st.rounds, left: list.filter((p) => p.gid !== st.champ && !st.seen.includes(p.gid)).length, last: st.last || null };
+const brief = (p) => p && { gid: p.gid, name: p.name, hood: p.hood || "", photo: p.photo || "", rating: p.rating ?? null, ratings: p.ratings || 0, price: p.price || "", maps: p.maps || "", kind: p.kind || "" };
+async function withPlaces(ct, list) {
+  const gids = [...new Set([...ct.list.slice(0, 15).map((r) => r.gid), ...(ct.hotTake ? [ct.hotTake.gid] : []), ...ct.sayGo.map((r) => r.gid)])];
+  const P = await placesFor(gids, list);
+  return {
+    list: ct.list.slice(0, 15).filter((r) => P[r.gid]).map((r) => ({ ...r, place: brief(P[r.gid]) })),
+    hotTake: ct.hotTake && P[ct.hotTake.gid] ? { ...ct.hotTake, place: brief(P[ct.hotTake.gid]) } : null,
+    sayGo: ct.sayGo.filter((r) => P[r.gid]).map((r) => ({ ...r, place: brief(P[r.gid]) })),
+  };
 }
-async function match(res, q) {
+// The next places to tier: ones your crews have tiered first (so you have opinions to compare), then ones you've
+// checked in at, then what groups are picking, then the list's own order. Anything you've already marked is left out.
+async function tier(res, q) {
   const me = q.get("me") || "", b = boardBySlug[q.get("slug")];
   if (!PLAYER_RE.test(me) || !b) return send(res, 400, { error: "Bad request." });
-  const where = await whereFrom(q);
-  let st = JSON.parse((await redis("GET", matchKey(me, b.slug))) || "null");
-  // A new run when asked, or when you've changed where (a West Village run only has West Village places).
-  if (!st || q.get("fresh") === "1" || st.wkey !== where.key) {
-    const list = await ranked(b, where);
-    if (list.length < 2) return send(res, 200, { empty: true, board: boardInfo(b), where: whereInfo(where) });
-    st = { slug: b.slug, where, wkey: where.key, champ: list[0].gid, chal: null, seen: [list[0].gid], reign: 0, best: st?.best || 0, rounds: 0 };
-    st.chal = nextChallenger(list, st);
-    await redis("SET", matchKey(me, b.slug), JSON.stringify(st), "EX", GAME_KEEP);
-  }
-  return send(res, 200, await matchView(st));
+  const where = await whereFrom(q), list = await ranked(b, where), marks = await marksOf(me, b.slug);
+  const crewIds = ((await redis("SMEMBERS", `pcrews:${me}`)) || []).slice(0, 5);
+  const crewPids = [...new Set((await Promise.all(crewIds.map(getCrew))).filter(Boolean).flatMap(memberPids))].filter((p) => p !== me).slice(0, 40);
+  const crewRows = crewPids.length ? await pipeline(crewPids.map((p) => ["HKEYS", `tier:${p}:${b.slug}`])) : [];
+  const crewKnown = new Set(crewRows.flat().filter(Boolean));
+  const [mineBeen] = await checkedIn([me]);
+  const rankOf = (p) => (crewKnown.has(p.gid) ? 0 : mineBeen.has(p.gid) ? 1 : p.wins || p.tonight ? 2 : 3);
+  const cards = list.filter((p) => !marks[p.gid]).map((p, i) => [rankOf(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).slice(0, 25)
+    .map(([r, , p]) => ({ ...brief(p), crew: r === 0, been: mineBeen.has(p.gid) }));
+  const mineList = await myTierList(me, b.slug, marks, list, mineBeen);
+  return send(res, 200, { board: boardInfo(b), where: whereInfo(where), cards, mine: mineList, left: list.filter((p) => !marks[p.gid]).length });
 }
-async function pick(req, res, b) {
-  const me = String(b.me || ""), board = boardBySlug[b.slug];
-  if (!PLAYER_RE.test(me) || !board || !["champ", "chal"].includes(b.pick)) return send(res, 400, { error: "Bad pick." });
-  if (!(await allow(`rl:pick:${clientIp(req)}`, 600, 86400))) return send(res, 429, { error: "That's a lot of matchups for one day. Come back tomorrow." });
-  const st = JSON.parse((await redis("GET", matchKey(me, board.slug))) || "null");
-  if (!st?.chal) return send(res, 409, { error: "Start a new run." });
-  if (b.chal && b.chal !== st.chal) return send(res, 200, { ...(await matchView(st)), already: true }); // a double tap
-  const champWon = b.pick === "champ", win = champWon ? st.champ : st.chal, lose = champWon ? st.chal : st.champ;
-  const list = await ranked(board, st.where), byId = Object.fromEntries(list.map((p) => [p.gid, p]));
-  // Chess-style: an upset moves the ratings more than an expected win.
-  const W = byId[win], L = byId[lose];
-  const Rw = (W?.prior || 1500) + (W?.delta || 0), Rl = (L?.prior || 1500) + (L?.delta || 0), ew = 1 / (1 + 10 ** ((Rl - Rw) / 400));
-  const k = (n) => ((n || 0) < 10 ? 32 : 20);
-  const crewIds = (await redis("SMEMBERS", `pcrews:${me}`)) || [];
-  // The same pair only counts once per person a week (replaying a run can't stuff the list).
-  const fresh = (await redis("SET", `mv:${me}:${board.slug}:${[win, lose].sort().join("|")}`, "1", "EX", 7 * 86400, "NX")) === "OK";
-  if (fresh) await pipeline([
-    ["ZINCRBY", `bx:${board.slug}:d`, Math.max(1, Math.round(k(W?.votes) * (1 - ew))), win], ["ZINCRBY", `bx:${board.slug}:d`, -Math.max(1, Math.round(k(L?.votes) * (1 - ew))), lose],
-    ["HINCRBY", `bx:${board.slug}:n`, win, 1], ["HINCRBY", `bx:${board.slug}:n`, lose, 1],
-    ...crewIds.slice(0, 10).flatMap((id) => [["ZINCRBY", `crewbd:${id}:${board.slug}`, 1, win], ["EXPIRE", `crewbd:${id}:${board.slug}`, KEEP]]),
-  ]);
-  st.rounds++;
-  st.last = { winner: W?.name || "", loser: L?.name || "", dethroned: !champWon, reign: champWon ? st.reign + 1 : 1 };
-  if (champWon) st.reign++; else { st.champ = st.chal; st.reign = 1; }
-  st.best = Math.max(st.best, st.reign);
-  st.seen = [...st.seen, st.chal].slice(-300);
-  st.chal = nextChallenger(list, st);
-  await pipeline([["SET", matchKey(me, board.slug), JSON.stringify(st), "EX", GAME_KEEP], ["SET", `champ:${me}:${board.slug}`, JSON.stringify({ gid: st.champ, at: Date.now() }), "EX", KEEP]]);
-  await bump("matchup_votes");
-  return send(res, 200, await matchView(st));
+async function myTierList(me, slug, marks, list, been) {
+  const gids = Object.keys(marks).filter((g) => marks[g].t !== "skip");
+  const P = await placesFor(gids, list);
+  const out = Object.fromEntries([...TIERS, "want"].map((t) => [t, []]));
+  for (const g of gids) if (P[g]) out[marks[g].t].push({ ...brief(P[g]), been: been.has(g), at: marks[g].at });
+  // Within a tier: places you've been first, then most recent.
+  for (const t of Object.keys(out)) out[t].sort((a, b) => b.been - a.been || b.at - a.at);
+  return out;
+}
+async function tierSet(req, res, b) {
+  const me = String(b.me || ""), board = boardBySlug[b.slug], gid = String(b.gid || ""), t = String(b.t || "");
+  if (!PLAYER_RE.test(me) || !board || !/^[A-Za-z0-9_-]{6,300}$/.test(gid) || ![...MARKS, "clear"].includes(t)) return send(res, 400, { error: "Bad tier." });
+  if (!(await allow(`rl:tier:${clientIp(req)}`, 800, 86400))) return send(res, 429, { error: "That's a lot of tiering for one day. Come back tomorrow." });
+  await setMark(me, board.slug, gid, t);
+  if (TIERS.includes(t)) await bump("tiers");
+  return send(res, 200, { ok: true });
+}
+async function crewTierList(res, q) {
+  const id = String(q.get("crew") || "").toUpperCase(), b = boardBySlug[q.get("slug")], me = q.get("me") || "";
+  if (!CREW_RE.test(id) || !b) return send(res, 400, { error: "Bad request." });
+  const crew = await getCrew(id); if (!crew) return send(res, 404, { error: "That crew wasn't found." });
+  return send(res, 200, { board: boardInfo(b), crew: { id, name: crew.name }, ...(await withPlaces(await crewTier(crew, b.slug, me), [])) });
 }
 
 // ---------- crews ----------
 async function crewBoards(res, q) {
-  const id = String(q.get("crew") || "").toUpperCase();
+  const id = String(q.get("crew") || "").toUpperCase(), me = q.get("me") || "";
   if (!CREW_RE.test(id)) return send(res, 400, { error: "Bad crew." });
-  const rows = await pipeline(BOARDS.map((b) => ["ZREVRANGE", `crewbd:${id}:${b.slug}`, 0, 2, "WITHSCORES"]));
-  const lists = BOARDS.map((b, i) => [b, pairs(rows[i]).filter(([, n]) => n > 0)]).filter(([, t]) => t.length).slice(0, 8);
-  const names = await details(lists.flatMap(([, t]) => t.map(([g]) => g)));
-  return send(res, 200, { boards: lists.map(([b, t]) => ({ ...boardInfo(b), top: t.map(([g, pts]) => ({ ...names[g], pts })).filter((x) => x.name) })).filter((x) => x.top.length) });
+  const crew = await getCrew(id); if (!crew) return send(res, 404, { error: "That crew wasn't found." });
+  const pids = memberPids(crew).slice(0, 40);
+  const slugs = new Set((await pipeline(pids.map((p) => ["SMEMBERS", `tierslugs:${p}`]))).flat().filter(Boolean));
+  const out = [];
+  for (const b of BOARDS.filter((x) => slugs.has(x.slug)).slice(0, 10)) {
+    const ct = await crewTier(crew, b.slug, me);
+    if (!ct.list.length) continue;
+    out.push({ ...boardInfo(b), ...(await withPlaces({ ...ct, list: ct.list.slice(0, 3), sayGo: [] }, [])) });
+  }
+  return send(res, 200, { boards: out });
 }
 
 // ---------- check-ins ----------
@@ -154,7 +162,8 @@ export default async function handler(req, res) {
       const q = new URL(req.url, "http://x").searchParams, op = q.get("op");
       if (op === "boards") return await boardsList(res);
       if (op === "board") return await board(res, q);
-      if (op === "match") return await match(res, q);
+      if (op === "tier") return await tier(res, q);
+      if (op === "crewtier") return await crewTierList(res, q);
       if (op === "crew") return await crewBoards(res, q);
       if (op === "nearby") return await nearbyList(req, res, q);
       if (op === "tonight") return await tonightList(res, q);
@@ -163,7 +172,7 @@ export default async function handler(req, res) {
     }
     if (req.method !== "POST") return send(res, 405, { error: "Use GET or POST." });
     const b = body(req);
-    if (b.op === "pick") return await pick(req, res, b);
+    if (b.op === "tierset") return await tierSet(req, res, b);
     if (b.op === "checkin") return await doCheckin(req, res, b);
     return send(res, 400, { error: "Unknown." });
   } catch (e) {
