@@ -97,7 +97,7 @@ const COLS = [
   ["Wouldn't", (d) => d.fb_down || 0],
 ];
 const fmt = (n) => n.toLocaleString();
-const EVENTS = [["session_created", "Session created"], ["link_opened", "Link opened"], ["joined", "Joined"], ["swiped", "Swipes"], ["matched", "Matches"], ["revealed", "Winner revealed"], ["checked_in", "Checked in"], ["rated", "Rated"], ["same_crew", "\"Same crew\" tapped"]];
+const EVENTS = [["session_created", "Session created"], ["link_opened", "Link opened"], ["joined", "Joined"], ["swiped", "Swipes"], ["matched", "Matches"], ["revealed", "Winner revealed"], ["checked_in", "Checked in"], ["rated", "Rated"], ["same_crew", "\"Same crew\" tapped"], ["tab_started", "Settle up started"], ["tab_opened", "Bill opened"], ["tab_split", "People who claimed items"], ["tab_paid", "\"I paid\""]];
 function pilot(p, days) {
   const so = p.secondOuting, tile = (n, label, sub = "") => `<div class="tile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
   $("#pilotTiles").innerHTML = [

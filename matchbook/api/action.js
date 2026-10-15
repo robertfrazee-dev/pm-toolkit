@@ -11,6 +11,7 @@
 //   type "tick":  { code }                  anyone (and the scheduler): runs anything that's due (2-minute warnings, time's up)
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
 import { track } from "./_events.js";
+import { billGet, billPost } from "./_billops.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
 import { findPlaces, shape } from "./_places.js";
 import { recordPlaces, swipeChanges } from "./_hot.js";
@@ -152,9 +153,16 @@ export async function tickDeck(code) {
 export default async function handler(req, res) {
   const missing = missingConfig();
   if (missing.length) return send(res, 503, { error: "The app isn't set up yet. Missing: " + missing.join(", ") });
+  // Settle up (bills) lives here too, so it needs no function of its own.
+  if (req.method === "GET") {
+    const q = new URL(req.url, "http://x").searchParams;
+    if (q.get("bill")) { try { return await billGet(res, q); } catch (e) { console.error(e); return send(res, 500, { error: "Couldn't load the bill." }); } }
+    return send(res, 405, { error: "Use POST." });
+  }
   if (req.method !== "POST") return send(res, 405, { error: "Use POST." });
   try {
     const b = body(req);
+    if (String(b.type || "").startsWith("bill")) return await billPost(req, res, b);
     const code = String(b.code || "").toUpperCase();
     if (b.type === "tick") {
       if (!CODE_RE.test(code)) return send(res, 400, { error: "Bad deck code." });

@@ -96,6 +96,17 @@ A crew is a group that decides together again and again (`api/crew.js`, `api/_cr
 - Each finished crew deck is kept as a short summary (places, winner, each person's yeses and ranking) for 400 days, so stats outlive the decks: best picker (whose #1 won), who's in sync (same yes/no on the same cards), wild card, easiest and hardest to please, most picked places, and "Next time?" (places lots of the crew liked that never won, swipeable as a deck).
 - People are matched by name inside a crew, so someone who used two browsers still counts once.
 
+## Settle up (split the bill)
+
+`api/_bill.js`, `api/_billops.js` and `api/_receipt.js`, served by `/api/action` (`GET ?bill=CODE`, `POST type: "bill*"`), at `/s/CODE`. **Matchbook never touches money:** it does the math and hands each person a pre-filled payment link to whoever paid.
+
+- **Start:** "💸 Settle up" on a finished deck's results or on a crew page. Whoever taps it is the payer; people are filled in from the deck or crew, and the payer can add or remove names. Friends open the link in the browser, are recognized from the deck or crew (or pick their name, or add themselves).
+- **The bill:** scan the receipt (the photo is shrunk on the phone, read once by Claude and never stored; quantity lines become single chips, "4 × Bud Light $28" → four $7 chips) or type the total. The payer can edit, add and delete items, with a warning when items don't add up to the subtotal. If the receipt has no tip: 18/20/22% or an amount.
+- **Split:** tap an item to claim it, tap again to unclaim (two people tapping at once both land); hold an item to split it among chosen people or "split this line evenly"; or "just split everything evenly". Tax and tip split in proportion to each person's items. Unclaimed items show a counter and the payer can ping the group (push, at most every 2 minutes); at Finish, leftovers split evenly. Everything is in cents and the shares add up exactly to the total.
+- **Pay back:** the payer adds a Venmo username and/or Cash App $cashtag once (saved for next time). Each person gets "Pay $23.40 with Venmo" (`https://venmo.com/USER?txn=pay&amount=…&note=Matchbook · Spot`), "Pay with Cash App" (`https://cash.app/$TAG/amount`, which prefills the amount; the note is copied), or "Copy amount", plus "I paid". The payer sees who's paid, can mark someone paid, and can remind who hasn't. The page refreshes every 3 seconds; bills last 30 days.
+- **Settings:** `ANTHROPIC_API_KEY` (receipt reading; without it, people type the total) and `DAILY_RECEIPT_LIMIT` (receipts read per day, default 100). Receipts are read with `claude-opus-5-5` (with server-side fallback on refusals), roughly a cent or two each.
+- **Events:** tab started, tab opened, split (first claim per person), paid.
+
 ## Best of Manhattan, Matchups and check-ins
 
 `api/boards.js`, `api/_best.js` and `api/_checkin.js`, shown on the app's **Top** tab. Manhattan only.
