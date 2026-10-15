@@ -2,12 +2,13 @@
 // Kept by Google place ID (the one piece of Google data that may be stored indefinitely) plus our own counts.
 import { pipeline, hashToObject } from "./_lib.js";
 import { CATEGORIES } from "./_places.js";
-import { inManhattan } from "./_nyc.js";
+import { inManhattan } from "./_best.js";
 
 const KEEP = 400 * 86400; // a place's lifetime counts
 const BOARD_KEEP = 70 * 86400; // monthly area boards: this month and last are read
 const CELL = 0.02; // about 2 km squares
 const POINTS = { yes: 1, match: 3, win: 8 }; // what moves a place up its area's hot list
+const BEST_POINTS = { yes: 1, match: 6, win: 20 }; // and up the Best of Manhattan lists
 export const GID_RE = /^[A-Za-z0-9_-]{6,300}$/;
 
 export const minSwipes = () => Number(process.env.HOT_MIN_SWIPES) || 20;
@@ -22,10 +23,8 @@ export async function recordPlaces(deck, changes) {
   for (const { place: p, field, n } of changes) {
     if (!n || !p?.gid || !GID_RE.test(p.gid)) continue;
     cmds.push(["HINCRBY", `place:${p.gid}`, field, n], ["EXPIRE", `place:${p.gid}`, KEEP]);
-    // Manhattan places also feed the "Best of Manhattan" boards (matched to the list later, in boards.js).
-    if (POINTS[field] && p.lat != null && inManhattan(p.lat, p.lng)) {
-      cmds.push(["LPUSH", "nyc:queue", JSON.stringify({ name: p.name, lat: p.lat, lng: p.lng, kind: p.kind || "", field, n })], ["LTRIM", "nyc:queue", 0, 4999], ["EXPIRE", "nyc:queue", 2 * 86400]);
-    }
+    // Manhattan places also count on the "Best of Manhattan" lists (a group win counts most).
+    if (POINTS[field] && inManhattan(p.lat, p.lng)) cmds.push(["ZINCRBY", "bx:grp", BEST_POINTS[field] * n, p.gid], ["EXPIRE", "bx:grp", KEEP], ...(field === "win" ? [["HINCRBY", "bx:wins", p.gid, n], ["EXPIRE", "bx:wins", KEEP]] : []));
     if (POINTS[field] && p.lat != null && p.lng != null) {
       const cell = cellOf(p.lat, p.lng), cat = CATEGORIES[deck.category] ? deck.category : CATEGORIES[p.cat] ? p.cat : null;
       for (const c of cat ? ["all", cat] : ["all"]) {

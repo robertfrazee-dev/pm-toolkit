@@ -90,26 +90,13 @@ A crew is a group that decides together again and again (`api/crew.js`, `api/_cr
 - Each finished crew deck is kept as a short summary (places, winner, each person's yeses and ranking) for 400 days, so stats outlive the decks: best picker (whose #1 won), who's in sync (same yes/no on the same cards), wild card, easiest and hardest to please, most picked places, and "Next time?" (places lots of the crew liked that never won, swipeable as a deck).
 - People are matched by name inside a crew, so someone who used two browsers still counts once.
 
-## Best of NYC: boards and games
+## Best of Manhattan, Matchups and check-ins
 
-`api/boards.js` and `api/_nyc.js`, shown on the app's **Top** tab.
+`api/boards.js`, `api/_best.js` and `api/_checkin.js`, shown on the app's **Top** tab. Manhattan only.
 
-- **The list:** bars, restaurants, cafés, nightlife, music venues, things to do, sights and parks in all five boroughs come from OpenStreetMap (free to store, credited on every board). It builds itself: the first time anyone opens the Top tab (or once the list is a month old, or from an older version), the app pulls the next part each call while showing progress, one part at a time behind a lock. The stats page ("Best of NYC list" → Build the list) can also force a rebuild. It pulls 32 parts from the Overpass API (a few per borough; a part that fails is retried in the background every 20 minutes until it's in) and sorts them into 33 boards in six sections: the big debates (Pizza, Bars, Buffalo Wings, Burger, Bagels), food (Italian, Thai, Chinese, Sushi, Mexican, Indian, Ramen, Steakhouse, Brunch, Restaurants, Dessert, Coffee), drinks (Espresso Martini, Pint of Guinness, Happy Hour, Dive Bar, Rooftop, Wine Bar), game day (Sports Bars, NFL Game Day Bar), nights out (Date Night Spot, Date Activities, Late-Night, Crazy Night, Live Music) and things to do. Rebuild every month or so; votes and rankings are kept. Optional: `OVERPASS_URL` to use a different Overpass server.
-- **Near me:** every board, and every game, can be All NYC, a radius around you (½, 1, 2 or 5 miles; your location stays on your device and is only sent with board requests), or one neighborhood.
-- **Rankings:** each place has a chess-style rating per board from every head-to-head vote, plus points when real groups pick it in an NYC deck (a group win counts most). A place needs 5 votes or one group win before it gets an official rank.
-- **This or That:** 5 matchups a day per person, one per board, each a close match or a newcomer. Votes are tied to the matchups the server handed out (no stuffing), with a daily streak.
-- **King of the Hill:** the champ stays on until a challenger beats it; every challenger is new to the run. Your longest reign is your record.
-- **Brackets:** 8 or 16 places seeded by rank (near you or all NYC), 1 plays 8, 4 plays 5…, down to a champ.
-- **Your champ and your crew's top 3:** the last place you crowned (on the hill or in a bracket) shows next to the city's #1. Every vote also counts on each of your crews' own boards, a bracket title counts extra and a crew night's winner counts most, so each crew has its own top 3 per board (on the board and on the crew page).
-- People can nominate a missing place from the NYC list onto a board, and swipe a board's top list as a deck with friends.
-
-## Check-ins
-
-`api/_checkin.js`, routed through `api/boards.js` (no extra function), shown on the Top tab, the crew page and "Your nights".
-
-- **Check in** at a place on the NYC list. Your phone's location has to be within 250 m of it (checked on the server), once per place per night (a night runs 5am to 5am New York time), up to 12 a night.
-- **Your crews get a push:** "📍 Rob checked in at Hudson Hound in Hell's Kitchen" (one per person even across shared crews, at most one per crew every 15 minutes; it opens the crew page). You can turn "Tell my crews" off for a check-in.
-- **Points:** 10 per check-in, +10 for a new spot, +5 when someone from your crew is checked in at the same place that night ("linked up"). **Streak:** at least one check-in each week. "Your nights" shows points, streak, check-ins, spots, your top spots and recent ones.
-- **Crew page:** "Out and about" (crew check-ins from the last two days) and "Out the most this month" (points).
-- **Out tonight:** anonymous counts of people checked in at each place tonight, on the Top tab (near you or all NYC) and on board rows. A place only shows once at least `TONIGHT_MIN` people (default 2) are there.
-- A check-in is also a small real-world vote: a little credit on the city boards and the checker's crews' boards.
+- **Lists:** 34 categories in six sections (big debates like Pizza, Bars, Wings, Burger and Bagels; food; drinks like Espresso Martini, Guinness and Dive Bar; game day; nights out; things to do). Each list comes from a live Google Places search ("best pizza in West Village, Manhattan"), with photos, ratings and reviews.
+- **Default order from real data:** a weighted rating (a 4.8 with 40 reviews doesn't beat a 4.6 with 3,000). Then Matchbook moves it: matchup votes (chess-style) and points when real groups pick a place in a deck (a group win counts most) or check in.
+- **Where:** all of Manhattan, near me (½, 1 or 2 mi), or a neighborhood: pick from the list or type one ("west vill", "LES", "Hell's Kitchen" all work; anything else in Manhattan is looked up). A neighborhood shows only places in that neighborhood. The choice sticks until changed.
+- **Matchups (the one game):** two places from the list; the one you pick stays on until something beats it, and challengers come down the list in order. Each pair counts once per person a week. Your last winner is "Your #1" on the list; every pick also counts on each of your crews' own top 3.
+- **Check-ins:** Google's nearby places within 250 m of your phone; crews get a push, points (+10, +10 new spot, +5 linked up with crewmates), weekly streak, "Your nights", crew "Out and about" and "Out the most this month", anonymous "Out tonight" counts (from `TONIGHT_MIN` people, default 2).
+- **Google costs:** results are kept in memory for an hour (Google's content isn't stored; Matchbook keeps place IDs and its own numbers). Daily caps: `BEST_DAILY_LIMIT` list searches (default 1500) and `CHECKIN_DAILY_LIMIT` nearby searches (default 1000).
