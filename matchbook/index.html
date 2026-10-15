@@ -1167,7 +1167,7 @@ function homeTop() {
   const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of NYC</h2><p class="muted">Ranked by what real groups pick on Matchbook, plus everyone's votes.</p></div></div>`);
   if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
-  if (d.building) driveBuild();
+  if (d.building || d.repair) driveBuild(); // a repair (a part that failed earlier) runs quietly in the background
   if (!d.ready) {
     const b = S.buildProg || d.building || { part: 0, parts: 27 }, pct = Math.round((b.part / b.parts) * 100);
     wrap.append(el(`<div class="empty build-prog"><span style="font-size:30px" aria-hidden="true">🗽</span><b>Loading every bar and restaurant in NYC…</b>
@@ -1213,6 +1213,7 @@ async function driveBuild() {
       let r;
       try { r = await api("/api/boards", { op: "buildstep" }); } catch { await new Promise((ok) => setTimeout(ok, 5000)); continue; }
       if (r.done) { S.buildProg = null; S.topData = null; if (S.view === "home" && S.tab === "top") render(); break; }
+      if (r.repair) { if (r.failed || r.busy || !r.left) { if (!r.failed && !r.busy) { S.topData = null; if (S.view === "home" && S.tab === "top") render(); } break; } continue; }
       if (r.part != null) { S.buildProg = { part: r.part, parts: r.parts }; if (!S.topData?.ready && S.view === "home" && S.tab === "top") render(); }
       await new Promise((ok) => setTimeout(ok, r.busy ? 4000 : 300));
     }
