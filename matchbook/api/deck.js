@@ -5,6 +5,8 @@ import { CATEGORIES, PRICE_LEVELS, CHAINS, google, shape, findPlaces } from "./_
 export { CATEGORIES };
 import { timerDue, tickDeck } from "./action.js";
 import { scheduleTimer } from "./_schedule.js";
+import { CREW_RE, getCrew, saveCrew, memberPids } from "./_crew.js";
+import { pushToPlayers } from "./_push.js";
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -73,7 +75,19 @@ const MINUTES = [0, 2, 5, 10, 15, 30, 60];
 function withTimers(deck, b) {
   const pick = (v, d) => (MINUTES.includes(Math.round(Number(v))) ? Math.round(Number(v)) : d);
   const swipeMinutes = pick(b.swipeMinutes, 0), rankMinutes = pick(b.rankMinutes, 5);
-  return { ...deck, swipeMinutes, rankMinutes, swipeEndsAt: swipeMinutes ? Date.now() + swipeMinutes * 60e3 : null, warned: {} };
+  return { ...deck, swipeMinutes, rankMinutes, swipeEndsAt: swipeMinutes ? Date.now() + swipeMinutes * 60e3 : null, warned: {}, crew: CREW_RE.test(String(b.crewId || "")) ? b.crewId : undefined };
+}
+
+// A deck started for a crew: it's the crew's live deck, and everyone in the crew gets the link pushed to them.
+async function announceCrewDeck(deck, code) {
+  try {
+    const crew = await getCrew(deck.crew); if (!crew) return;
+    crew.liveCode = code; crew.lastAt = Date.now();
+    await saveCrew(crew);
+    const host = Object.values(crew.members).find((m) => m.pids.includes(deck.hostId))?.name || "Someone";
+    const where = deck.category === "saved" ? "" : deck.area === "you" ? " nearby" : ` near ${deck.area}`;
+    await pushToPlayers(memberPids(crew).filter((p) => p !== deck.hostId), { title: `${crew.name}: new deck 🔥`, body: `${host} wants to pick ${deck.label.toLowerCase()}${where}. Start swiping.`, code });
+  } catch (e) { console.error("crew deck", e); }
 }
 
 async function saveDeck(res, deck) {
@@ -81,7 +95,11 @@ async function saveDeck(res, deck) {
     let code = "";
     for (let i = 0; i < 5; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
     const ok = await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, code }), "EX", TTL, "NX");
-    if (ok === "OK") { if (deck.swipeEndsAt) await scheduleTimer(code, deck.swipeEndsAt); return send(res, 201, { code }); }
+    if (ok === "OK") {
+      if (deck.swipeEndsAt) await scheduleTimer(code, deck.swipeEndsAt);
+      if (deck.crew) await announceCrewDeck(deck, code);
+      return send(res, 201, { code });
+    }
   }
   return send(res, 500, { error: "Couldn't save the deck. Try again." });
 }

@@ -14,6 +14,7 @@ import { pushToPlayers, deckPlayers } from "./_push.js";
 import { findPlaces, shape } from "./_places.js";
 import { recordPlaces, swipeChanges } from "./_hot.js";
 import { scheduleTimer } from "./_schedule.js";
+import { recordCrewDeck, getCrew, addMember, saveCrew } from "./_crew.js";
 
 export const TIMER_CHOICES = [0, 2, 5, 10, 15, 30, 60];
 const cleanMinutes = (m) => (TIMER_CHOICES.includes(Math.round(Number(m))) ? Math.round(Number(m)) : null);
@@ -34,7 +35,7 @@ function qualifying(deck, swipes, bar) {
 }
 
 // Same scoring as the results screen: a list of n places gives n points to its top pick, n-1 to the next...
-function winnerOf(deck, ranks) {
+export function winnerOf(deck, ranks) {
   const n = deck.matches.length, pts = Object.fromEntries(deck.matches.map((id) => [id, 0]));
   for (const r of ranks) (r.order || []).forEach((id, pos) => { if (id in pts) pts[id] += n - pos; });
   const best = deck.matches.slice().sort((a, b) => pts[b] - pts[a] || deck.matches.indexOf(a) - deck.matches.indexOf(b))[0];
@@ -50,9 +51,12 @@ async function announceWinner(code, deck, exceptId) {
 }
 
 // Counts the winner toward the place's lifetime picks and its area's hot list.
+// Every way a deck can finish comes through here: count the winner, and file the night in the crew's history.
 async function recordWinner(code, deck) {
-  const ranks = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:ranks`)));
-  await recordPlaces(deck, [{ place: winnerOf(deck, ranks), field: "win", n: 1 }]);
+  const [sw, rk] = await pipeline([["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
+  const swipes = hashToObject(sw), ranks = hashToObject(rk), winner = winnerOf(deck, Object.values(ranks));
+  await recordPlaces(deck, [{ place: winner, field: "win", n: 1 }]);
+  if (deck.crew) await recordCrewDeck(code, deck, winner, swipes, ranks).catch((e) => console.error("crew", e));
 }
 
 async function announceRanking(code, deck, count, exceptId, title = "Time to rank") {
@@ -172,6 +176,8 @@ export default async function handler(req, res) {
       const before = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1) await bump("joins");
+      // Joining a crew's deck makes you part of the crew.
+      if (added === 1 && deck.crew) { const crew = await getCrew(deck.crew); if (crew && addMember(crew, playerId, name)) await saveCrew(crew); }
       await recordPlaces(deck, swipeChanges(deck, before, playerId, likes, passes));
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });

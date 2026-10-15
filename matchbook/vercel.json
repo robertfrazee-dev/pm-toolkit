@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/j/:code", "destination": "/index.html" },
-    { "source": "/.well-known/apple-app-site-association", "destination": "/api/aasa" }
+    {
+      "source": "/j/:code",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/c/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "destination": "/api/aasa"
+    }
   ]
 }
