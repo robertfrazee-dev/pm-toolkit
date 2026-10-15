@@ -1,5 +1,5 @@
 // "Best of NYC" boards and the games that rank them.
-// GET  /api/boards?op=boards&me=PID[&lat&lng&mi]          every board (in sections) with its #1, near me or all NYC
+// GET  /api/boards?op=boards&me=PID[&hood | &lat&lng&mi]   every board (in sections) with its #1: one neighborhood, near me, or all NYC
 // GET  /api/boards?op=board&slug=pizza&me=PID[&hood|&lat&lng&mi]  a board's top 10, rising, my champ, my crews' top 3
 // GET  /api/boards?op=play&me=PID&day=YYYY-MM-DD          This or That: today's 5 matchups
 // POST /api/boards { op: "vote", me, day, i, pick: "a"|"b" }
@@ -46,6 +46,13 @@ function nearFrom(src) {
   if (lat < 40.4 || lat > 41 || lng < -74.4 || lng > -73.6) return null; // outside the city: show all NYC
   return { lat, lng, mi };
 }
+// Where: one neighborhood, or a radius around you, or (neither) all of NYC. A neighborhood wins if both are sent.
+function whereFrom(src) {
+  const get = (k) => (src instanceof URLSearchParams ? src.get(k) : src[k]);
+  const hood = ALL_HOODS.has(get("hood")) ? get("hood") : "";
+  const near = hood ? null : nearFrom(src);
+  return { hood, near, key: hood ? `hood:${hood}` : near ? `near:${near.lat},${near.lng},${near.mi}` : "" };
+}
 const within = (near, hood, byId) => (id) => {
   const p = byId.get(id); if (!p) return false;
   if (hood) return p.hood === hood;
@@ -90,13 +97,21 @@ async function ranked(slug, { hood = "", near = null, limit = 10, all = false } 
     return { ...view(c.byId.get(id), near), votes, wins, score: scoreOf(elo, grp, id), eligible: votes >= MIN_VOTES || wins >= 1 };
   });
   const top = list.filter((x) => x.eligible).slice(0, limit);
+  // Filtered to a neighborhood or a radius: everything else there too, so the board is never empty.
+  let rest;
+  if (hood || near) {
+    const shown = new Set(top.map((x) => x.id));
+    const scored = list.filter((x) => !shown.has(x.id)), seenIds = new Set(list.map((x) => x.id));
+    const others = [...inPool].filter((id) => ok(id) && !seenIds.has(id)).map((id) => c.byId.get(id)).sort((a, b) => (near ? milesBetween(near, a) - milesBetween(near, b) : a.n.localeCompare(b.n)));
+    rest = [...scored, ...others.map((p) => view(p, near))].slice(0, 60);
+  }
   const rising = Object.entries(wk).filter(([id]) => inPool.has(id) && ok(id)).slice(0, 5).map(([id, n]) => ({ ...view(c.byId.get(id), near), weekWins: n }));
   const size = near || hood ? [...inPool].filter(ok).length : inPool.size;
-  return { top, rising, pool: size, unranked: list.filter((x) => !x.eligible).length, list: all ? list : undefined };
+  return { top, rising, pool: size, unranked: list.filter((x) => !x.eligible).length, list: all ? list : undefined, rest };
 }
 // The places in a board's running (near me, if set), as ids.
-async function poolIds(slug, near) {
-  const c = await catalog(), ok = within(near, "", c.byId);
+async function poolIds(slug, near, hood = "") {
+  const c = await catalog(), ok = within(near, hood, c.byId);
   return [...(await pool(slug))].filter(ok);
 }
 
@@ -188,8 +203,8 @@ async function vote(req, res, b) {
 // ---------- King of the Hill ----------
 // The champ stays on until something beats it; every challenger is new to this run. The longest reign is your record.
 const hillKey = (me, slug) => `hill:${me}:${slug}`;
-async function nextChallenger(slug, near, champ, seen) {
-  const ids = (await poolIds(slug, near)).filter((id) => id !== champ && !seen.includes(id));
+async function nextChallenger(slug, near, champ, seen, hood = "") {
+  const ids = (await poolIds(slug, near, hood)).filter((id) => id !== champ && !seen.includes(id));
   if (!ids.length) return null;
   // Half the time a top-rated place (a real test), otherwise anything in the running.
   const set = new Set(ids);
@@ -198,21 +213,22 @@ async function nextChallenger(slug, near, champ, seen) {
 }
 async function hillView(st) {
   const c = await catalog(), b = boardBySlug[st.slug];
-  return { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun }, champ: view(c.byId.get(st.champ), st.near), chal: st.chal ? view(c.byId.get(st.chal), st.near) : null, reign: st.reign, best: st.best, rounds: st.rounds, near: st.near, last: st.last || null };
+  return { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun }, champ: view(c.byId.get(st.champ), st.near), chal: st.chal ? view(c.byId.get(st.chal), st.near) : null, reign: st.reign, best: st.best, rounds: st.rounds, near: st.near, hood: st.hood || "", last: st.last || null };
 }
 async function hill(res, q) {
   const me = q.get("me") || "", b = boardBySlug[q.get("slug")];
   if (!PLAYER_RE.test(me) || !b) return send(res, 400, { error: "Bad request." });
   let st = JSON.parse((await redis("GET", hillKey(me, b.slug))) || "null");
-  if (!st || q.get("fresh") === "1") {
-    const near = nearFrom(q);
-    const { top } = await ranked(b.slug, { near, limit: 1 });
-    const ids = await poolIds(b.slug, near);
-    if (ids.length < 2) return send(res, 200, { empty: true, board: { slug: b.slug, title: b.title, emoji: b.emoji } });
-    // The board's #1 starts on the hill (near you, if you picked a radius); otherwise a random place.
+  const { hood, near, key } = whereFrom(q);
+  // A new game when asked, or when you've changed where (a West Village game only ever has West Village places).
+  if (!st || q.get("fresh") === "1" || (st.wkey || "") !== key) {
+    const { top } = await ranked(b.slug, { hood, near, limit: 1 });
+    const ids = await poolIds(b.slug, near, hood);
+    if (ids.length < 2) return send(res, 200, { empty: true, hood, near, board: { slug: b.slug, title: b.title, emoji: b.emoji } });
+    // The board's #1 there starts on the hill; otherwise a random place there.
     const champ = top[0]?.id || pick(ids);
-    st = { slug: b.slug, near, champ, reign: 0, best: st?.best || 0, rounds: 0, seen: [champ], chal: null };
-    st.chal = await nextChallenger(b.slug, near, champ, st.seen);
+    st = { slug: b.slug, near, hood, wkey: key, champ, reign: 0, best: st?.best || 0, rounds: 0, seen: [champ], chal: null };
+    st.chal = await nextChallenger(b.slug, near, champ, st.seen, hood);
     await redis("SET", hillKey(me, b.slug), JSON.stringify(st), "EX", GAME_KEEP);
   }
   return send(res, 200, await hillView(st));
@@ -233,7 +249,7 @@ async function hillVote(req, res, b) {
   if (champWon) st.reign++; else { st.champ = st.chal; st.reign = 1; }
   st.best = Math.max(st.best, st.reign);
   st.seen = [...st.seen, st.chal].slice(-300);
-  st.chal = await nextChallenger(board.slug, st.near, st.champ, st.seen);
+  st.chal = await nextChallenger(board.slug, st.near, st.champ, st.seen, st.hood || "");
   await pipeline([["SET", hillKey(me, board.slug), JSON.stringify(st), "EX", GAME_KEEP], ["SET", `champ:${me}:${board.slug}`, JSON.stringify({ id: st.champ, how: "hill", at: Date.now() }), "EX", KEEP]]);
   return send(res, 200, await hillView(st));
 }
@@ -258,28 +274,30 @@ async function bracketView(st) {
     return matches;
   });
   const champ = st.rounds.at(-1).length === 1 ? { ...view(c.byId.get(st.rounds.at(-1)[0]), st.near), seed: seedOf[st.rounds.at(-1)[0]] } : null;
-  return { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun }, size: st.size, near: st.near, rounds, champ };
+  return { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun }, size: st.size, near: st.near, hood: st.hood || "", rounds, champ };
 }
 async function getBracket(res, q) {
   const me = q.get("me") || "", b = boardBySlug[q.get("slug")];
   if (!PLAYER_RE.test(me) || !b) return send(res, 400, { error: "Bad request." });
   const st = JSON.parse((await redis("GET", brKey(me, b.slug))) || "null");
+  // A bracket from somewhere else (you've changed where since): offer a new one for here.
+  if (st && (st.wkey || "") !== whereFrom(q).key) return send(res, 200, { none: true, elsewhere: true });
   return send(res, 200, st ? await bracketView(st) : { none: true });
 }
 async function startBracket(req, res, b) {
   const me = String(b.me || ""), board = boardBySlug[b.slug];
   if (!PLAYER_RE.test(me) || !board) return send(res, 400, { error: "Bad request." });
   if (!(await allow(`rl:br:${clientIp(req)}`, 60, 86400))) return send(res, 429, { error: "That's a lot of brackets for one day." });
-  const near = nearFrom(b), want = Number(b.size) === 16 ? 16 : 8;
-  const { list } = await ranked(board.slug, { near, all: true });
-  const ids = await poolIds(board.slug, near);
+  const { hood, near, key } = whereFrom(b), want = Number(b.size) === 16 ? 16 : 8;
+  const { list } = await ranked(board.slug, { hood, near, all: true });
+  const ids = await poolIds(board.slug, near, hood);
   // Seeds: best-rated first; if there aren't enough rated places, the rest come from the running at random.
   const rated = list.map((x) => x.id), set = new Set(rated);
   const field = [...rated, ...shuffle(ids.filter((id) => !set.has(id)))];
   const size = field.length >= want ? want : field.length >= 8 ? 8 : field.length >= 4 ? 4 : 0;
-  if (!size) return send(res, 400, { error: near ? "Not enough places near you for a bracket. Try a bigger radius." : "Not enough places on this board yet." });
+  if (!size) return send(res, 400, { error: hood ? `Not enough of these in ${hood} for a bracket.` : near ? "Not enough places near you for a bracket. Try a bigger radius." : "Not enough places on this board yet." });
   const seeded = field.slice(0, size), order = seedOrder(size);
-  const st = { slug: board.slug, size, near, seeds: order, rounds: [order.map((s) => seeded[s - 1])], picks: [[]], at: Date.now() };
+  const st = { slug: board.slug, size, near, hood, wkey: key, seeds: order, rounds: [order.map((s) => seeded[s - 1])], picks: [[]], at: Date.now() };
   await redis("SET", brKey(me, board.slug), JSON.stringify(st), "EX", GAME_KEEP);
   await bump("brackets");
   return send(res, 200, await bracketView(st));
@@ -324,14 +342,14 @@ async function crewBoards(res, q) {
 
 // ---------- boards ----------
 async function boards(res, q) {
-  const c = await catalog(), near = nearFrom(q);
+  const c = await catalog(), { hood, near } = whereFrom(q);
   // Every board's #1 in one go: the best few by score in range, then the first with an official rank.
-  const zs = await pipeline(BOARDS.flatMap((b) => [["ZREVRANGE", `bd:${b.slug}:elo`, 0, near ? 999 : 49, "WITHSCORES"], ["ZREVRANGE", `bd:${b.slug}:grp`, 0, near ? 999 : 49, "WITHSCORES"], ["SMEMBERS", `bd:${b.slug}:extra`]]));
-  const ok = within(near, "", c.byId), cands = [], sizes = {};
+  const zs = await pipeline(BOARDS.flatMap((b) => [["ZREVRANGE", `bd:${b.slug}:elo`, 0, near || hood ? 999 : 49, "WITHSCORES"], ["ZREVRANGE", `bd:${b.slug}:grp`, 0, near || hood ? 999 : 49, "WITHSCORES"], ["SMEMBERS", `bd:${b.slug}:extra`]]));
+  const ok = within(near, hood, c.byId), cands = [], sizes = {};
   BOARDS.forEach((b, i) => {
     const elo = pairs(zs[i * 3]), grp = pairs(zs[i * 3 + 1]);
     const inPool = new Set([...(c.pools[b.slug] || []), ...(zs[i * 3 + 2] || []).filter((id) => c.byId.has(id))]);
-    sizes[b.slug] = near ? [...inPool].filter(ok).length : inPool.size;
+    sizes[b.slug] = near || hood ? [...inPool].filter(ok).length : inPool.size;
     const ids = [...new Set([...Object.keys(elo), ...Object.keys(grp)])].filter((id) => inPool.has(id) && ok(id)).sort((x, y) => scoreOf(elo, grp, y) - scoreOf(elo, grp, x)).slice(0, 6);
     cands.push(ids);
   });
@@ -345,12 +363,12 @@ async function boards(res, q) {
     return { slug: b.slug, sec: b.sec, title: b.title, emoji: b.emoji, featured: !!b.featured, size: sizes[b.slug], first: p ? { name: p.n, hood: p.hood, ...(near ? { mi: Math.round(milesBetween(near, p) * 10) / 10 } : {}) } : null };
   });
   const st = await buildState();
-  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, repair: st.repair.length, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
+  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, repair: st.repair.length, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, hood, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
 }
 async function board(res, q) {
   const b = boardBySlug[q.get("slug")];
   if (!b) return send(res, 404, { error: "No such board." });
-  const hood = ALL_HOODS.has(q.get("hood")) ? q.get("hood") : "", near = hood ? null : nearFrom(q);
+  const { hood, near } = whereFrom(q);
   const me = q.get("me") || "", c = await catalog();
   const out = { board: { slug: b.slug, title: b.title, emoji: b.emoji, noun: b.noun, sec: b.sec }, hood, near, ...(await ranked(b.slug, { hood, near })) };
   const counts = await tonightCounts(out.top.map((p) => p.id));
@@ -403,8 +421,8 @@ async function doCheckin(req, res, b) {
   catch (e) { if (e instanceof CheckinError) return send(res, e.status, { error: e.message }); throw e; }
 }
 async function tonightList(res, q) {
-  const c = await catalog(), near = nearFrom(q);
-  const list = (await tonight(100)).map(([id, n]) => [c.byId.get(id), n]).filter(([p]) => p && (!near || milesBetween(near, p) <= near.mi)).slice(0, 10);
+  const c = await catalog(), { hood, near } = whereFrom(q);
+  const list = (await tonight(100)).map(([id, n]) => [c.byId.get(id), n]).filter(([p]) => p && (hood ? p.hood === hood : !near || milesBetween(near, p) <= near.mi)).slice(0, 10);
   return send(res, 200, { places: list.map(([p, n]) => ({ ...view(p, near), tonight: n })) });
 }
 
