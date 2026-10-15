@@ -444,9 +444,15 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .av.away span { opacity: .55; } .av.away em { color: var(--muted); font-style: italic; }
 .av.live em { color: var(--sulfur); font-weight: 700; }
 .av[data-rm] { cursor: pointer; }
-.scores.who th { white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
-.scores.who td:first-child, .scores.who th:first-child { position: sticky; left: 0; background: var(--surface); font-weight: 700; }
 .claim h2 { font-size: 26px; }
+.lists { display: flex; flex-direction: column; gap: 8px; }
+.plist { background: var(--sunk); border-radius: 14px; padding: 10px 14px; }
+.plist summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; }
+.plist summary::-webkit-details-marker { display: none; }
+.plist summary span { color: var(--muted); font-size: 14px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plist[open] summary span { display: none; }
+.plist ol { margin: 8px 0 2px; padding-left: 22px; display: flex; flex-direction: column; gap: 3px; font-size: 15px; }
+.plist li.win { font-weight: 800; }
 </style>
 </head>
 <body>
@@ -1897,17 +1903,25 @@ function viewResults() {
       <ul class="mlist">${ranked.map((id, i) => placeRow(placeById(id), i)).join("")}</ul></section>`);
     root.append(opts);
   }
+  // Who put each place first: the quickest read on how split the group was.
+  const firstFor = (id) => rankers.filter((u) => per[id]?.[u] === 1).sort(byName).map(nameOf);
   if (ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><table class="scores">
     <thead><tr><th>#</th><th>Place</th><th class="n">Pts</th></tr></thead>
-    <tbody>${ranked.map((id, i) => `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}</td><td class="n">${pts[id]}</td></tr>`).join("")}</tbody>
+    <tbody>${ranked.map((id, i) => { const f = firstFor(id); return `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}${f.length ? `<div class="small muted">#1 for ${esc(f.join(", "))}</div>` : ""}</td><td class="n">${pts[id]}</td></tr>`; }).join("")}</tbody>
   </table><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
-  // Everyone's own list, one row per person, however big the group. Places run across in the combined order.
+  // Everyone's own list, one card per person, top to bottom: readable on a phone at any group size.
   if (ranked.length > 1 && rankers.length) {
-    const short = (n) => (n.length > 14 ? n.slice(0, 13) + "…" : n);
-    root.append(el(`<section class="panel"><div class="eyebrow">How everyone ranked (${rankers.length})</div><div class="table-wrap"><table class="scores who">
-      <thead><tr><th>Person</th>${ranked.map((id, i) => `<th class="n" title="${esc(placeById(id)?.name)}">${i + 1}. ${esc(short(placeById(id)?.name || ""))}</th>`).join("")}</tr></thead>
-      <tbody>${[...rankers].sort(byName).map((u) => `<tr><td>${esc(nameOf(u))}</td>${ranked.map((id) => `<td class="n">${per[id]?.[u] ? "#" + per[id][u] : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
-    </table></div><p class="small muted">Each number is where that person put the place. Swipe the table sideways if it's wide.</p></section>`));
+    const box = el(`<section class="panel"><div class="eyebrow">How everyone ranked (${rankers.length})</div><div class="lists"></div></section>`);
+    for (const u of [...rankers].sort(byName)) {
+      const order = (S.ranks[u].order || []).filter((id) => placeById(id));
+      const open = S.openLists?.[u] ?? (u === S.me || rankers.length <= 4);
+      box.querySelector(".lists").append(el(`<details class="plist" data-u="${esc(u)}"${open ? " open" : ""}><summary><b>${esc(nameOf(u))}</b><span>${esc(placeById(order[0])?.name || "")}</span></summary>
+        <ol>${order.map((id) => `<li${id === ranked[0] ? ' class="win"' : ""}>${esc(placeById(id).name)}</li>`).join("")}</ol></details>`));
+    }
+    if (rankers.length > 4) box.append(el(`<p class="small muted">Tap a name to see their whole list.</p>`));
+    // Remember what's open so a live update doesn't snap it shut.
+    box.addEventListener("toggle", (e) => { const d = e.target.closest?.("[data-u]"); if (d) (S.openLists ||= {})[d.dataset.u] = d.open; }, true);
+    root.append(box);
   }
   if (final && ranked.length > 1) root.append(rankStatus());
   const row = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
