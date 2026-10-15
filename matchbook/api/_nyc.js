@@ -148,6 +148,9 @@ export const kindLabel = (p) => (p.cu?.length && ["restaurant", "quick", "cafe"]
 export const mapsUrl = (p) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.n}, ${p.addr ? p.addr + ", " : ""}${p.b && p.b !== "Manhattan" ? p.b + ", " : ""}New York, NY`)}`;
 
 // ---------- the list in memory ----------
+export const LIST_VERSION = 2; // 2 = all five boroughs; an older list rebuilds itself
+export const REFRESH_DAYS = 30;
+export const listStale = (meta) => !meta?.keys?.length || meta.v !== LIST_VERSION || Date.now() - (meta.builtAt || 0) > REFRESH_DAYS * 864e5;
 let mem = null, memAt = 0;
 export async function catalog() {
   if (mem && Date.now() - memAt < 10 * 60e3) return mem;
@@ -180,7 +183,7 @@ export async function savePart(part, places) {
 export async function finishBuild() {
   const lists = await pipeline(PARTS.map((_, i) => ["GET", `nyc:partkeys:${i}`]));
   const keys = lists.flatMap((l) => (l ? JSON.parse(l) : []));
-  await redis("SET", "nyc:meta", JSON.stringify({ keys, builtAt: Date.now() }));
+  await redis("SET", "nyc:meta", JSON.stringify({ keys, builtAt: Date.now(), v: LIST_VERSION }));
   resetCatalog();
   const c = await catalog();
   return { places: c.places.length, boards: Object.fromEntries(Object.entries(c.pools).map(([k, v]) => [k, v.length])) };

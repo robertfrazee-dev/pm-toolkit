@@ -1424,7 +1424,13 @@ function homeTop() {
   const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of NYC</h2><p class="muted">Ranked by what real groups pick on Matchbook, plus everyone's votes.</p></div></div>`);
   if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
-  if (!d.ready) { wrap.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">🗽</span><b>The boards are being set up</b><p class="muted">Check back soon.</p></div>`)); return wrap; }
+  if (d.building) driveBuild();
+  if (!d.ready) {
+    const b = S.buildProg || d.building || { part: 0, parts: 27 }, pct = Math.round((b.part / b.parts) * 100);
+    wrap.append(el(`<div class="empty build-prog"><span style="font-size:30px" aria-hidden="true">🗽</span><b>Loading every bar and restaurant in NYC…</b>
+      <span class="pbar" style="width:100%"><i style="width:${Math.max(4, pct)}%"></i></span><p class="muted small">${b.part} of ${b.parts} parts · about ${Math.max(1, Math.ceil(((b.parts - b.part) * 8) / 60))} min. Only happens once; keep this open.</p></div>`));
+    return wrap;
+  }
   wrap.append(radiusChips(() => { S.topData = null; render(); }));
   const st = S.playData?.streak?.n || 0, left = S.playData ? S.playData.matchups.filter((m) => !m.pick).length : 5;
   const play = el(`<button class="tt-entry" type="button"><span class="tt-icon" aria-hidden="true">⚡</span><span><b>This or That</b><span>${left ? `${left} quick pick${left === 1 ? "" : "s"} today · every vote moves the rankings` : "Done for today. New matchups tomorrow."}</span></span><i>${st ? `🔥 ${st}` : "→"}</i></button>`);
@@ -1454,6 +1460,20 @@ function homeTop() {
   if (d.near && !d.boards.some((b) => b.size)) wrap.append(el(`<div class="empty"><b>Nothing on the list this close</b><p class="muted">Try a bigger radius, or All NYC.</p></div>`));
   wrap.append(el(`<p class="attrib">Places © OpenStreetMap contributors · Rankings by Matchbook</p>`));
   return wrap;
+}
+// The list builds itself (one part per call) whenever it's missing or a month old; the open Top tab drives it.
+async function driveBuild() {
+  if (S.buildDriving) return; S.buildDriving = true;
+  try {
+    for (let i = 0; i < 200; i++) {
+      if (!(S.view === "home" && S.tab === "top")) break;
+      let r;
+      try { r = await api("/api/boards", { op: "buildstep" }); } catch { await new Promise((ok) => setTimeout(ok, 5000)); continue; }
+      if (r.done) { S.buildProg = null; S.topData = null; if (S.view === "home" && S.tab === "top") render(); break; }
+      if (r.part != null) { S.buildProg = { part: r.part, parts: r.parts }; if (!S.topData?.ready && S.view === "home" && S.tab === "top") render(); }
+      await new Promise((ok) => setTimeout(ok, r.busy ? 4000 : 300));
+    }
+  } finally { S.buildDriving = false; }
 }
 async function loadTop() {
   if (S.topLoading) return; S.topLoading = true;
