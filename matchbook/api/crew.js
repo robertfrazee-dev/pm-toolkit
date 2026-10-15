@@ -6,6 +6,7 @@
 import { CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, bump } from "./_lib.js";
 import { CREW_RE, getCrew, saveCrew, newCrewId, addMember, isMember, memberPids, recordCrewDeck, crewStats } from "./_crew.js";
 import { winnerOf } from "./action.js";
+import { crewActivity } from "./_checkin.js";
 
 const crewName = (s) => String(s || "").replace(/[\u0000-\u001f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
 
@@ -29,7 +30,7 @@ async function read(res, q) {
   const members = Object.entries(crew.members).map(([k, m]) => ({ key: k, name: m.name, me: PLAYER_RE.test(me) && m.pids.includes(me) })).sort((a, b) => b.me - a.me || a.name.localeCompare(b.name));
   return send(res, 200, {
     crew: { id: crew.id, name: crew.name, createdAt: crew.createdAt, owner: crew.ownerId === me, decks: history.length },
-    members, live, stats: crewStats(history, crew),
+    members, live, stats: crewStats(history, crew), activity: await crewActivity(crew).catch(() => ({ feed: [], leaders: [] })),
     history: history.slice(0, 30).map((h) => ({ code: h.code, at: h.at, label: h.label, area: h.area, winner: h.winner != null ? h.places[h.winner] : null, people: Object.keys(h.people).length, matches: h.matches.length })),
   });
 }

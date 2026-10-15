@@ -102,3 +102,14 @@ A crew is a group that decides together again and again (`api/crew.js`, `api/_cr
 - **Brackets:** 8 or 16 places seeded by rank (near you or all NYC), 1 plays 8, 4 plays 5…, down to a champ.
 - **Your champ and your crew's top 3:** the last place you crowned (on the hill or in a bracket) shows next to the city's #1. Every vote also counts on each of your crews' own boards, a bracket title counts extra and a crew night's winner counts most, so each crew has its own top 3 per board (on the board and on the crew page).
 - People can nominate a missing place from the NYC list onto a board, and swipe a board's top list as a deck with friends.
+
+## Check-ins
+
+`api/_checkin.js`, routed through `api/boards.js` (no extra function), shown on the Top tab, the crew page and "Your nights".
+
+- **Check in** at a place on the NYC list. Your phone's location has to be within 250 m of it (checked on the server), once per place per night (a night runs 5am to 5am New York time), up to 12 a night.
+- **Your crews get a push:** "📍 Rob checked in at Hudson Hound in Hell's Kitchen" (one per person even across shared crews, at most one per crew every 15 minutes; it opens the crew page). You can turn "Tell my crews" off for a check-in.
+- **Points:** 10 per check-in, +10 for a new spot, +5 when someone from your crew is checked in at the same place that night ("linked up"). **Streak:** at least one check-in each week. "Your nights" shows points, streak, check-ins, spots, your top spots and recent ones.
+- **Crew page:** "Out and about" (crew check-ins from the last two days) and "Out the most this month" (points).
+- **Out tonight:** anonymous counts of people checked in at each place tonight, on the Top tab (near you or all NYC) and on board rows. A place only shows once at least `TONIGHT_MIN` people (default 2) are there.
+- A check-in is also a small real-world vote: a little credit on the city boards and the checker's crews' boards.
