@@ -493,6 +493,11 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
+.hood-pick.on { border-color: var(--match); color: var(--match); font-weight: 700; }
+.where-tag { display: inline-block; vertical-align: middle; font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--match) 14%, var(--surface)); color: var(--match); font-family: var(--f-body, inherit); }
+.all-here .here-row { padding: 8px 0; border-top: 1px solid var(--line); gap: 10px; }
+.all-here .here-row:first-of-type { border-top: 0; }
+.all-here a { color: var(--match); font-weight: 700; text-decoration: none; white-space: nowrap; }
 .mode-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .mode-grid.two { grid-template-columns: 1fr 1fr; }
 .mode { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; border: 0; cursor: pointer; padding: 12px; border-radius: 16px; background: var(--surface); box-shadow: var(--soft-shadow); color: inherit; min-width: 0; }
@@ -1394,12 +1399,18 @@ const localDay = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.g
 const RADII = [0.5, 1, 2, 5];
 const miLabel = (mi) => (mi === 0.5 ? "½ mi" : `${mi} mi`);
 S.near = (() => { try { const n = JSON.parse(store.get("mb.near") || "null"); return n && Number.isFinite(n.lat) && RADII.includes(n.mi) ? n : null; } catch { return null; } })();
-const nearQS = () => (S.near ? `&lat=${S.near.lat}&lng=${S.near.lng}&mi=${S.near.mi}` : "");
-const nearBody = () => (S.near ? { lat: S.near.lat, lng: S.near.lng, mi: S.near.mi } : {});
+// Where the boards and games look: one neighborhood, a radius around you, or all of NYC. It sticks until you change it.
+S.hood = store.get("mb.hood") || "";
+try { S.hoodList = JSON.parse(store.get("mb.hoods") || "null"); } catch {}
+const nearQS = () => (S.hood ? `&hood=${encodeURIComponent(S.hood)}` : S.near ? `&lat=${S.near.lat}&lng=${S.near.lng}&mi=${S.near.mi}` : "");
+const nearBody = () => (S.hood ? { hood: S.hood } : S.near ? { lat: S.near.lat, lng: S.near.lng, mi: S.near.mi } : {});
 const whereLabel = (near, hood) => (hood ? hood : near ? `Within ${miLabel(near.mi)} of you` : "All of NYC");
+const whereShort = () => (S.hood ? `in ${S.hood}` : S.near ? "near you" : "in NYC");
+function setHood(h) { S.hood = h || ""; store.set("mb.hood", S.hood); if (S.hood) { S.near = null; store.set("mb.near", ""); } }
 const placeSub = (p) => [p.hood, p.kind, p.mi != null ? `${p.mi} mi` : ""].filter(Boolean).join(" · ");
 // Picking a radius asks for your location (once; it's kept on this device and only sent with board requests).
 async function setRadius(mi) {
+  setHood("");
   if (!mi) { S.near = null; store.set("mb.near", ""); return true; }
   const fresh = S.near && Date.now() - (S.near.at || 0) < 30 * 60e3;
   if (fresh) { S.near = { ...S.near, mi }; store.set("mb.near", JSON.stringify(S.near)); return true; }
@@ -1410,21 +1421,24 @@ async function setRadius(mi) {
     S.near = { lat, lng, mi, at: Date.now() }; store.set("mb.near", JSON.stringify(S.near)); return true;
   } catch { toast("Couldn't get your location. Allow it in your browser settings to rank near you."); return false; }
 }
+// The one "where" control: All NYC, a radius, or a neighborhood (picking one clears the others).
 function radiusChips(onChange) {
-  const cur = S.near?.mi || 0;
-  const row = el(`<div class="chips scroll near-chips" role="group" aria-label="How far"><button type="button" class="chip" data-mi="0" aria-pressed="${!cur}">All NYC</button>${RADII.map((m) => `<button type="button" class="chip" data-mi="${m}" aria-pressed="${cur === m}">📍 ${miLabel(m)}</button>`).join("")}</div>`);
-  row.addEventListener("click", async (e) => { const c = e.target.closest("[data-mi]"); if (!c) return; if (await setRadius(Number(c.dataset.mi))) onChange(); });
-  return row;
+  const cur = S.hood ? -1 : S.near?.mi || 0, hoods = S.hoodList || [];
+  const box = el(`<div class="where stack-y"><div class="chips scroll near-chips" role="group" aria-label="Where"><button type="button" class="chip" data-mi="0" aria-pressed="${cur === 0}">All NYC</button>${RADII.map((m) => `<button type="button" class="chip" data-mi="${m}" aria-pressed="${cur === m}">📍 ${miLabel(m)}</button>`).join("")}</div>
+    ${hoods.length ? `<select class="input hood-pick${S.hood ? " on" : ""}" aria-label="Neighborhood"><option value="">${S.hood ? "All neighborhoods" : "Pick a neighborhood…"}</option>${hoods.map((g) => `<optgroup label="${esc(g.borough)}">${g.hoods.map((h) => `<option${S.hood === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</optgroup>`).join("")}</select>` : ""}</div>`);
+  box.addEventListener("click", async (e) => { const c = e.target.closest("[data-mi]"); if (!c) return; if (await setRadius(Number(c.dataset.mi))) onChange(); });
+  $("select", box)?.addEventListener("change", (e) => { setHood(e.target.value); onChange(); });
+  return box;
 }
 function backToTop() { S.tab = "top"; store.set("mb.tab", "top"); S.topData = null; leave(); }
 function backButton(label, fn) { const b = el(`<button type="button" class="link" data-back style="align-self:flex-start">← ${esc(label)}</button>`); b.addEventListener("click", fn); return b; }
 
 function homeTop() {
   const d = S.topData;
-  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of NYC</h2><p class="muted">Ranked by what real groups pick on Matchbook, plus everyone's votes.</p></div></div>`);
+  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of ${esc(S.hood || "NYC")}</h2><p class="muted">Ranked by what real groups pick on Matchbook, plus everyone's votes.</p></div></div>`);
   if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
-  if (d.building) driveBuild();
+  if (d.building || d.repair) driveBuild(); // a repair (a part that failed earlier) runs quietly in the background
   if (!d.ready) {
     const b = S.buildProg || d.building || { part: 0, parts: 27 }, pct = Math.round((b.part / b.parts) * 100);
     wrap.append(el(`<div class="empty build-prog"><span style="font-size:30px" aria-hidden="true">🗽</span><b>Loading every bar and restaurant in NYC…</b>
@@ -1440,7 +1454,7 @@ function homeTop() {
   ci.addEventListener("click", () => openCheckin());
   wrap.append(play, ci);
   if (d.tonight?.length) {
-    const tn = el(`<section class="panel tonight"><div class="eyebrow">🔥 Out tonight${d.near ? ` · within ${miLabel(d.near.mi)}` : ""}</div>${d.tonight.map((p) => `<div class="row spread"><span><b>${esc(p.name)}</b> <span class="small muted">${esc(placeSub(p))}</span></span><span class="small hot">${p.tonight} here</span></div>`).join("")}<p class="small muted">Anonymous counts from check-ins.</p></section>`);
+    const tn = el(`<section class="panel tonight"><div class="eyebrow">🔥 Out tonight${d.hood ? ` · ${esc(d.hood)}` : d.near ? ` · within ${miLabel(d.near.mi)}` : ""}</div>${d.tonight.map((p) => `<div class="row spread"><span><b>${esc(p.name)}</b> <span class="small muted">${esc(placeSub(p))}</span></span><span class="small hot">${p.tonight} here</span></div>`).join("")}<p class="small muted">Anonymous counts from check-ins.</p></section>`);
     wrap.append(tn);
   }
   for (const [sec, title] of d.sections || [["", ""]]) {
@@ -1451,13 +1465,13 @@ function homeTop() {
     for (const b of list) {
       const t = el(`<button type="button" class="board-tile${b.featured ? " featured" : ""}" data-board="${b.slug}"><span class="be" aria-hidden="true">${b.emoji}</span><b></b><span class="small muted"></span></button>`);
       $("b", t).textContent = b.title.replace(/^Best (of )?/, "");
-      $(".muted", t).textContent = b.first ? `#1 ${b.first.name}${b.first.mi != null ? ` · ${b.first.mi} mi` : ""}` : "Help rank it";
+      $(".muted", t).textContent = b.first ? `#1 ${b.first.name}${b.first.mi != null ? ` · ${b.first.mi} mi` : ""}` : d.hood || d.near ? `${b.size} spot${b.size === 1 ? "" : "s"} ${d.hood ? "here" : "near you"}` : "Help rank it";
       t.addEventListener("click", () => openBoard(b.slug));
       grid.append(t);
     }
     wrap.append(grid);
   }
-  if (d.near && !d.boards.some((b) => b.size)) wrap.append(el(`<div class="empty"><b>Nothing on the list this close</b><p class="muted">Try a bigger radius, or All NYC.</p></div>`));
+  if ((d.near || d.hood) && !d.boards.some((b) => b.size)) wrap.append(el(`<div class="empty"><b>Nothing on the list ${d.hood ? "in " + esc(d.hood) : "this close"} yet</b><p class="muted">Try ${d.hood ? "another neighborhood" : "a bigger radius"}, or All NYC.</p></div>`));
   wrap.append(el(`<p class="attrib">Places © OpenStreetMap contributors · Rankings by Matchbook</p>`));
   return wrap;
 }
@@ -1470,6 +1484,7 @@ async function driveBuild() {
       let r;
       try { r = await api("/api/boards", { op: "buildstep" }); } catch { await new Promise((ok) => setTimeout(ok, 5000)); continue; }
       if (r.done) { S.buildProg = null; S.topData = null; if (S.view === "home" && S.tab === "top") render(); break; }
+      if (r.repair) { if (r.failed || r.busy || !r.left) { if (!r.failed && !r.busy) { S.topData = null; if (S.view === "home" && S.tab === "top") render(); } break; } continue; }
       if (r.part != null) { S.buildProg = { part: r.part, parts: r.parts }; if (!S.topData?.ready && S.view === "home" && S.tab === "top") render(); }
       await new Promise((ok) => setTimeout(ok, r.busy ? 4000 : 300));
     }
@@ -1480,6 +1495,7 @@ async function loadTop() {
   try {
     const [b, p, t, m] = await Promise.all([api(`/api/boards?op=boards&me=${ME}${nearQS()}`), api(`/api/boards?op=play&me=${ME}&day=${localDay()}`).catch(() => null), api(`/api/boards?op=tonight${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
     b.tonight = t?.places || []; S.mine = m;
+    if (b.neighborhoods) { S.hoodList = b.neighborhoods; store.set("mb.hoods", JSON.stringify(b.neighborhoods)); }
     S.topData = b;
     if (S.view !== "play") S.playData = p; // never swap the game out from under someone playing it
   } catch (e) { S.topData = { error: e.message }; }
@@ -1487,10 +1503,10 @@ async function loadTop() {
   if (S.view === "home" && S.tab === "top") render();
 }
 
-async function openBoard(slug, hood = S.boardSlug === slug ? S.boardHood : "") {
-  Object.assign(S, { boardSlug: slug, boardHood: hood, boardData: null });
+async function openBoard(slug) {
+  Object.assign(S, { boardSlug: slug, boardData: null });
   setView("board");
-  try { S.boardData = await api(`/api/boards?op=board&slug=${slug}&me=${ME}${hood ? "&hood=" + encodeURIComponent(hood) : nearQS()}`); }
+  try { S.boardData = await api(`/api/boards?op=board&slug=${slug}&me=${ME}${nearQS()}`); }
   catch (e) { S.boardData = { error: e.message }; }
   if (S.view === "board") render();
 }
@@ -1498,29 +1514,26 @@ const topRow = (p, i) => `<li class="mitem"><span class="rank-n${i === 0 ? " gol
   <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc(placeSub(p))}${p.wins ? `<br><span class="hot">🏆 Picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.votes ? ` <span class="muted">· ${p.votes} vote${p.votes === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
   <a class="maps small" data-kind="maps" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`;
 function viewBoard() {
-  const d = S.boardData, hoods = S.topData?.neighborhoods || S.hoodList || [];
-  if (S.topData?.neighborhoods) S.hoodList = S.topData.neighborhoods;
+  const d = S.boardData;
   const root = el(`<div class="app stack-y"></div>`);
   root.append(backButton("Best of NYC", backToTop));
   if (!d) { root.append(el(`<div class="skeleton" style="height:300px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>`)); return root; }
   if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
   const b = d.board;
-  root.append(el(`<div class="greet"><h2>${b.emoji} ${esc(b.title)}</h2><p class="muted">${esc(whereLabel(d.near, d.hood))} · ${d.pool} places in the running</p></div>`));
-  // Where: all NYC, near me, or one neighborhood.
-  const where = radiusChips(() => openBoard(b.slug, ""));
-  if (d.hood) where.querySelectorAll("[data-mi]").forEach((c) => c.setAttribute("aria-pressed", "false"));
-  root.append(where);
-  if (hoods.length) {
-    const sel = el(`<select class="input hood-pick" aria-label="Neighborhood"><option value="">Any neighborhood</option>${hoods.map((g) => `<optgroup label="${esc(g.borough)}">${g.hoods.map((h) => `<option${d.hood === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</optgroup>`).join("")}</select>`);
-    sel.addEventListener("change", () => openBoard(b.slug, sel.value));
-    root.append(sel);
-  }
+  const here = d.hood || d.near;
+  root.append(el(`<div class="greet"><h2>${b.emoji} ${esc(b.title)}${d.hood ? ` <span class="where-tag">${esc(d.hood)}</span>` : ""}</h2><p class="muted">${esc(whereLabel(d.near, d.hood))} · ${d.pool} place${d.pool === 1 ? "" : "s"}</p></div>`));
+  root.append(radiusChips(() => openBoard(b.slug)));
   if (d.top.length) root.append(el(`<ol class="mlist top10">${d.top.map(topRow).join("")}</ol>`));
-  else root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">${b.emoji}</span><b>No official ranking ${d.near || d.hood ? "here " : ""}yet</b><p class="muted">A place needs ${d.unranked ? "a few more votes" : "votes"} or a group win to get ranked. Play a game below to get it going.</p></div>`));
+  else if (!here || !d.rest?.length) root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">${b.emoji}</span><b>${here && !d.pool ? `No ${esc(b.noun)}s on the list ${d.hood ? "in " + esc(d.hood) : "this close"}` : "No official ranking yet"}</b><p class="muted">${here && !d.pool ? `Try ${d.hood ? "another neighborhood" : "a bigger radius"}.` : "A place needs a few votes or a group win to get ranked. Play a game below to get it going."}</p></div>`));
+  // Filtered: every place there, not just the ranked ones.
+  if (here && d.rest?.length) {
+    const more = el(`<section class="panel all-here"><div class="eyebrow">${d.top.length ? "More" : "Every " + esc(b.noun)} ${d.hood ? "in " + esc(d.hood) : "near you"}${d.top.length ? "" : " · not ranked yet"}</div>${d.rest.map((p) => `<div class="row spread here-row"><span><b>${esc(p.name)}</b> <span class="small muted">${esc([p.kind, d.hood ? "" : p.hood, p.mi != null ? p.mi + " mi" : ""].filter(Boolean).join(" · "))}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></div>`).join("")}${d.pool > d.top.length + d.rest.length ? `<p class="small muted">and ${d.pool - d.top.length - d.rest.length} more</p>` : ""}</section>`);
+    root.append(more);
+  }
   // The games.
   const modes = el(`<div class="mode-grid">
-    <button type="button" class="mode" data-mode="hill"><span aria-hidden="true">👑</span><b>King of the Hill</b><span class="small muted">The champ stays until something beats it</span></button>
-    <button type="button" class="mode" data-mode="bracket"><span aria-hidden="true">🏆</span><b>Bracket</b><span class="small muted">8 or 16, seeded by rank. Crown a champ</span></button>
+    <button type="button" class="mode" data-mode="hill"><span aria-hidden="true">👑</span><b>King of the Hill</b><span class="small muted">${here ? "Only places " + esc(whereShort()) : "The champ stays until something beats it"}</span></button>
+    <button type="button" class="mode" data-mode="bracket"><span aria-hidden="true">🏆</span><b>Bracket</b><span class="small muted">${here ? "8 or 16 " + esc(whereShort()) : "8 or 16, seeded by rank. Crown a champ"}</span></button>
     <button type="button" class="mode" data-mode="play"><span aria-hidden="true">⚡</span><b>This or That</b><span class="small muted">Today's 5 quick picks</span></button></div>`);
   modes.addEventListener("click", (e) => { const m = e.target.closest("[data-mode]")?.dataset.mode; if (m === "hill") openHill(b.slug); else if (m === "bracket") openBracket(b.slug); else if (m === "play") openPlay(); });
   root.append(modes);
@@ -1531,14 +1544,15 @@ function viewBoard() {
     root.append(panel);
   }
   if (d.rising.length) root.append(el(`<section class="panel"><div class="eyebrow">📈 Rising this week</div>${d.rising.map((p) => `<div class="row spread"><span>${esc(p.name)} <span class="muted small">${esc(p.hood)}</span></span><span class="small muted">+${p.weekWins} head-to-head win${p.weekWins === 1 ? "" : "s"}</span></div>`).join("")}</section>`));
-  if (d.top.length >= 2) {
-    const swipe = el(`<button class="btn block" type="button">Swipe this top ${d.top.length} with friends</button>`);
+  const deckList = d.top.length >= 2 ? d.top : here ? [...d.top, ...(d.rest || [])].slice(0, 12) : [];
+  if (deckList.length >= 2) {
+    const swipe = el(`<button class="btn block" type="button">${d.top.length >= 2 ? `Swipe this top ${d.top.length}` : `Swipe ${deckList.length} ${d.hood ? "in " + esc(d.hood) : "near you"}`} with friends</button>`);
     swipe.addEventListener("click", async () => {
       if (!S.name) return toast("Add your name on the Pick tab first.");
       swipe.disabled = true;
       try {
         const where = d.hood || (d.near ? "near you" : "NYC");
-        const { code } = await api("/api/deck", { playerId: S.me, source: "board", label: `${b.title}${d.hood ? " · " + d.hood : ""}`, area: where, saved: d.top.map((p) => ({ name: p.name, maps: p.maps, lat: p.lat, lng: p.lng, kind: p.kind, website: p.web })), swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+        const { code } = await api("/api/deck", { playerId: S.me, source: "board", label: `${b.title}${d.hood ? " · " + d.hood : ""}`, area: where, saved: deckList.map((p) => ({ name: p.name, maps: p.maps, lat: p.lat, lng: p.lng, kind: p.kind, website: p.web })), swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
         openSession(code);
       } catch (e) { swipe.disabled = false; toast(e.message); }
     });
@@ -1586,13 +1600,13 @@ function viewHill() {
   root.append(backButton("Back to the board", () => openBoard(slug)));
   if (!d) { root.append(el(`<div class="skeleton" style="height:360px;width:100%" aria-hidden="true"><div class="sk-img"></div></div>`)); return root; }
   if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
-  if (d.empty) { root.append(el(`<div class="empty"><b>Not enough places here</b><p class="muted">Try a bigger radius or All NYC.</p></div>`)); return root; }
+  if (d.empty) { root.append(el(`<div class="empty"><b>Not enough places ${d.hood ? "in " + esc(d.hood) : "here"}</b><p class="muted">Try ${d.hood ? "another neighborhood" : "a bigger radius"} or All NYC.</p></div>`)); return root; }
   const b = d.board;
-  root.append(el(`<div class="tt-head"><span class="small muted">👑 King of the Hill · ${esc(whereLabel(d.near))}</span><h2>${b.emoji} ${esc(b.title)}</h2><p class="muted">Which is the better ${esc(b.noun)}? The champ stays until something beats it.</p></div>`));
+  root.append(el(`<div class="tt-head"><span class="small muted">👑 King of the Hill · ${esc(whereLabel(d.near, d.hood))}</span><h2>${b.emoji} ${esc(b.title)}</h2><p class="muted">Which is the better ${esc(b.noun)}? The champ stays until something beats it.</p></div>`));
   root.append(el(`<div class="hill-stats"><span>👑 Reign <b>${d.reign}</b></span><span>Best <b>${d.best}</b></span><span>Rounds <b>${d.rounds}</b></span></div>`));
   if (d.last) root.append(el(`<p class="tt-result hill-last">${d.last.dethroned ? `🔥 ${esc(d.last.winner)} takes the crown from ${esc(d.last.loser)}!` : `${esc(d.last.winner)} holds the hill${d.last.reign > 1 ? ` · ${d.last.reign} in a row` : ""}.`}</p>`));
   if (!d.chal) {
-    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">👑</span><h2>${esc(d.champ.name)} is king</h2><p class="muted">You've been through every ${esc(b.noun)} ${d.near ? "near you" : "on the board"}. Longest reign: ${d.best}.</p></div>`));
+    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">👑</span><h2>${esc(d.champ.name)} is king</h2><p class="muted">You've been through every ${esc(b.noun)} ${d.hood ? "in " + esc(d.hood) : d.near ? "near you" : "on the board"}. Longest reign: ${d.best}.</p></div>`));
   } else {
     const pair = el(`<div class="tt-pair">${ttCard(d.champ, "champ", "", `👑 Champ${d.reign ? ` · ${d.reign}` : ""}`)}<span class="tt-vs" aria-hidden="true">or</span>${ttCard(d.chal, "chal", "", "Challenger")}</div>`);
     pair.addEventListener("click", async (e) => {
@@ -1604,7 +1618,7 @@ function viewHill() {
     });
     root.append(pair);
   }
-  const again = el(`<button class="btn block" type="button">New game${S.near ? ` · ${miLabel(S.near.mi)}` : ""}</button>`);
+  const again = el(`<button class="btn block" type="button">New game${S.hood ? ` · ${esc(S.hood)}` : S.near ? ` · ${miLabel(S.near.mi)}` : ""}</button>`);
   again.addEventListener("click", () => openHill(slug, true));
   root.append(again);
   return root;
@@ -1614,7 +1628,7 @@ function viewHill() {
 async function openBracket(slug) {
   Object.assign(S, { brSlug: slug, brData: null, brBusy: false });
   setView("bracket");
-  try { S.brData = await api(`/api/boards?op=bracket&me=${ME}&slug=${slug}`); } catch (e) { S.brData = { error: e.message }; }
+  try { S.brData = await api(`/api/boards?op=bracket&me=${ME}&slug=${slug}${nearQS()}`); } catch (e) { S.brData = { error: e.message }; }
   if (S.view === "bracket") render();
 }
 const roundName = (n) => (n === 2 ? "Final" : n === 4 ? "Semifinals" : n === 8 ? "Quarterfinals" : `Round of ${n}`);
@@ -1630,10 +1644,10 @@ function viewBracket() {
     catch (err) { toast(err.message); btn.disabled = false; }
   };
   if (d.none || S.brSetup) {
-    root.append(el(`<div class="tt-head"><span class="small muted">🏆 Bracket · ${esc(whereLabel(S.near))}</span><h2>${b ? `${b.emoji} ${esc(b.title)}` : "Bracket"}</h2><p class="muted">The best places ${S.near ? "near you" : "in NYC"}, seeded by rank: 1 plays 8, 4 plays 5. Win your way to a champ. Every pick counts on the boards.</p></div>`));
+    root.append(el(`<div class="tt-head"><span class="small muted">🏆 Bracket · ${esc(whereLabel(S.near, S.hood))}</span><h2>${b ? `${b.emoji} ${esc(b.title)}` : "Bracket"}</h2><p class="muted">The best places ${esc(whereShort())}, seeded by rank: 1 plays 8, 4 plays 5. Win your way to a champ. Every pick counts on the boards.</p></div>`));
     const sizes = el(`<div class="mode-grid two"><button type="button" class="mode" data-size="8"><span aria-hidden="true">🏆</span><b>8 places</b><span class="small muted">7 picks</span></button><button type="button" class="mode" data-size="16"><span aria-hidden="true">🔥</span><b>16 places</b><span class="small muted">15 picks</span></button></div>`);
     sizes.addEventListener("click", (e) => { const c = e.target.closest("[data-size]"); if (c) start(Number(c.dataset.size), c); });
-    root.append(radiusChips(() => render()), sizes);
+    root.append(radiusChips(() => openBracket(slug)), sizes);
     return root;
   }
   const B = d.board;
