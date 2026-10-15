@@ -36,6 +36,7 @@ export async function redis(...command) {
 }
 
 export async function pipeline(commands) {
+  if (!commands.length) return []; // Upstash rejects an empty pipeline
   const r = await fetch(redisUrl() + "/pipeline", {
     method: "POST",
     headers: { Authorization: `Bearer ${redisToken()}`, "Content-Type": "application/json" },
