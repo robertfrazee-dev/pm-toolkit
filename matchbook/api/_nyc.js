@@ -99,15 +99,18 @@ export const boardBySlug = Object.fromEntries(BOARDS.map((b) => [b.slug, b]));
 const RESTAURANT_BANDS = { Manhattan: [40.68, 40.735, 40.765, 40.8, 40.885], Brooklyn: [40.56, 40.64, 40.69, 40.74], Queens: [40.54, 40.7, 40.75, 40.81] };
 export const PARTS = BOROUGHS.flatMap(([borough, qid]) => {
   const area = `area["wikidata"="${qid}"]->.m;`;
-  const q = (body) => ({ borough, query: `[out:json][timeout:25];${area}(${body});out center tags;` });
+  const q = (body) => ({ borough, query: `[out:json][timeout:50];${area}(${body});out center tags;` });
   const bands = RESTAURANT_BANDS[borough];
   return [
     q(`nwr(area.m)["amenity"~"^(bar|pub|biergarten|nightclub|music_venue)$"];`),
     ...(bands ? bands.slice(0, -1).map((s, i) => q(`nwr(area.m)(${s},-74.3,${bands[i + 1]},-73.6)["amenity"="restaurant"];`)) : [q(`nwr(area.m)["amenity"="restaurant"];`)]),
-    q(`nwr(area.m)["amenity"~"^(cafe|fast_food|ice_cream)$"];nwr(area.m)["shop"~"^(bakery|pastry|confectionery|chocolate|coffee)$"];`),
+    q(`nwr(area.m)["amenity"~"^(cafe|ice_cream)$"];nwr(area.m)["shop"~"^(bakery|pastry|confectionery|chocolate|coffee)$"];`),
     q(`nwr(area.m)["leisure"~"^(bowling_alley|amusement_arcade|escape_game|miniature_golf|ice_rink|park|garden)$"]["name"];nwr(area.m)["amenity"~"^(karaoke_box|theatre|cinema)$"];nwr(area.m)["tourism"~"^(attraction|museum|gallery|viewpoint|zoo|aquarium)$"]["name"];`),
   ];
-});
+});// Fast food (slice shops, bagels, wings…) is its own part per borough, added after the first five-borough list
+// so the earlier part numbers didn't change.
+PARTS.push(...BOROUGHS.map(([borough, qid]) => ({ borough, query: `[out:json][timeout:50];area["wikidata"="${qid}"]->.m;(nwr(area.m)["amenity"="fast_food"];);out center tags;` })));
+
 
 const cuisines = (t) => String(t.cuisine || "").toLowerCase().split(/[;,]/).map((x) => x.trim()).filter(Boolean).slice(0, 4);
 // One OpenStreetMap element → a compact place, or null if it isn't something people go to.
@@ -170,7 +173,7 @@ const CELL = 0.002; // about 200 m
 const cellKey = (lat, lng) => `${Math.floor(lat / CELL)}:${Math.floor(lng / CELL)}`;
 
 // Saving one built part: places in chunks of 400 (keys listed in nyc:meta once the build finishes).
-export async function savePart(part, places) {
+export async function savePart(part, places, ok = true) {
   const keys = [];
   for (let i = 0; i * 400 < places.length; i++) {
     const key = `nyc:part:${part}:${i}`;
@@ -178,12 +181,17 @@ export async function savePart(part, places) {
     await redis("SET", key, JSON.stringify(places.slice(i * 400, (i + 1) * 400)));
   }
   await redis("SET", `nyc:partkeys:${part}`, JSON.stringify(keys));
+  if (ok) await redis("SET", `nyc:partdone:${part}`, "1"); // fetched for real (a skipped part stays missing and gets retried)
   return keys;
 }
-export async function finishBuild() {
+export async function missingParts() {
+  const rows = await pipeline(PARTS.flatMap((_, i) => [["GET", `nyc:partkeys:${i}`], ["GET", `nyc:partdone:${i}`]]));
+  return PARTS.map((_, i) => i).filter((i) => !rows[i * 2] || (!rows[i * 2 + 1] && rows[i * 2] === "[]"));
+}
+export async function finishBuild(builtAt = Date.now()) {
   const lists = await pipeline(PARTS.map((_, i) => ["GET", `nyc:partkeys:${i}`]));
   const keys = lists.flatMap((l) => (l ? JSON.parse(l) : []));
-  await redis("SET", "nyc:meta", JSON.stringify({ keys, builtAt: Date.now(), v: LIST_VERSION }));
+  await redis("SET", "nyc:meta", JSON.stringify({ keys, builtAt, v: LIST_VERSION, missing: await missingParts() }));
   resetCatalog();
   const c = await catalog();
   return { places: c.places.length, boards: Object.fromEntries(Object.entries(c.pools).map(([k, v]) => [k, v.length])) };

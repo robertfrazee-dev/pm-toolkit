@@ -23,7 +23,7 @@
 // Each vote also counts on the voter's crews' own boards, so every crew has its own top 3.
 import { PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
 import { checkIn, CheckinError, myStats, tonight, tonightCounts, VERIFY_M } from "./_checkin.js";
-import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween, nearbyPlaces, listStale } from "./_nyc.js";
+import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween, nearbyPlaces, listStale, missingParts } from "./_nyc.js";
 import { CREW_RE, getCrew } from "./_crew.js";
 
 const START = 1500, MIN_VOTES = 5, PER_DAY = 5;
@@ -345,7 +345,7 @@ async function boards(res, q) {
     return { slug: b.slug, sec: b.sec, title: b.title, emoji: b.emoji, featured: !!b.featured, size: sizes[b.slug], first: p ? { name: p.n, hood: p.hood, ...(near ? { mi: Math.round(milesBetween(near, p) * 10) / 10 } : {}) } : null };
   });
   const st = await buildState();
-  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
+  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, repair: st.repair.length, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
 }
 async function board(res, q) {
   const b = boardBySlug[q.get("slug")];
@@ -412,9 +412,11 @@ async function tonightList(res, q) {
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
 async function fetchPart(part) {
   let lastErr = "";
+  const until = Date.now() + 54000; // the function has 60 seconds
   for (const url of process.env.OVERPASS_URL ? [process.env.OVERPASS_URL] : OVERPASS) {
+    const left = until - Date.now(); if (left < 8000) break;
     try {
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Matchbook (Best of NYC)" }, body: "data=" + encodeURIComponent(PARTS[part].query), signal: AbortSignal.timeout(40000) });
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Matchbook (Best of NYC)" }, body: "data=" + encodeURIComponent(PARTS[part].query), signal: AbortSignal.timeout(left) });
       if (r.ok) { const json = await r.json(); return (json.elements || []).map((el) => fromOsm(el, PARTS[part].borough)).filter(Boolean); }
       lastErr = `${r.status}`;
     } catch (e) { lastErr = e.message; }
@@ -425,11 +427,30 @@ async function fetchPart(part) {
 // Anyone's Top tab drives it, but only one part runs at once (lock) and only while the list actually needs it.
 async function buildState() {
   const [metaRaw, progRaw] = await pipeline([["GET", "nyc:meta"], ["GET", "nyc:build"]]);
-  const meta = JSON.parse(metaRaw || "null"), prog = JSON.parse(progRaw || "null");
-  return { meta, prog, needed: listStale(meta) || !!prog };
+  let meta = JSON.parse(metaRaw || "null"); const prog = JSON.parse(progRaw || "null");
+  const needed = listStale(meta) || !!prog;
+  // A list from before parts were tracked: work out once which parts it's missing.
+  if (!needed && meta && !meta.missing) meta = { ...meta, missing: await missingParts() }, await redis("SET", "nyc:meta", JSON.stringify(meta));
+  // Parts that failed (or were added since) get retried in the background, each at most every 20 minutes.
+  let repair = [];
+  if (!needed && meta.missing.length) {
+    const tried = await pipeline(meta.missing.map((i) => ["GET", `nyc:tried:${i}`]));
+    repair = meta.missing.filter((_, k) => !tried[k]);
+  }
+  return { meta, prog, needed, repair };
+}
+async function repairStep(res, meta, part) {
+  if ((await redis("SET", "nyc:buildlock", "1", "EX", 70, "NX")) !== "OK") return send(res, 200, { busy: true, repair: true });
+  try {
+    await redis("SET", `nyc:tried:${part}`, "1", "EX", 1200);
+    try { await savePart(part, await fetchPart(part)); } catch (e) { console.error("list repair", part, e.message); return send(res, 200, { repair: true, part, failed: true }); }
+    const r = await finishBuild(meta.builtAt); // same list, now with that part
+    return send(res, 200, { repair: true, part, places: r.places, left: (await buildState()).repair.length });
+  } finally { await redis("DEL", "nyc:buildlock"); }
 }
 async function buildStep(res) {
-  const { meta, prog: p0, needed } = await buildState();
+  const { meta, prog: p0, needed, repair } = await buildState();
+  if (!needed && repair.length) return await repairStep(res, meta, repair[0]);
   if (!needed) return send(res, 200, { done: true });
   if ((await redis("SET", "nyc:buildlock", "1", "EX", 70, "NX")) !== "OK") return send(res, 200, { busy: true, part: p0?.next || 0, parts: PARTS.length });
   try {
@@ -447,7 +468,7 @@ async function buildStep(res) {
     } catch (e) {
       // A part that keeps failing is skipped (the rest of the list still goes up); it'll be retried next month.
       prog.fails = (prog.fails || 0) + 1;
-      if (prog.fails >= 4) { if (!meta) await savePart(prog.next, []); prog.next++; prog.fails = 0; }
+      if (prog.fails >= 4) { if (!meta) await savePart(prog.next, [], false); prog.next++; prog.fails = 0; }
       console.error("list build", prog.next, e.message);
     }
     await redis("SET", "nyc:build", JSON.stringify(prog), "EX", 7 * 86400);
@@ -481,7 +502,7 @@ export default async function handler(req, res) {
       if (op === "nearby") return await nearby(res, q);
       if (op === "tonight") return await tonightList(res, q);
       if (op === "mine") return PLAYER_RE.test(q.get("me") || "") ? send(res, 200, await myStats(q.get("me"))) : send(res, 400, { error: "Bad request." });
-      if (op === "status") { const c = await catalog(), st = await buildState(); return send(res, 200, { parts: PARTS.length, places: c.places.length, builtAt: c.meta?.builtAt || null, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null }); }
+      if (op === "status") { const c = await catalog(), st = await buildState(); return send(res, 200, { parts: PARTS.length, places: c.places.length, builtAt: c.meta?.builtAt || null, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, missing: st.meta?.missing || null, repair: st.repair }); }
       return send(res, 404, { error: "Unknown." });
     }
     if (req.method !== "POST") return send(res, 405, { error: "Use GET or POST." });
