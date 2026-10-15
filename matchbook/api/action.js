@@ -177,7 +177,7 @@ export default async function handler(req, res) {
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1) await bump("joins");
       // Joining a crew's deck makes you part of the crew.
-      if (added === 1 && deck.crew) { const crew = await getCrew(deck.crew); if (crew && addMember(crew, playerId, name)) await saveCrew(crew); }
+      if (added === 1 && deck.crew) { const crew = await getCrew(deck.crew); if (crew && addMember(crew, playerId, name)) await saveCrew(crew); if (crew) await redis("SADD", `pcrews:${playerId}`, crew.id); }
       await recordPlaces(deck, swipeChanges(deck, before, playerId, likes, passes));
       if (added === 1 && deck.hostId && playerId !== deck.hostId) {
         await pushToPlayers([deck.hostId], { title: `${name} joined your deck`, body: deck.category === "saved" ? deck.label : `${deck.label} near ${deck.area}`, code });
