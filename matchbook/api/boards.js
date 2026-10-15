@@ -15,13 +15,15 @@
 // POST /api/boards { op: "checkin", me, name, id, lat, lng, tell }  check in (you have to be there); tells your crews
 // GET  /api/boards?op=mine&me=PID                         your points, weekly streak, spots and recent check-ins
 // GET  /api/boards?op=tonight[&lat&lng&mi]                anonymous: where people are out tonight
+// POST /api/boards { op: "buildstep" }                   no key: builds the next part of the list if it's missing or a month old
+//                                                         (one at a time, behind a lock; the Top tab keeps calling it while it shows progress)
 // POST /api/boards { op: "build", part } / { op: "finish" }  owner only (x-stats-key): pull NYC from OpenStreetMap
 // Rankings: each place has a chess-style rating from every head-to-head vote (all three games), plus points for being
 // picked by real groups in decks (a group win counts most). A place needs 5 votes or one group win for an official rank.
 // Each vote also counts on the voter's crews' own boards, so every crew has its own top 3.
 import { PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
 import { checkIn, CheckinError, myStats, tonight, tonightCounts, VERIFY_M } from "./_checkin.js";
-import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween, nearbyPlaces } from "./_nyc.js";
+import { BOARDS, SECTIONS, boardBySlug, PARTS, NEIGHBORHOODS, fromOsm, savePart, finishBuild, catalog, matchPlace, kindLabel, mapsUrl, milesBetween, nearbyPlaces, listStale } from "./_nyc.js";
 import { CREW_RE, getCrew } from "./_crew.js";
 
 const START = 1500, MIN_VOTES = 5, PER_DAY = 5;
@@ -342,7 +344,8 @@ async function boards(res, q) {
     const p = firsts[b.slug] && c.byId.get(firsts[b.slug]);
     return { slug: b.slug, sec: b.sec, title: b.title, emoji: b.emoji, featured: !!b.featured, size: sizes[b.slug], first: p ? { name: p.n, hood: p.hood, ...(near ? { mi: Math.round(milesBetween(near, p) * 10) / 10 } : {}) } : null };
   });
-  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
+  const st = await buildState();
+  return send(res, 200, { boards: out, sections: SECTIONS, ready: c.places.length > 0, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null, builtAt: c.meta?.builtAt || null, neighborhoods: NEIGHBORHOODS, near, streak: PLAYER_RE.test(me) && DAY_RE.test(q.get("day") || "") ? await streakOf(me, q.get("day")) : null });
 }
 async function board(res, q) {
   const b = boardBySlug[q.get("slug")];
@@ -407,21 +410,57 @@ async function tonightList(res, q) {
 
 // ---------- building the list (owner only) ----------
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+async function fetchPart(part) {
+  let lastErr = "";
+  for (const url of process.env.OVERPASS_URL ? [process.env.OVERPASS_URL] : OVERPASS) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Matchbook (Best of NYC)" }, body: "data=" + encodeURIComponent(PARTS[part].query), signal: AbortSignal.timeout(40000) });
+      if (r.ok) { const json = await r.json(); return (json.elements || []).map((el) => fromOsm(el, PARTS[part].borough)).filter(Boolean); }
+      lastErr = `${r.status}`;
+    } catch (e) { lastErr = e.message; }
+  }
+  throw new Error(`OpenStreetMap didn't answer (${lastErr}).`);
+}
+// Self-building: whenever the list is missing, from an older version, or a month old, the app builds it a part at a time.
+// Anyone's Top tab drives it, but only one part runs at once (lock) and only while the list actually needs it.
+async function buildState() {
+  const [metaRaw, progRaw] = await pipeline([["GET", "nyc:meta"], ["GET", "nyc:build"]]);
+  const meta = JSON.parse(metaRaw || "null"), prog = JSON.parse(progRaw || "null");
+  return { meta, prog, needed: listStale(meta) || !!prog };
+}
+async function buildStep(res) {
+  const { meta, prog: p0, needed } = await buildState();
+  if (!needed) return send(res, 200, { done: true });
+  if ((await redis("SET", "nyc:buildlock", "1", "EX", 70, "NX")) !== "OK") return send(res, 200, { busy: true, part: p0?.next || 0, parts: PARTS.length });
+  try {
+    const prog = p0 || { next: 0, fails: 0, started: Date.now() };
+    if (prog.next >= PARTS.length) {
+      const r = await finishBuild();
+      await redis("DEL", "nyc:build");
+      await bump("list_builds");
+      return send(res, 200, { done: true, places: r.places });
+    }
+    try {
+      const places = await fetchPart(prog.next);
+      await savePart(prog.next, places);
+      prog.next++; prog.fails = 0;
+    } catch (e) {
+      // A part that keeps failing is skipped (the rest of the list still goes up); it'll be retried next month.
+      prog.fails = (prog.fails || 0) + 1;
+      if (prog.fails >= 4) { if (!meta) await savePart(prog.next, []); prog.next++; prog.fails = 0; }
+      console.error("list build", prog.next, e.message);
+    }
+    await redis("SET", "nyc:build", JSON.stringify(prog), "EX", 7 * 86400);
+    return send(res, 200, { part: prog.next, parts: PARTS.length, fails: prog.fails });
+  } finally { await redis("DEL", "nyc:buildlock"); }
+}
 async function build(req, res, b) {
   if (!process.env.STATS_KEY || req.headers["x-stats-key"] !== process.env.STATS_KEY) return send(res, 401, { error: "Wrong key." });
   if (b.op === "finish") return send(res, 200, await finishBuild());
   const part = Math.round(Number(b.part));
   if (!(part >= 0 && part < PARTS.length)) return send(res, 400, { error: "Bad part." });
-  let json = null, lastErr = "";
-  for (const url of process.env.OVERPASS_URL ? [process.env.OVERPASS_URL] : OVERPASS) {
-    try {
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Matchbook (Best of NYC)" }, body: "data=" + encodeURIComponent(PARTS[part].query) });
-      if (r.ok) { json = await r.json(); break; }
-      lastErr = `${r.status}`;
-    } catch (e) { lastErr = e.message; }
-  }
-  if (!json) return send(res, 502, { error: `OpenStreetMap didn't answer (${lastErr}). Try that part again in a minute.` });
-  const places = (json.elements || []).map((el) => fromOsm(el, PARTS[part].borough)).filter(Boolean);
+  let places;
+  try { places = await fetchPart(part); } catch (e) { return send(res, 502, { error: e.message + " Try that part again in a minute." }); }
   await savePart(part, places);
   return send(res, 200, { part, parts: PARTS.length, borough: PARTS[part].borough, places: places.length });
 }
@@ -442,7 +481,7 @@ export default async function handler(req, res) {
       if (op === "nearby") return await nearby(res, q);
       if (op === "tonight") return await tonightList(res, q);
       if (op === "mine") return PLAYER_RE.test(q.get("me") || "") ? send(res, 200, await myStats(q.get("me"))) : send(res, 400, { error: "Bad request." });
-      if (op === "status") { const c = await catalog(); return send(res, 200, { parts: PARTS.length, places: c.places.length, builtAt: c.meta?.builtAt || null }); }
+      if (op === "status") { const c = await catalog(), st = await buildState(); return send(res, 200, { parts: PARTS.length, places: c.places.length, builtAt: c.meta?.builtAt || null, building: st.needed ? { part: st.prog?.next || 0, parts: PARTS.length } : null }); }
       return send(res, 404, { error: "Unknown." });
     }
     if (req.method !== "POST") return send(res, 405, { error: "Use GET or POST." });
@@ -453,6 +492,7 @@ export default async function handler(req, res) {
     if (b.op === "bracketvote") return await bracketVote(req, res, b);
     if (b.op === "nominate") return await nominate(req, res, b);
     if (b.op === "checkin") return await doCheckin(req, res, b);
+    if (b.op === "buildstep") return await buildStep(res);
     if (b.op === "build" || b.op === "finish") return await build(req, res, b);
     return send(res, 400, { error: "Unknown." });
   } catch (e) {
