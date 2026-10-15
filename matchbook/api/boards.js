@@ -7,6 +7,11 @@
 // POST /api/boards { op: "tierset", me, slug, gid, t: "S"|"A"|"B"|"C"|"D"|"want"|"skip"|"clear" }
 // GET  /api/boards?op=crewtier&crew=ID&slug=pizza&me=PID  a crew's merged tier list, hot take, and what it says you should try
 // GET  /api/boards?op=crew&crew=ID                   a crew's tier lists across categories (for the crew page)
+// POST /api/boards { op: "queststart", me, crew, slug, <where> }   a crew takes on a list (up to 30 spots, snapshotted)
+// POST /api/boards { op: "queststart", me, crew, slug, title, gids }   …or its own list of place IDs
+// GET  /api/boards?op=quest&crew=ID&id=QID&me=PID    progress (from crew check-ins), the crew's ranking (Tier It), spots
+// GET  /api/boards?op=quests&crew=ID                 a crew's quests with progress
+// Tier It on a quest: op=tier&slug=…&crew=ID&quest=QID (cards are the quest's spots)
 // GET  /api/boards?op=nearby&lat&lng                 places close enough to check in at
 // POST /api/boards { op: "checkin", me, name, gid, lat, lng, tell }
 // GET  /api/boards?op=mine&me=PID                    your check-in points, weekly streak, spots
@@ -14,7 +19,8 @@
 import { PLAYER_RE, redis, pipeline, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
 import { BOARDS, SECTIONS, boardBySlug, HOOD_NAMES, whereFrom, candidates, scored, details, MIN_VOTES } from "./_best.js";
 import { checkIn, CheckinError, myStats, tonight, tonightCounts, nearby } from "./_checkin.js";
-import { CREW_RE, getCrew, memberPids } from "./_crew.js";
+import { CREW_RE, getCrew, memberPids, isMember } from "./_crew.js";
+import { createQuest, getQuest, crewQuests, crewCheckins, progressOf, QUEST_RE, MAX_SPOTS } from "./_quests.js";
 import { TIERS, MARKS, marksOf, setMark, crewTier, checkedIn } from "./_tiers.js";
 import { miles } from "./_places.js";
 
@@ -77,7 +83,9 @@ async function withPlaces(ct, list) {
 async function tier(res, q) {
   const me = q.get("me") || "", b = boardBySlug[q.get("slug")];
   if (!PLAYER_RE.test(me) || !b) return send(res, 400, { error: "Bad request." });
-  const where = await whereFrom(q), list = await ranked(b, where), marks = await marksOf(me, b.slug);
+  const qt = q.get("quest") ? await questFor(q.get("crew"), q.get("quest")) : null;
+  if (q.get("quest") && (!qt || qt.quest.slug !== b.slug)) return send(res, 404, { error: "That quest wasn't found." });
+  const where = qt ? qt.quest.where || { kind: "list", label: qt.quest.title } : await whereFrom(q), list = qt ? qt.places : await ranked(b, where), marks = await marksOf(me, b.slug);
   const crewIds = ((await redis("SMEMBERS", `pcrews:${me}`)) || []).slice(0, 5);
   const crewPids = [...new Set((await Promise.all(crewIds.map(getCrew))).filter(Boolean).flatMap(memberPids))].filter((p) => p !== me).slice(0, 40);
   const crewRows = crewPids.length ? await pipeline(crewPids.map((p) => ["HKEYS", `tier:${p}:${b.slug}`])) : [];
@@ -87,7 +95,7 @@ async function tier(res, q) {
   const cards = list.filter((p) => !marks[p.gid]).map((p, i) => [rankOf(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).slice(0, 25)
     .map(([r, , p]) => ({ ...brief(p), crew: r === 0, been: mineBeen.has(p.gid) }));
   const mineList = await myTierList(me, b.slug, marks, list, mineBeen);
-  return send(res, 200, { board: boardInfo(b), where: whereInfo(where), cards, mine: mineList, left: list.filter((p) => !marks[p.gid]).length });
+  return send(res, 200, { board: boardInfo(b), where: whereInfo(where), cards, mine: mineList, left: list.filter((p) => !marks[p.gid]).length, quest: qt ? { id: qt.quest.id, crew: qt.quest.crew, title: qt.quest.title } : null });
 }
 async function myTierList(me, slug, marks, list, been) {
   const gids = Object.keys(marks).filter((g) => marks[g].t !== "skip");
@@ -111,6 +119,62 @@ async function crewTierList(res, q) {
   if (!CREW_RE.test(id) || !b) return send(res, 400, { error: "Bad request." });
   const crew = await getCrew(id); if (!crew) return send(res, 404, { error: "That crew wasn't found." });
   return send(res, 200, { board: boardInfo(b), crew: { id, name: crew.name }, ...(await withPlaces(await crewTier(crew, b.slug, me), [])) });
+}
+
+// ---------- Quests ----------
+// A quest and its spots (names and photos live from Google: the list's search when it's still in memory, else details).
+async function questFor(crewId, id) {
+  const crewIdU = String(crewId || "").toUpperCase();
+  if (!CREW_RE.test(crewIdU) || !QUEST_RE.test(String(id || ""))) return null;
+  const quest = await getQuest(crewIdU, id); if (!quest) return null;
+  const b = boardBySlug[quest.slug];
+  const fromList = b && quest.where && quest.where.kind !== "near" ? await ranked(b, quest.where).catch(() => []) : [];
+  const P = await placesFor(quest.gids, fromList);
+  return { quest, places: quest.gids.filter((g) => P[g]).map((g) => ({ ...P[g], gid: g })) };
+}
+async function questStart(req, res, b) {
+  const me = String(b.me || ""), board = boardBySlug[b.slug], crewId = String(b.crew || "").toUpperCase();
+  if (!PLAYER_RE.test(me) || !board || !CREW_RE.test(crewId)) return send(res, 400, { error: "Bad request." });
+  const crew = await getCrew(crewId);
+  if (!crew || !isMember(crew, me)) return send(res, 403, { error: "Join the crew first." });
+  if (!(await allow(`rl:quest:${clientIp(req)}`, 20, 86400))) return send(res, 429, { error: "That's plenty of new quests for today." });
+  let where = null, gids, title;
+  if (Array.isArray(b.gids)) {
+    // The crew's own list of places.
+    gids = b.gids.map(String).filter((g) => /^[A-Za-z0-9_-]{6,300}$/.test(g)).slice(0, MAX_SPOTS);
+    title = String(b.title || "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 60) || `${crew.name}'s ${board.short} quest`;
+  } else {
+    where = await whereFrom(b);
+    const list = await ranked(board, where);
+    gids = list.slice(0, MAX_SPOTS).map((p) => p.gid);
+    title = `${board.short}${where.kind === "all" ? "" : ` · ${where.label}`}`;
+  }
+  if (gids.length < 3) return send(res, 400, { error: "A quest needs at least 3 spots. Try a bigger area." });
+  // A near-me quest doesn't keep where you were standing: the spot list is all it needs.
+  const keepWhere = where && (where.kind === "near" ? { kind: "near", label: where.label, key: "quest-near" } : where);
+  const quest = await createQuest(crew, { slug: board.slug, where: keepWhere, title, gids, by: me });
+  await bump("quests");
+  return send(res, 201, { id: quest.id, crew: crew.id });
+}
+async function questView(res, q) {
+  const qt = await questFor(q.get("crew"), q.get("id")); if (!qt) return send(res, 404, { error: "That quest wasn't found." });
+  const { quest, places } = qt, crew = await getCrew(quest.crew), b = boardBySlug[quest.slug], me = q.get("me") || "";
+  const tried = await crewCheckins(crew);
+  // The crew's ranking: its Tier It marks on the quest's spots (checked-in votes count double).
+  const ct = await crewTier(crew, quest.slug, me), set = new Set(quest.gids);
+  const ranking = ct.list.filter((r) => set.has(r.gid)).map((r) => ({ ...r, place: brief(places.find((p) => p.gid === r.gid)) })).filter((r) => r.place);
+  const spots = places.map((p) => ({ ...brief(p), lat: p.lat, lng: p.lng, website: p.website || "", tried: tried[p.gid] || [] }));
+  return send(res, 200, {
+    quest: { id: quest.id, crew: quest.crew, crewName: crew.name, title: quest.title, at: quest.at, slug: quest.slug, where: quest.where ? whereInfo(quest.where) : null },
+    board: boardInfo(b), progress: progressOf(quest, tried), ranking, hotTake: ct.hotTake && set.has(ct.hotTake.gid) ? { ...ct.hotTake, place: brief(places.find((p) => p.gid === ct.hotTake.gid)) } : null, spots,
+  });
+}
+async function questList(res, q) {
+  const id = String(q.get("crew") || "").toUpperCase();
+  if (!CREW_RE.test(id)) return send(res, 400, { error: "Bad crew." });
+  const crew = await getCrew(id); if (!crew) return send(res, 404, { error: "That crew wasn't found." });
+  const tried = await crewCheckins(crew);
+  return send(res, 200, { quests: (await crewQuests(id)).map((x) => ({ id: x.id, title: x.title, slug: x.slug, emoji: boardBySlug[x.slug]?.emoji || "🗺️", at: x.at, progress: progressOf(x, tried) })) });
 }
 
 // ---------- crews ----------
@@ -164,6 +228,8 @@ export default async function handler(req, res) {
       if (op === "board") return await board(res, q);
       if (op === "tier") return await tier(res, q);
       if (op === "crewtier") return await crewTierList(res, q);
+      if (op === "quest") return await questView(res, q);
+      if (op === "quests") return await questList(res, q);
       if (op === "crew") return await crewBoards(res, q);
       if (op === "nearby") return await nearbyList(req, res, q);
       if (op === "tonight") return await tonightList(res, q);
@@ -173,6 +239,7 @@ export default async function handler(req, res) {
     if (req.method !== "POST") return send(res, 405, { error: "Use GET or POST." });
     const b = body(req);
     if (b.op === "tierset") return await tierSet(req, res, b);
+    if (b.op === "queststart") return await questStart(req, res, b);
     if (b.op === "checkin") return await doCheckin(req, res, b);
     return send(res, 400, { error: "Unknown." });
   } catch (e) {
