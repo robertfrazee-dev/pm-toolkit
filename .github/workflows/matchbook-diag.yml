@@ -3,21 +3,25 @@ on:
   push:
     branches: [matchbook-diag]
 jobs:
-  diag:
+  build-list:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Live API
+      - name: Boards load
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          for u in "/api/boards?op=status" "/api/boards?op=boards&me=diagdiagdiag" "/api/boards?op=tonight" "/api/boards?op=mine&me=diagdiagdiag"; do
-            echo "=== GET $u"; curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S$u" | cut -c1-600
-          done
-          echo "=== POST buildstep"; curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" -X POST -H 'content-type: application/json' -d '{"op":"buildstep"}' "$S/api/boards"
-          echo "=== GET status again"; curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S/api/boards?op=status"
-          echo "=== index has autobuild?"; curl -s "$S/" | grep -c "driveBuild"
-      - name: Overpass reachability
+          curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S/api/boards?op=boards&me=diagdiagdiag" | cut -c1-300
+      - name: Build the NYC list (same calls the Top tab makes)
         run: |
-          Q='[out:json][timeout:25];area["wikidata"="Q11299"]->.m;(nwr(area.m)["amenity"~"^(bar|pub|biergarten|nightclub|music_venue)$"];);out center tags;'
-          for u in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter https://overpass.private.coffee/api/interpreter; do
-            echo "=== $u"; curl -s -m 60 -o /tmp/o.json -w "[%{http_code} in %{time_total}s, %{size_download} bytes]\n" --data-urlencode "data=$Q" "$u"; head -c 200 /tmp/o.json; echo
+          S=https://pm-toolkit-matchbook.vercel.app
+          for i in $(seq 1 80); do
+            r=$(curl -s -m 70 -X POST -H 'content-type: application/json' -d '{"op":"buildstep"}' "$S/api/boards")
+            echo "$(date +%T) $r"
+            echo "$r" | grep -q '"done":true' && break
+            echo "$r" | grep -q '"busy":true' && sleep 10 || sleep 1
           done
+      - name: After
+        run: |
+          S=https://pm-toolkit-matchbook.vercel.app
+          curl -s -m 70 "$S/api/boards?op=status"; echo
+          curl -s -m 70 -w "\n[%{http_code} in %{time_total}s]\n" "$S/api/boards?op=boards&me=diagdiagdiag" | python3 -c "import sys,json; t=sys.stdin.read(); j=json.loads(t[:t.rindex('[')]); print('ready', j.get('ready'), 'building', j.get('building')); [print(b['title'], b['size'], (b['first'] or {}).get('name')) for b in j['boards']]; print(t[t.rindex('['):])"
