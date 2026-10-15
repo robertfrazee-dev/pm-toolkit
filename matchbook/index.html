@@ -444,6 +444,20 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .av.away span { opacity: .55; } .av.away em { color: var(--muted); font-style: italic; }
 .av.live em { color: var(--sulfur); font-weight: 700; }
 .claim h2 { font-size: 26px; }
+.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: b; }
+.board li { display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 10px; align-items: center; counter-increment: b; }
+.board li::before { content: counter(b); grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); font-weight: 800; font-size: 13px; }
+.board li:first-child::before { background: var(--sulfur); color: #2a1a00; }
+.board .pbar { grid-column: 2 / 4; }
+.pbar { display: block; height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--like); border-radius: 3px; }
+.crew-view .panel > div + div, .crew-view .panel .row + .row { margin-top: 2px; }
+.history { display: flex; flex-direction: column; }
+.hist { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; border: 0; background: none; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; color: inherit; }
+.hist:first-child { border-top: 0; }
+.hist span span { display: block; }
+.live-card { box-shadow: 0 0 0 2px var(--match), var(--soft-shadow); }
+.crew-banner { box-shadow: 0 0 0 2px var(--like), var(--soft-shadow); }
 .table-wrap { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
 .scores.who th { white-space: nowrap; }
 .scores.who td, .scores.who th { padding-inline: 10px; }
@@ -488,6 +502,7 @@ const ICON = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg>',
   flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.5 2.6-5.8 4.2-8.8.4 2 1.6 3.2 2.8 3.9 0-1.7.6-3.6 2-4.9.6 2.7 3.9 5 3.9 9.4 0 3.8-2.6 6.6-6.4 6.6z"/></svg>',
+  crew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/></svg>',
   cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="7" y="3" width="13" height="17" rx="2.5" transform="rotate(8 13.5 11.5)"/><rect x="4" y="4" width="13" height="17" rx="2.5"/></svg>',
   share: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
   star: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
@@ -581,7 +596,7 @@ if (NATIVE) {
   Plug.PushNotifications?.addListener("pushNotificationActionPerformed", ({ notification }) => {
     const code = notification?.data?.code; if (code) openSession(code);
   });
-  Plug.App?.addListener("appUrlOpen", ({ url }) => { const b = (String(url).match(/\/b\/([A-Za-z0-9]{6,24})/) || [])[1]; if (b) return openBooking(b); const code = codeFromUrl(url); if (code) openSession(code); });
+  Plug.App?.addListener("appUrlOpen", ({ url }) => { const crew = crewFromUrl(url); if (crew) return openCrew(crew); const b = (String(url).match(/\/b\/([A-Za-z0-9]{6,24})/) || [])[1]; if (b) return openBooking(b); const code = codeFromUrl(url); if (code) openSession(code); });
   // Keep the token fresh on each launch once someone has opted in.
   if (pushOn()) Plug.PushNotifications?.register().catch(() => {});
 }
@@ -1143,6 +1158,159 @@ async function shareBooking(b) {
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast("Link copied. Paste it in your group chat."); } catch { toast(url); }
 }
 
+// ---------- crews ----------
+// A crew is a group that decides together again and again. It keeps every finished night and turns them into stats.
+function myCrews() { try { return JSON.parse(store.get("mb.crews") || "[]"); } catch { return []; } }
+function rememberCrew(c) { store.set("mb.crews", JSON.stringify([{ id: c.id, name: c.name }, ...myCrews().filter((x) => x.id !== c.id)].slice(0, 20))); }
+function forgetCrew(id) { store.set("mb.crews", JSON.stringify(myCrews().filter((x) => x.id !== id))); }
+const crewUrl = (id) => `${NATIVE ? SITE : location.origin}/c/${id}`;
+const crewFromUrl = (u) => (String(u).match(/\/c\/([A-Za-z0-9]{8})/) || [])[1];
+
+function homeCrews() {
+  const list = myCrews();
+  const wrap = el(`<div class="stack-y"><div class="greet"><h2>Your crews</h2><p class="muted">The groups you decide with. Each crew keeps every night you've picked, plus who picks best and who's always in sync.</p></div></div>`);
+  if (list.length) {
+    const box = el(`<div class="decks"></div>`);
+    for (const c of list) {
+      const b = el(`<button class="deck" type="button"><span class="dot ${COVERS[hash(c.id) % COVERS.length]}"></span><span class="info"><span class="t"></span><span class="s">Crew · tap for stats and history</span></span><span class="code-tag">→</span></button>`);
+      $(".t", b).textContent = c.name;
+      b.addEventListener("click", () => openCrew(c.id));
+      box.append(b);
+    }
+    wrap.append(box);
+  } else wrap.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">👥</span><b>No crews yet</b><p class="muted">Make one here, or tap "Save this group as a crew" after a deck finishes.</p></div>`));
+  const form = el(`<form class="panel" novalidate><div class="field"><label for="crewName">New crew</label><input class="input" id="crewName" maxlength="40" placeholder="Thursday night crew"></div>
+    ${S.name ? "" : nameField("crewMe")}<button class="btn primary block" type="submit">Make the crew</button></form>`);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const me = $("#crewMe", form); if (me && !takeName(me)) return toast("Add your name first.");
+    const name = $("#crewName", form).value.trim(); if (name.length < 2) return toast("Give the crew a name.");
+    const btn = $("button[type=submit]", form); btn.disabled = true;
+    try { const { id } = await api("/api/crew", { type: "create", name, playerId: ME, playerName: S.name }); openCrew(id); }
+    catch (err) { btn.disabled = false; toast(err.message); }
+  });
+  wrap.append(form);
+  return wrap;
+}
+
+async function openCrew(id) {
+  id = String(id).toUpperCase();
+  if (!S.name) { S.pendingCrew = id; return setView("crewName"); }
+  stopPolling();
+  Object.assign(S, { code: null, session: null, crewId: id, crewData: null });
+  try { history.replaceState(null, "", "/c/" + id); } catch {}
+  setView("crew");
+  await loadCrew(id);
+}
+async function loadCrew(id) {
+  try {
+    let d = await api(`/api/crew?id=${id}&me=${ME}`);
+    // Opened from a crew link: you're in.
+    if (!d.members.some((m) => m.me)) { await api("/api/crew", { type: "join", id, playerId: ME, name: S.name }); d = await api(`/api/crew?id=${id}&me=${ME}`); }
+    S.crewData = d; rememberCrew(d.crew);
+  } catch (e) { S.crewData = { error: e.message }; }
+  if (S.view === "crew") render();
+}
+function viewCrewName() {
+  const root = el(`<form class="panel" novalidate><div><div class="eyebrow">You're invited to a crew</div><h2 style="font-size:26px;margin-top:6px">Join the crew on Matchbook</h2>
+    <p class="muted" style="margin-top:8px">A crew picks places together: bars, dinners, things to do. You'll get its decks and see its stats.</p></div>
+    ${nameField("crewJoinName")}<button class="btn primary block" type="submit">Join the crew</button></form>`);
+  root.addEventListener("submit", (e) => { e.preventDefault(); if (takeName($("#crewJoinName", root))) { askForPush(); openCrew(S.pendingCrew); } });
+  return root;
+}
+
+const pctBar = (pct) => `<span class="pbar"><i style="width:${Math.max(4, pct)}%"></i></span>`;
+function viewCrew() {
+  const d = S.crewData;
+  const root = el(`<div class="app stack-y crew-view"><button type="button" class="link" data-back style="align-self:flex-start">← Crews</button></div>`);
+  $("[data-back]", root).addEventListener("click", () => { S.tab = "crews"; store.set("mb.tab", "crews"); leave(); });
+  if (!d) { root.append(el(`<div class="skeleton" style="height:260px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const { crew, members, live, stats, history } = d;
+  root.append(el(`<div class="greet"><h2>${esc(crew.name)}</h2><p class="muted">${members.length} ${members.length === 1 ? "person" : "people"} · ${crew.decks} night${crew.decks === 1 ? "" : "s"} picked</p></div>`));
+  root.append(el(`<div class="chips">${members.map((m) => `<span class="chip" aria-pressed="${m.me}">${esc(m.me ? "You" : m.name)}</span>`).join("")}</div>`));
+  if (live) {
+    const card = el(`<section class="panel live-card"><div class="eyebrow">🔴 Live now</div><h3 style="font-size:20px">${esc(live.label)}${live.area && live.area !== "your saved list" ? ` <span class="muted" style="font-weight:600">near ${esc(live.area === "you" ? "the host" : live.area)}</span>` : ""}</h3>
+      <p class="muted">${live.phase === "ranking" ? `Ranking · ${live.done} ranked` : `Swiping · ${live.done} of ${live.people} done`}${live.endsAt ? " · " + timerChip(live.endsAt, live.phase === "ranking" ? "rank" : "swipe") : ""}</p>
+      <button class="btn primary block big" type="button">${live.phase === "ranking" ? "Rank now" : "Swipe now"}</button></section>`);
+    $("button", card).addEventListener("click", () => openSession(live.code));
+    root.append(card);
+  }
+  const start = el(`<button class="btn ${live ? "" : "primary "}block big" type="button">Start a deck for the crew</button>`);
+  start.addEventListener("click", () => { S.crewFor = { id: crew.id, name: crew.name }; S.tab = "pick"; store.set("mb.tab", "pick"); leave(); });
+  const inv = el(`<button class="btn block" type="button">${ICON.share} Invite people to the crew</button>`);
+  inv.addEventListener("click", async () => {
+    const url = crewUrl(crew.id), text = `Join ${crew.name} on Matchbook, where we pick where to go:`;
+    if (NATIVE && Plug.Share) { try { await Plug.Share.share({ title: crew.name, text, url }); } catch {} return; }
+    if (navigator.share) { try { await navigator.share({ title: crew.name, text, url }); return; } catch (e) { if (e?.name === "AbortError") return; } }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast("Crew link copied"); } catch { toast(url); }
+  });
+  root.append(start, inv);
+  const note = pushPrompt("Turn on notifications for crew decks"); if (note) root.append(note);
+
+  if (!stats.decks) root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">📊</span><b>Stats show up after your first night</b><p class="muted">Start a deck for the crew. When it's picked, you'll see who picks best, who's in sync, and the places you keep almost choosing.</p></div>`));
+  else {
+    if (stats.bestPickers.length) root.append(el(`<section class="panel"><div class="eyebrow">🏆 Best picker</div><p class="small muted">Whose #1 pick ended up winning.</p>
+      <ol class="board">${stats.bestPickers.map((p) => `<li><span>${esc(p.name)}</span><span class="muted small">${p.won} of ${p.ranked} won</span>${pctBar(Math.round((p.won / p.ranked) * 100))}</li>`).join("")}</ol></section>`));
+    const sync = [];
+    if (stats.inSync.length) sync.push(`<div><b>Most in sync</b>${stats.inSync.map((p) => `<div class="row spread"><span>${esc(p.a)} & ${esc(p.b)}</span><span class="muted small">agree ${p.pct}%</span></div>`).join("")}</div>`);
+    if (stats.wildCard) sync.push(`<div class="row spread"><span><b>Wild card</b> · ${esc(stats.wildCard.name)}</span><span class="muted small">agrees ${stats.wildCard.pct}% on average</span></div>`);
+    if (stats.easiest) sync.push(`<div class="row spread"><span><b>Easiest to please</b> · ${esc(stats.easiest.name)}</span><span class="muted small">says yes ${stats.easiest.pct}%</span></div>`);
+    if (stats.hardest && stats.hardest.name !== stats.easiest?.name) sync.push(`<div class="row spread"><span><b>Hardest to please</b> · ${esc(stats.hardest.name)}</span><span class="muted small">says yes ${stats.hardest.pct}%</span></div>`);
+    if (sync.length) root.append(el(`<section class="panel"><div class="eyebrow">🤝 Who's in sync</div>${sync.join("")}</section>`));
+    if (stats.mostPicked.length) root.append(el(`<section class="panel"><div class="eyebrow">📍 Most picked</div>${stats.mostPicked.map((w) => `<div class="row spread"><span>${esc(w.name)}</span><span class="muted small">${w.n}×</span></div>`).join("")}</section>`));
+    if (stats.nextTime.length) {
+      const nt = el(`<section class="panel"><div class="eyebrow">👀 Next time?</div><p class="small muted">Places a lot of you said yes to that never won.</p>
+        ${stats.nextTime.map((a) => `<div class="row spread"><span>${esc(a.name)}</span><span class="muted small">${a.yes} yes${a.decks > 1 ? ` over ${a.decks} decks` : ""}</span></div>`).join("")}
+        ${stats.nextTime.length >= 2 ? `<button class="btn block" type="button">Swipe these with the crew</button>` : ""}</section>`);
+      $("button", nt)?.addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try { const { code } = await api("/api/deck", { playerId: S.me, saved: stats.nextTime.map((a) => ({ name: a.name, maps: a.maps, gid: a.gid })), crewId: crew.id, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin }); openSession(code); }
+        catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+      });
+      root.append(nt);
+    }
+  }
+  if (history.length) {
+    const h = el(`<section class="panel"><div class="eyebrow">Past nights</div><div class="history"></div></section>`);
+    for (const x of history) {
+      const row = el(`<button type="button" class="hist"><span><b></b><span class="small muted"></span></span><span class="small muted">${new Date(x.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></button>`);
+      $("b", row).textContent = x.winner ? x.winner.name : "No winner";
+      $("span .small", row).textContent = `${x.label}${x.area ? " · " + (x.area === "you" ? "nearby" : x.area) : ""} · ${x.people} people`;
+      row.addEventListener("click", () => openSession(x.code));
+      $(".history", h).append(row);
+    }
+    root.append(h);
+  }
+  const leaveBtn = el(`<button class="btn ghost block" type="button">Leave this crew</button>`);
+  leaveBtn.addEventListener("click", async () => {
+    if (!confirm(`Leave ${crew.name}? You can rejoin from the crew link.`)) return;
+    try { await api("/api/crew", { type: "leave", id: crew.id, playerId: ME }); forgetCrew(crew.id); S.tab = "crews"; leave(); } catch (err) { toast(err.message); }
+  });
+  root.append(leaveBtn);
+  return root;
+}
+
+// After a deck: keep these people together as a crew (or jump to the crew it already belongs to).
+function crewPanel() {
+  if (S.session.crew) {
+    const b = el(`<button class="btn block" type="button">👥 Crew stats and history</button>`);
+    b.addEventListener("click", () => openCrew(S.session.crew));
+    return b;
+  }
+  const n = rankPeople().length; if (n < 2) return null;
+  const box = el(`<form class="panel" novalidate><div class="eyebrow">👥 Same group next time?</div>
+    <p class="small muted">Save these ${n} people as a crew. Next time, start a deck for the crew and everyone gets it, with no new link. You'll also get stats on who picks best.</p>
+    <div class="row"><input class="input" id="newCrew" maxlength="40" placeholder="Crew name" style="flex:1;min-width:0"><button class="btn primary" type="submit">Save</button></div></form>`);
+  box.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("#newCrew", box).value.trim(); if (name.length < 2) return toast("Give the crew a name.");
+    try { const { id } = await api("/api/crew", { type: "create", name, playerId: ME, playerName: S.name, fromCode: S.code }); toast(`${name} saved`); openCrew(id); }
+    catch (err) { toast(err.message); }
+  });
+  return box;
+}
+
 // ---------- recent decks (this device only) ----------
 function recents() { try { return JSON.parse(store.get("mb.recent") || "[]"); } catch { return []; } }
 function remember(d) {
@@ -1322,7 +1490,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -1351,7 +1519,7 @@ function takeName(input) {
 
 function viewHome() {
   const root = el(`<div class="app home"></div>`);
-  root.append(S.tab === "decks" ? homeDecks() : S.tab === "saved" ? homeSaved() : homePick());
+  root.append(S.tab === "decks" ? homeDecks() : S.tab === "crews" ? homeCrews() : S.tab === "saved" ? homeSaved() : homePick());
   root.append(tabBar());
   return root;
 }
@@ -1359,7 +1527,7 @@ function viewHome() {
 function tabBar() {
   const n = favs().length;
   const t = (id, label, icon, badge) => `<button type="button" class="tab" data-tab="${id}" aria-current="${S.tab === id ? "page" : "false"}">${icon}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ""}</button>`;
-  const bar = el(`<nav class="tabbar" aria-label="Sections">${t("pick", "Pick", ICON.flame)}${t("decks", "Decks", ICON.cards)}${t("saved", "Saved", ICON.star, n)}</nav>`);
+  const bar = el(`<nav class="tabbar" aria-label="Sections">${t("pick", "Pick", ICON.flame)}${t("decks", "Decks", ICON.cards)}${t("crews", "Crews", ICON.crew)}${t("saved", "Saved", ICON.star, n)}</nav>`);
   bar.addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]"); if (!b || b.dataset.tab === S.tab) return;
     S.tab = b.dataset.tab; store.set("mb.tab", S.tab); haptic("light"); render(); scrollTo(0, 0);
@@ -1402,6 +1570,11 @@ function homePick() {
     const deals = el(`<button class="hot-entry" type="button"><span class="fire" aria-hidden="true">🎟</span><span><b>Group deals</b><span>Packages for groups ${area.label === "you" ? "near you" : "near " + esc(area.label)}, book and split it</span></span><i aria-hidden="true">→</i></button>`);
     deals.addEventListener("click", openDeals);
     wrap.append(deals);
+  }
+  if (S.crewFor) {
+    const banner = el(`<div class="notice crew-banner"><b>👥 New deck for ${esc(S.crewFor.name)}</b><br><span class="small">Everyone in the crew gets it as a notification, with no link to send.</span> <button type="button" class="link small">Not for the crew</button></div>`);
+    $("button", banner).addEventListener("click", () => { S.crewFor = null; render(); });
+    wrap.append(banner);
   }
   const askName = !S.name || S.editName;
   const form = el(`<form class="composer" id="newForm" novalidate>
@@ -2024,6 +2197,7 @@ function viewResults() {
   }
   const again = el(`<button class="btn ghost block" type="button">Start a new deck</button>`); again.addEventListener("click", leave);
   row.append(again); root.append(row);
+  const cp = crewPanel(); if (cp) root.append(cp);
   if (final && !store.get("mb.fb." + S.code)) root.append(feedbackPanel());
   return root;
 }
@@ -2037,8 +2211,9 @@ async function createDeck() {
   try {
     const { code } = await api("/api/deck", {
       category: f.cat, mood: f.mood, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
-      playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, swipeMinutes: f.swipeMin, rankMinutes: f.rankMin,
+      playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, swipeMinutes: f.swipeMin, rankMinutes: f.rankMin, crewId: S.crewFor?.id,
     });
+    S.crewFor = null;
     rememberForm(f);
     openSession(code);
   } catch (e) { S.error = e.message; setView("home"); }
@@ -2065,7 +2240,8 @@ async function createSavedDeck(btn) {
   btn.disabled = true;
   try {
     const saved = favs().slice(0, 40).map((f) => ({ ...f, category: f.ctx?.category }));
-    const { code } = await api("/api/deck", { playerId: S.me, saved, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+    const { code } = await api("/api/deck", { playerId: S.me, saved, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin, crewId: S.crewFor?.id });
+    S.crewFor = null;
     openSession(code);
   } catch (e) { btn.disabled = false; toast(e.message); }
 }
@@ -2073,7 +2249,7 @@ async function createSavedDeck(btn) {
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
   stopPolling(); clearInterval(S.bookingTimer);
-  Object.assign(S, { code: null, session: null, lastSig: null, me: ME, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
+  Object.assign(S, { code: null, session: null, lastSig: null, me: ME, crewId: null, crewData: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
 }
@@ -2155,9 +2331,10 @@ $("#codePill").addEventListener("click", () => { if (S.session) invite(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 
 const fromLink = codeFromUrl(location.pathname) || codeFromUrl(location.hash);
+const crewLink = crewFromUrl(location.pathname);
 const bookingLink = (location.pathname.match(/^\/b\/([A-Za-z0-9]{6,24})/) || [])[1];
 if (bookingLink) { if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Your card is only charged once everyone's paid."); openBooking(bookingLink); }
-else if (fromLink) openSession(fromLink); else render();
+else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
 </script>
 </body>
 </html>
