@@ -16,10 +16,13 @@
 // POST /api/boards { op: "checkin", me, name, gid, lat, lng, tell }
 // GET  /api/boards?op=mine&me=PID                    your check-in points, weekly streak, spots
 // GET  /api/boards?op=tonight&<where>                anonymous: where people are out tonight
+// GET  /api/boards?op=trending&window=tonight|week|month&<where>[&auto=1]  what's hot from real activity only
+//                                                    (auto: if tonight is quiet, this week; then this month)
 import { PLAYER_RE, redis, pipeline, send, body, clientIp, allow, missingConfig, bump, cleanName } from "./_lib.js";
 import { BOARDS, SECTIONS, boardBySlug, HOOD_NAMES, whereFrom, candidates, scored, details, MIN_VOTES } from "./_best.js";
 import { checkIn, CheckinError, myStats, tonight, tonightCounts, nearby } from "./_checkin.js";
 import { CREW_RE, getCrew, memberPids, isMember } from "./_crew.js";
+import { trending } from "./_trending.js";
 import { createQuest, getQuest, crewQuests, crewCheckins, progressOf, QUEST_RE, MAX_SPOTS } from "./_quests.js";
 import { TIERS, MARKS, marksOf, setMark, crewTier, checkedIn } from "./_tiers.js";
 import { miles } from "./_places.js";
@@ -233,6 +236,12 @@ export default async function handler(req, res) {
       if (op === "crew") return await crewBoards(res, q);
       if (op === "nearby") return await nearbyList(req, res, q);
       if (op === "tonight") return await tonightList(res, q);
+      if (op === "trending") {
+        const where = await whereFrom(q), want = ["tonight", "week", "month"].includes(q.get("window")) ? q.get("window") : "tonight";
+        const order = q.get("auto") === "1" ? ["tonight", "week", "month"].slice(["tonight", "week", "month"].indexOf(want)) : [want];
+        let out; for (const w of order) { out = await trending(w, where); if (out.places.length) break; }
+        return send(res, 200, { ...out, where: whereInfo(where) });
+      }
       if (op === "mine") return PLAYER_RE.test(q.get("me") || "") ? send(res, 200, await myStats(q.get("me"))) : send(res, 400, { error: "Bad request." });
       return send(res, 404, { error: "Unknown." });
     }
