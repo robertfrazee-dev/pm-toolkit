@@ -68,6 +68,12 @@ Redeploy after adding them. Taps are counted per month in Redis under `stats:cli
 
 Open `/stats.html` on your site and enter your stats key to see decks started, people joining, decks reaching ranking and a winner, booking taps, and Google usage by day. Turn it on by adding `STATS_KEY` (any long random password) in Vercel → Settings → Environment Variables, then redeploy.
 
+### Pilot analytics (`api/_events.js`)
+
+- **Events** (who, which deck, which crew, when; kept 120 days in `ev:{day}` lists, with daily totals on the stats page): session created, link opened, joined, swiped, matched, revealed, checked in, rated (counts once ratings ship), "same crew" (saving a deck's people as a crew, or starting a deck for a crew). "Link opened" and starting a crew deck are sent by the browser through `/api/click` (`kind: "event"`); the rest are recorded on the server.
+- **Groups:** a crew, or 2+ people who shared a deck. Later decks with the same crew, or 2+ of the same people, belong to the same group. Each session's people are kept 120 days (`mx:s:{code}`, `mx:p:{code}`), so groups outlive decks.
+- **Dashboard** (`/stats.html`, top panel): % of groups with a 2nd outing within 14 days (of groups whose first deck is 14+ days old, plus how many newer groups are already back), active groups this week, new groups (7/30 days), swipes per match (last 30 days), groups by week (8 weeks), and the event counts.
+
 ## Limits built in
 
 - 20 new decks per hour from one connection, so a shared link can't burn your Google quota.

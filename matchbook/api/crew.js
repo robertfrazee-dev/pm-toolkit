@@ -4,6 +4,7 @@
 // POST /api/crew { type: "leave", id, playerId }
 // POST /api/crew { type: "rename", id, playerId, name } the person who made it
 import { CODE_RE, PLAYER_RE, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, bump } from "./_lib.js";
+import { track } from "./_events.js";
 import { CREW_RE, getCrew, saveCrew, newCrewId, addMember, isMember, memberPids, recordCrewDeck, crewStats } from "./_crew.js";
 import { winnerOf } from "./action.js";
 import { crewActivity } from "./_checkin.js";
@@ -66,6 +67,7 @@ async function create(req, res, b, playerId) {
     else { crew.liveCode = code; await saveCrew(crew); }
   }
   await bump("crews");
+  if (CODE_RE.test(String(b.fromCode || "").toUpperCase())) await track("same_crew", { pid: playerId, code: String(b.fromCode).toUpperCase(), crew: crew.id });
   return send(res, 201, { id: crew.id });
 }
 

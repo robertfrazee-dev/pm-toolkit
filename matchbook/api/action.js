@@ -10,6 +10,7 @@
 //   type "remove": { target }               host only: take someone out of the deck (a duplicate or someone who left)
 //   type "tick":  { code }                  anyone (and the scheduler): runs anything that's due (2-minute warnings, time's up)
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
+import { track } from "./_events.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
 import { findPlaces, shape } from "./_places.js";
 import { recordPlaces, swipeChanges } from "./_hot.js";
@@ -56,6 +57,7 @@ async function recordWinner(code, deck) {
   const [sw, rk] = await pipeline([["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
   const swipes = hashToObject(sw), ranks = hashToObject(rk), winner = winnerOf(deck, Object.values(ranks));
   await recordPlaces(deck, [{ place: winner, field: "win", n: 1 }]);
+  await track("revealed", { pid: deck.hostId || "", code, crew: deck.crew || "" });
   if (deck.crew) await recordCrewDeck(code, deck, winner, swipes, ranks).catch((e) => console.error("crew", e));
 }
 
@@ -81,6 +83,7 @@ async function startRanking(code, deck, swipes, bar, { relax }) {
   }), "KEEPTTL");
   if (rankEndsAt) await scheduleTimer(code, rankEndsAt);
   await bump(single ? "winners" : "ranking_started");
+  await track("matched", { code, crew: deck.crew || "", n: matches.length });
   await recordPlaces(deck, matches.map((id) => ({ place: deck.places.find((p) => p.id === id), field: "match", n: 1 })));
   if (single) await recordWinner(code, { ...deck, matches });
   return matches;
@@ -175,7 +178,9 @@ export default async function handler(req, res) {
       const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
       const before = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
-      if (added === 1) await bump("joins");
+      if (added === 1) { await bump("joins"); await track("joined", { pid: playerId, code, crew: deck.crew || "" }); }
+      const was = before[playerId], decided = likes.length + passes.length - ((was?.likes?.length || 0) + (was?.passes?.length || 0));
+      if (decided > 0) await track("swiped", { pid: playerId, code, crew: deck.crew || "", n: decided });
       // Joining a crew's deck makes you part of the crew.
       if (added === 1 && deck.crew) { const crew = await getCrew(deck.crew); if (crew && addMember(crew, playerId, name)) await saveCrew(crew); if (crew) await redis("SADD", `pcrews:${playerId}`, crew.id); }
       await recordPlaces(deck, swipeChanges(deck, before, playerId, likes, passes));

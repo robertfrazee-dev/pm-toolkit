@@ -1095,7 +1095,7 @@ function viewCrew() {
     root.append(card);
   }
   const start = el(`<button class="btn ${live ? "" : "primary "}block big" type="button">Start a deck for the crew</button>`);
-  start.addEventListener("click", () => { S.crewFor = { id: crew.id, name: crew.name }; S.tab = "pick"; store.set("mb.tab", "pick"); leave(); });
+  start.addEventListener("click", () => { trackEvent("same_crew", { crew: crew.id }); S.crewFor = { id: crew.id, name: crew.name }; S.tab = "pick"; store.set("mb.tab", "pick"); leave(); });
   const inv = el(`<button class="btn block" type="button">${ICON.share} Invite people to the crew</button>`);
   inv.addEventListener("click", async () => {
     const url = crewUrl(crew.id), text = `Join ${crew.name} on Matchbook, where we pick where to go:`;
@@ -2507,6 +2507,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) refr
 
 const fromLink = codeFromUrl(location.pathname) || codeFromUrl(location.hash);
 const crewLink = crewFromUrl(location.pathname);
+// Analytics: someone opened a deck link (once per deck per device).
+function trackEvent(e, extra = {}) { fetch("/api/click", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "event", e, pid: ME, ...extra }), keepalive: true }).catch(() => {}); }
+if (fromLink && store.get("mb.opened." + fromLink.toUpperCase()) !== "1") { store.set("mb.opened." + fromLink.toUpperCase(), "1"); trackEvent("link_opened", { code: fromLink.toUpperCase() }); }
 if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
 </script>
 </body>

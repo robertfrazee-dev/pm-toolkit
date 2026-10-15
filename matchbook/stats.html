@@ -52,6 +52,11 @@ th:first-child, td:first-child { text-align: left; }
 th { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .err { color: var(--match); font-weight: 600; }
 .summary td:first-child { font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.tile { border: 1px solid rgba(127,127,127,.25); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.tile b { font-size: 28px; }
+.tile small { opacity: .65; font-size: 12px; }
+h3 { margin: 14px 0 6px; font-size: 15px; }
 </style>
 </head>
 <body><main>
@@ -63,6 +68,11 @@ th { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; let
   <form class="row" id="keyForm"><input id="key" type="password" autocomplete="current-password" aria-label="Stats key"><button type="submit">Show stats</button></form>
   <p class="err" id="err" hidden></p>
 </section>
+<section class="panel" id="pilot" hidden><h2>Pilot: do groups come back?</h2>
+  <div class="tiles" id="pilotTiles"></div>
+  <h3>By week</h3><div class="wrap"><table id="weekTable"></table></div>
+  <h3>Events</h3><div class="wrap"><table id="evTable"></table></div>
+  <p class="muted">A group is a crew, or 2+ people who shared a deck; later decks with the same crew or 2+ of the same people are the same group. "2nd outing" counts groups whose first deck is at least 14 days old and that started another deck within 14 days. "Rated" starts counting once ratings ship.</p></section>
 <section class="panel" id="summary" hidden><h2>How groups are doing</h2><div class="wrap"><table class="summary" id="sumTable"></table></div>
   <p class="muted">Finish rate is decks that reached a winner out of decks started. Google searches and photos are what cost money.</p></section>
 
@@ -87,6 +97,20 @@ const COLS = [
   ["Wouldn't", (d) => d.fb_down || 0],
 ];
 const fmt = (n) => n.toLocaleString();
+const EVENTS = [["session_created", "Session created"], ["link_opened", "Link opened"], ["joined", "Joined"], ["swiped", "Swipes"], ["matched", "Matches"], ["revealed", "Winner revealed"], ["checked_in", "Checked in"], ["rated", "Rated"], ["same_crew", "\"Same crew\" tapped"]];
+function pilot(p, days) {
+  const so = p.secondOuting, tile = (n, label, sub = "") => `<div class="tile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  $("#pilotTiles").innerHTML = [
+    tile(so.pct == null ? "–" : so.pct + "%", "2nd outing within 14 days", `${so.returned} of ${so.eligible} groups · ${so.pendingBack} of ${so.pending} newer groups already back`),
+    tile(fmt(p.activeThisWeek), "Active groups this week"),
+    tile(fmt(p.createdLast7), "New groups, last 7 days", `${fmt(p.createdLast30)} in 30 days · ${fmt(p.groups)} total (${fmt(p.crewGroups)} crews)`),
+    tile(p.swipesToMatch.ratio == null ? "–" : p.swipesToMatch.ratio, "Swipes per match", `${fmt(p.swipesToMatch.swipes)} swipes · ${fmt(p.swipesToMatch.matches)} matches, last 30 days`),
+  ].join("");
+  $("#weekTable").innerHTML = `<tr><th>Week of</th><th>New groups</th><th>Active groups</th></tr>` + p.weekly.slice().reverse().map((w) => `<tr><td>${w.week}</td><td>${fmt(w.created)}</td><td>${fmt(w.active)}</td></tr>`).join("");
+  const periods = [["Today", days.slice(0, 1)], ["Last 7 days", days.slice(0, 7)], ["Last 30 days", days]];
+  $("#evTable").innerHTML = `<tr><th></th>${periods.map(([n]) => `<th>${n}</th>`).join("")}</tr>` + EVENTS.map(([k, name]) => `<tr><td>${name}</td>${periods.map(([, ds]) => `<td>${fmt(sum(ds, (d) => d["ev_" + k] || 0))}</td>`).join("")}</tr>`).join("");
+  $("#pilot").hidden = false;
+}
 function sum(days, f) { return days.reduce((a, d) => a + f(d), 0); }
 async function load(key) {
   $("#err").hidden = true;
@@ -104,6 +128,7 @@ async function load(key) {
   $("#fbList").innerHTML = (j.feedback || []).length
     ? j.feedback.map((f) => `<p><b>${f.vote === "up" ? "Would use again" : "Wouldn't"}</b> · <span class="muted">${new Date(f.at).toLocaleDateString()} · deck ${esc(f.code)}</span><br>${esc(f.text)}</p>`).join("")
     : `<p class="muted">No written feedback yet.</p>`;
+  if (j.pilot) pilot(j.pilot, days);
   $("#summary").hidden = $("#daily").hidden = $("#comments").hidden = false;
 }
 $("#keyForm").addEventListener("submit", (e) => { e.preventDefault(); const k = $("#key").value.trim(); if (k) load(k); });
