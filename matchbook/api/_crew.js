@@ -2,11 +2,9 @@
 // A crew keeps a short summary of every deck it finishes, so its stats outlive the decks (which expire after a week).
 // People are matched by name within a crew, so someone who joined from two browsers still counts as one person.
 import { redis, pipeline, bump } from "./_lib.js";
-import { BOARDS, matchPlace } from "./_nyc.js";
 
 export const CREW_RE = /^[A-Z0-9]{8}$/;
 const KEEP = 400 * 86400;
-export const CREW_WIN = 5; // a crew night's winner, on the crew's own boards (one vote counts 1)
 const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const personKey = (name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, 30);
 
@@ -64,13 +62,6 @@ export async function recordCrewDeck(code, deck, winner, swipes, ranks) {
   crew.lastAt = entry.at; crew.decks = (crew.decks || 0) + 1;
   await pipeline([["LPUSH", `crew:${crew.id}:history`, JSON.stringify(entry)], ["LTRIM", `crew:${crew.id}:history`, 0, 99], ["EXPIRE", `crew:${crew.id}:history`, KEEP]]);
   await saveCrew(crew);
-  // The night's winner counts big on the crew's own boards (when it's a place on the NYC list).
-  if (winner) {
-    try {
-      const p = await matchPlace({ name: winner.name, lat: winner.lat, lng: winner.lng });
-      if (p) await pipeline(BOARDS.filter((b) => b.test(p)).flatMap((b) => [["ZINCRBY", `crewbd:${crew.id}:${b.slug}`, CREW_WIN, p.id], ["EXPIRE", `crewbd:${crew.id}:${b.slug}`, KEEP]]));
-    } catch (e) { console.error("crew board", e); }
-  }
   await bump("crew_decks");
 }
 
