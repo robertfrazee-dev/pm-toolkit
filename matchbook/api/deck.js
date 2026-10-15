@@ -126,7 +126,7 @@ async function createFromSaved(req, res, b) {
   // The same kind of deck can come from the hot list; it's labeled for where it came from.
   const hot = b.source === "hot" || b.source === "board", near = text(b.area, 60);
   return saveDeck(res, withTimers({
-    category: "saved", mood: "", label: b.source === "board" ? text(b.label, 60) || "Best of Manhattan" : hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: b.source === "board" ? "Best of Manhattan" : hot ? "the hot list" : "your saved list", radius: 0, center, places,
+    category: "saved", mood: "", label: b.source === "board" ? text(b.label, 60) || "Best of NYC" : hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: b.source === "board" ? "Best of NYC" : hot ? "the hot list" : "your saved list", radius: 0, center, places,
     phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   }, b));
 }
