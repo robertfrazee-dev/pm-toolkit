@@ -5,6 +5,7 @@ import { redis, pipeline, hashToObject, bump, underDailyCap } from "./_lib.js";
 import { getCrew, memberPids, personKey } from "./_crew.js";
 import { pushToPlayers } from "./_push.js";
 import { details, hoodOf } from "./_best.js";
+import { track } from "./_events.js";
 
 export const VERIFY_M = 250; // how close you have to be to check in
 const PER_NIGHT = 12;
@@ -132,6 +133,7 @@ export async function checkIn({ pid, name, gid, lat, lng, tell = true }) {
     await Promise.all([...byCrew].map(([cr, ids]) => pushToPlayers(ids, { title: cr.name, body: `📍 ${name} checked in at ${p.name}${p.hood ? ` in ${p.hood}` : ""}`, url: `/c/${cr.id}` })));
   }
   await bump("checkins");
+  await track("checked_in", { pid, crew: crews[0]?.id || "" });
   return { place: p, pts, newSpot, linked: [...linked], streak, best, tonight: count >= tonightMin() ? count : null, told, stats: await myStats(pid) };
 }
 

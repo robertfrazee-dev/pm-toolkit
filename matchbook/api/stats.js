@@ -1,5 +1,6 @@
 // GET /api/stats?days=30  with header x-stats-key: <STATS_KEY>  → daily counts for the owner's stats page
 import { pipeline, send } from "./_lib.js";
+import { sessions, metrics } from "./_events.js";
 
 export default async function handler(req, res) {
   const key = process.env.STATS_KEY;
@@ -12,7 +13,9 @@ export default async function handler(req, res) {
     const days = dates.map((date, i) => ({ date, ...Object.fromEntries(Object.entries(hashToNumbers(rows[i]))) }));
     const [fb] = await pipeline([["LRANGE", "feedback", 0, 49]]);
     const feedback = (fb || []).map((x) => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean);
-    return send(res, 200, { days, feedback });
+    // Pilot metrics: groups, weekly active groups, 2nd outing within 14 days, swipes per match.
+    const pilot = metrics(await sessions(120));
+    return send(res, 200, { days, feedback, pilot });
   } catch (e) {
     console.error(e);
     return send(res, 500, { error: "Couldn't load stats." });
