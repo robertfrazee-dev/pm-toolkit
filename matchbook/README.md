@@ -102,3 +102,12 @@ A crew is a group that decides together again and again (`api/crew.js`, `api/_cr
 - "Start a deck for the crew" sends every member a push with the deck, so there's no link to pass around, and the crew page shows the live deck. Anyone who joins a crew deck, or opens the crew link, becomes a member.
 - Each finished crew deck is kept as a short summary (places, winner, each person's yeses and ranking) for 400 days, so stats outlive the decks: best picker (whose #1 won), who's in sync (same yes/no on the same cards), wild card, easiest and hardest to please, most picked places, and "Next time?" (places lots of the crew liked that never won, swipeable as a deck).
 - People are matched by name inside a crew, so someone who used two browsers still counts once.
+
+## Best of Manhattan and This or That
+
+`api/boards.js` and `api/_nyc.js`, shown on the app's **Top** tab.
+
+- **The list:** Manhattan's bars, restaurants, cafés, nightlife, music venues, things to do, sights and parks come from OpenStreetMap (free to store, credited on every board). Build it from the stats page ("Best of Manhattan list" → Build the list): it pulls 7 parts from the Overpass API and sorts them into 16 boards (Sports Bars, Happy Hour, Late-Night Hangouts, Bars for a Crazy Night, Italian Dinners, Pizza, Bagels, Brunch, Bars, Restaurants, Coffee, Dessert, Live Music, Things to Do, Sights, Outdoor Spots). Rebuild every month or so; votes and rankings are kept. Optional: `OVERPASS_URL` to use a different Overpass server.
+- **Rankings:** each place has a chess-style rating per board from This or That votes, plus points when real groups pick it in a Manhattan deck (a group win counts most). A place needs 5 votes or one group win before it gets an official rank.
+- **This or That:** 5 matchups a day per person, one per board, each a close match or a newcomer. Votes are tied to the matchups the server handed out (no stuffing), with a daily streak.
+- People can nominate a missing place from the Manhattan list onto a board, and swipe a board's top list as a deck with friends.

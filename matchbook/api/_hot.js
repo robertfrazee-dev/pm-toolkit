@@ -2,6 +2,7 @@
 // Kept by Google place ID (the one piece of Google data that may be stored indefinitely) plus our own counts.
 import { pipeline, hashToObject } from "./_lib.js";
 import { CATEGORIES } from "./_places.js";
+import { inManhattan } from "./_nyc.js";
 
 const KEEP = 400 * 86400; // a place's lifetime counts
 const BOARD_KEEP = 70 * 86400; // monthly area boards: this month and last are read
@@ -21,6 +22,10 @@ export async function recordPlaces(deck, changes) {
   for (const { place: p, field, n } of changes) {
     if (!n || !p?.gid || !GID_RE.test(p.gid)) continue;
     cmds.push(["HINCRBY", `place:${p.gid}`, field, n], ["EXPIRE", `place:${p.gid}`, KEEP]);
+    // Manhattan places also feed the "Best of Manhattan" boards (matched to the list later, in boards.js).
+    if (POINTS[field] && p.lat != null && inManhattan(p.lat, p.lng)) {
+      cmds.push(["LPUSH", "nyc:queue", JSON.stringify({ name: p.name, lat: p.lat, lng: p.lng, kind: p.kind || "", field, n })], ["LTRIM", "nyc:queue", 0, 4999], ["EXPIRE", "nyc:queue", 2 * 86400]);
+    }
     if (POINTS[field] && p.lat != null && p.lng != null) {
       const cell = cellOf(p.lat, p.lng), cat = CATEGORIES[deck.category] ? deck.category : CATEGORIES[p.cat] ? p.cat : null;
       for (const c of cat ? ["all", cat] : ["all"]) {

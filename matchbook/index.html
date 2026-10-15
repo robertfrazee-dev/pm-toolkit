@@ -444,6 +444,37 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .av.away span { opacity: .55; } .av.away em { color: var(--muted); font-style: italic; }
 .av.live em { color: var(--sulfur); font-weight: 700; }
 .claim h2 { font-size: 26px; }
+.tab { max-width: 120px; }
+.tt-entry { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; cursor: pointer; padding: 16px 18px; border-radius: 22px; background: linear-gradient(135deg, var(--match), color-mix(in srgb, var(--match) 55%, var(--sulfur))); color: #fff; box-shadow: 0 10px 24px color-mix(in srgb, var(--match) 30%, transparent); }
+.tt-entry .tt-icon { font-size: 26px; }
+.tt-entry b { display: block; font-family: var(--f-display); font-size: 19px; }
+.tt-entry span span { font-size: 14px; opacity: .9; }
+.tt-entry i { font-style: normal; font-weight: 800; font-size: 17px; }
+.board-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.board-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; cursor: pointer; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--soft-shadow); color: inherit; min-height: 108px; }
+.board-tile .be { font-size: 26px; margin-bottom: 4px; }
+.board-tile b { font-family: var(--f-display); font-size: 16px; line-height: 1.15; }
+.board-tile .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.top10 .rank-n { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); font-weight: 800; }
+.top10 .rank-n.gold { background: var(--sulfur); color: #2a1a00; }
+.top10 a { color: var(--match); font-weight: 700; text-decoration: none; }
+.found { padding: 8px 0; border-top: 1px solid var(--line); }
+.tt-head h2 { font-size: 26px; margin-top: 4px; }
+.tt-pair { display: flex; flex-direction: column; gap: 10px; position: relative; }
+.tt-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border: 0; cursor: pointer; padding: 26px 22px; border-radius: 24px; color: var(--cov-ink); box-shadow: var(--soft-shadow); min-height: 150px; justify-content: flex-end; transition: transform .15s, opacity .2s; }
+.tt-card b { font-family: var(--f-display); font-size: clamp(24px, 7vw, 32px); line-height: 1.05; }
+.tt-card span { font-weight: 600; opacity: .9; }
+.tt-card:active:not(:disabled) { transform: scale(.98); }
+.tt-card.chosen { box-shadow: 0 0 0 4px var(--sulfur), var(--soft-shadow); }
+.tt-card.other { opacity: .6; }
+.tt-card:disabled { cursor: default; }
+.tt-vs { align-self: center; font-family: var(--f-display); font-weight: 800; color: var(--muted); margin: -4px 0; }
+.tt-pct { width: 100%; height: 26px; border-radius: 13px; background: rgba(0,0,0,.25); position: relative; overflow: hidden; margin-top: 6px; }
+.tt-pct i { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.35); border-radius: 13px; }
+.tt-pct em { position: relative; font-style: normal; font-weight: 800; padding: 0 12px; line-height: 26px; }
+.tt-result { font-weight: 600; text-align: center; }
+.tt-done { text-align: center; display: flex; flex-direction: column; gap: 8px; padding: 30px 10px 10px; }
+.tt-done .tt-fire { font-size: 54px; }
 .board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: b; }
 .board li { display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 10px; align-items: center; counter-increment: b; }
 .board li::before { content: counter(b); grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); font-weight: 800; font-size: 13px; }
@@ -502,6 +533,7 @@ const ICON = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg>',
   flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.5 2.6-5.8 4.2-8.8.4 2 1.6 3.2 2.8 3.9 0-1.7.6-3.6 2-4.9.6 2.7 3.9 5 3.9 9.4 0 3.8-2.6 6.6-6.4 6.6z"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/></svg>',
   crew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/></svg>',
   cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="7" y="3" width="13" height="17" rx="2.5" transform="rotate(8 13.5 11.5)"/><rect x="4" y="4" width="13" height="17" rx="2.5"/></svg>',
   share: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
@@ -885,7 +917,7 @@ async function loadHot() {
 }
 const hotOf = (p) => (p?.gid && S.hot[p.gid]) || null;
 const hotText = (h) => !h ? "" : `${h.rate}% swipe yes${h.wins ? ` · picked ${h.wins}×` : ""}`;
-const fromHot = (d) => d?.area === "the hot list";
+const fromHot = (d) => d?.area === "the hot list" || d?.area === "Best of Manhattan";
 function lastArea() { try { return JSON.parse(store.get("mb.lastArea") || "null"); } catch { return null; } }
 
 function viewHot() {
@@ -1264,9 +1296,9 @@ function viewCrew() {
         ${stats.nextTime.map((a) => `<div class="row spread"><span>${esc(a.name)}</span><span class="muted small">${a.yes} yes${a.decks > 1 ? ` over ${a.decks} decks` : ""}</span></div>`).join("")}
         ${stats.nextTime.length >= 2 ? `<button class="btn block" type="button">Swipe these with the crew</button>` : ""}</section>`);
       $("button", nt)?.addEventListener("click", async (e) => {
-        e.currentTarget.disabled = true;
+        const btn = e.currentTarget; btn.disabled = true;
         try { const { code } = await api("/api/deck", { playerId: S.me, saved: stats.nextTime.map((a) => ({ name: a.name, maps: a.maps, gid: a.gid })), crewId: crew.id, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin }); openSession(code); }
-        catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+        catch (err) { toast(err.message); btn.disabled = false; }
       });
       root.append(nt);
     }
@@ -1309,6 +1341,161 @@ function crewPanel() {
     catch (err) { toast(err.message); }
   });
   return box;
+}
+
+// ---------- Best of Manhattan + This or That ----------
+// Leaderboards for Manhattan, ranked by what real groups pick in decks plus a 30-second daily game.
+const localDay = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+function homeTop() {
+  const d = S.topData;
+  const wrap = el(`<div class="stack-y top-home"><div class="greet"><h2>Best of Manhattan</h2><p class="muted">Ranked by what real groups pick on Matchbook, plus everyone's daily votes.</p></div></div>`);
+  if (!d) { loadTop(); wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
+  if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
+  if (!d.ready) { wrap.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">🗽</span><b>The boards are being set up</b><p class="muted">Check back soon.</p></div>`)); return wrap; }
+  const st = S.playData?.streak?.n || 0, left = S.playData ? S.playData.matchups.filter((m) => !m.pick).length : 5;
+  const play = el(`<button class="tt-entry" type="button"><span class="tt-icon" aria-hidden="true">⚡</span><span><b>This or That</b><span>${left ? `${left} quick pick${left === 1 ? "" : "s"} today · every vote moves the rankings` : "Done for today. New matchups tomorrow."}</span></span><i>${st ? `🔥 ${st}` : "→"}</i></button>`);
+  play.addEventListener("click", () => openPlay());
+  wrap.append(play);
+  const grid = el(`<div class="board-grid"></div>`);
+  for (const b of d.boards.filter((x) => x.size)) {
+    const t = el(`<button type="button" class="board-tile${b.featured ? " featured" : ""}"><span class="be" aria-hidden="true">${b.emoji}</span><b></b><span class="small muted"></span></button>`);
+    $("b", t).textContent = b.title.replace(/^Best /, "");
+    $(".muted", t).textContent = b.first ? `#1 ${b.first.name}` : "Help rank it";
+    t.addEventListener("click", () => openBoard(b.slug));
+    grid.append(t);
+  }
+  wrap.append(grid, el(`<p class="attrib">Places © OpenStreetMap contributors · Rankings by Matchbook</p>`));
+  return wrap;
+}
+async function loadTop() {
+  if (S.topLoading) return; S.topLoading = true;
+  try {
+    const [b, p] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=play&me=${ME}&day=${localDay()}`).catch(() => null)]);
+    S.topData = b;
+    if (S.view !== "play") S.playData = p; // never swap the game out from under someone playing it
+  } catch (e) { S.topData = { error: e.message }; }
+  S.topLoading = false;
+  if (S.view === "home" && S.tab === "top") render();
+}
+
+async function openBoard(slug, hood = "") {
+  Object.assign(S, { boardSlug: slug, boardHood: hood, boardData: null });
+  setView("board");
+  try { S.boardData = await api(`/api/boards?op=board&slug=${slug}${hood ? "&hood=" + encodeURIComponent(hood) : ""}`); }
+  catch (e) { S.boardData = { error: e.message }; }
+  if (S.view === "board") render();
+}
+function viewBoard() {
+  const d = S.boardData, hoods = S.topData?.neighborhoods || [];
+  const root = el(`<div class="app stack-y"><button type="button" class="link" data-back style="align-self:flex-start">← Best of Manhattan</button></div>`);
+  $("[data-back]", root).addEventListener("click", () => { S.tab = "top"; store.set("mb.tab", "top"); S.topData = null; leave(); });
+  if (!d) { root.append(el(`<div class="skeleton" style="height:300px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const b = d.board;
+  root.append(el(`<div class="greet"><h2>${b.emoji} ${esc(b.title)}</h2><p class="muted">${d.hood ? esc(d.hood) : "All of Manhattan"} · ${d.pool} places in the running</p></div>`));
+  const chips = el(`<div class="chips scroll" role="group" aria-label="Neighborhood"><button type="button" class="chip" data-hood="" aria-pressed="${!d.hood}">All Manhattan</button>${hoods.map((h) => `<button type="button" class="chip" data-hood="${esc(h)}" aria-pressed="${d.hood === h}">${esc(h)}</button>`).join("")}</div>`);
+  chips.addEventListener("click", (e) => { const c = e.target.closest("[data-hood]"); if (c) openBoard(b.slug, c.dataset.hood); });
+  root.append(chips);
+  if (d.top.length) {
+    root.append(el(`<ol class="mlist top10">${d.top.map((p, i) => `<li class="mitem"><span class="rank-n${i === 0 ? " gold" : ""}">${i + 1}</span>
+      <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc([p.hood, p.kind].filter(Boolean).join(" · "))}${p.wins ? `<br><span class="hot">🏆 Picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.votes ? ` <span class="muted">· ${p.votes} vote${p.votes === 1 ? "" : "s"}</span>` : ""}</span></span>
+      <a class="maps small" data-kind="maps" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`).join("")}</ol>`));
+  } else root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">${b.emoji}</span><b>No official ranking yet</b><p class="muted">A place needs ${d.unranked ? "a few more votes" : "votes"} or a group win to get ranked. Play This or That to get it going.</p></div>`));
+  if (d.rising.length) root.append(el(`<section class="panel"><div class="eyebrow">📈 Rising this week</div>${d.rising.map((p) => `<div class="row spread"><span>${esc(p.name)} <span class="muted small">${esc(p.hood)}</span></span><span class="small muted">+${p.weekWins} head-to-head win${p.weekWins === 1 ? "" : "s"}</span></div>`).join("")}</section>`));
+  const playBtn = el(`<button class="btn primary block big" type="button">⚡ Vote in This or That</button>`);
+  playBtn.addEventListener("click", () => openPlay());
+  root.append(playBtn);
+  if (d.top.length >= 2) {
+    const swipe = el(`<button class="btn block" type="button">Swipe this top ${d.top.length} with friends</button>`);
+    swipe.addEventListener("click", async () => {
+      if (!S.name) return toast("Add your name on the Pick tab first.");
+      swipe.disabled = true;
+      try {
+        const { code } = await api("/api/deck", { playerId: S.me, source: "board", label: `${b.title}${d.hood ? " · " + d.hood : ""}`, area: d.hood || "Manhattan", saved: d.top.map((p) => ({ name: p.name, maps: p.maps, lat: p.lat, lng: p.lng, kind: p.kind, website: p.web })), swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+        openSession(code);
+      } catch (e) { swipe.disabled = false; toast(e.message); }
+    });
+    root.append(swipe);
+  }
+  // Missing a favorite? Nominate it from the Manhattan list.
+  const nom = el(`<section class="panel"><div class="eyebrow">Missing a spot?</div><div class="row"><input class="input" id="nomQ" placeholder="Search Manhattan by name" style="flex:1;min-width:0" autocomplete="off"></div><div class="places-found"></div></section>`);
+  let t;
+  $("#nomQ", nom).addEventListener("input", (e) => {
+    clearTimeout(t); const q = e.target.value.trim();
+    t = setTimeout(async () => {
+      const box = $(".places-found", nom); if (q.length < 2) { box.innerHTML = ""; return; }
+      try {
+        const r = await api(`/api/boards?op=search&q=${encodeURIComponent(q)}`);
+        box.innerHTML = r.places.length ? "" : `<p class="small muted">Nothing by that name in Manhattan.</p>`;
+        for (const p of r.places) {
+          const row = el(`<div class="row spread found"><span><b></b> <span class="small muted"></span></span><button type="button" class="btn small-btn">Add</button></div>`);
+          $("b", row).textContent = p.name; $(".muted", row).textContent = [p.hood, p.kind].filter(Boolean).join(" · ");
+          const add = $("button", row);
+          add.addEventListener("click", async () => {
+            add.disabled = true;
+            try { await api("/api/boards", { op: "nominate", me: ME, slug: b.slug, id: p.id }); toast(`${p.name} is in the running`); add.textContent = "Added"; }
+            catch (err) { toast(err.message); add.disabled = false; }
+          });
+          box.append(row);
+        }
+      } catch {}
+    }, 250);
+  });
+  root.append(nom, el(`<p class="attrib">Places © OpenStreetMap contributors · Ranked by Matchbook group picks and votes</p>`));
+  return root;
+}
+
+async function openPlay() {
+  S.playIdx = null; setView("play");
+  try { S.playData = await api(`/api/boards?op=play&me=${ME}&day=${localDay()}`); } catch (e) { S.playData = { error: e.message }; }
+  if (S.view === "play") render();
+}
+function viewPlay() {
+  const d = S.playData;
+  const root = el(`<div class="app stack-y play"><button type="button" class="link" data-back style="align-self:flex-start">← Best of Manhattan</button></div>`);
+  $("[data-back]", root).addEventListener("click", () => { S.tab = "top"; store.set("mb.tab", "top"); S.topData = null; leave(); });
+  if (!d) { root.append(el(`<div class="skeleton" style="height:360px;width:100%" aria-hidden="true"><div class="sk-img"></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  if (!d.matchups.length) { root.append(el(`<div class="empty"><b>No matchups yet</b><p class="muted">Check back soon.</p></div>`)); return root; }
+  const i = S.playIdx ?? d.matchups.findIndex((m) => !m.pick);
+  if (i < 0) {
+    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">🔥</span><h2>That's today's ${d.matchups.length}</h2>
+      <p class="muted">${d.streak.n > 1 ? `${d.streak.n}-day streak. ` : ""}Come back tomorrow for ${d.matchups.length} more. Every vote moves the rankings.</p></div>`));
+    const see = el(`<button class="btn primary block big" type="button">See the boards</button>`);
+    see.addEventListener("click", () => { S.tab = "top"; store.set("mb.tab", "top"); S.topData = null; leave(); });
+    root.append(see);
+    const note = pushPrompt("Remind me tomorrow"); if (note) root.append(note);
+    return root;
+  }
+  const m = d.matchups[i], done = !!m.pick;
+  root.append(el(`<div class="tt-head"><span class="small muted">This or That · ${i + 1} of ${d.matchups.length}${d.streak.n ? ` · 🔥 ${d.streak.n}` : ""}</span><h2>${m.emoji} ${esc(m.title)}</h2><p class="muted">Which is the better ${esc(m.noun)}?</p></div>`));
+  const card = (side) => {
+    const p = m[side], pct = done ? m.split[side] : null, chosen = m.pick === side;
+    return `<button type="button" class="tt-card ${COVERS[hash(p.id) % COVERS.length]}${done ? (chosen ? " chosen" : " other") : ""}" data-side="${side}" ${done ? "disabled" : ""}>
+      <b>${esc(p.name)}</b><span>${esc([p.hood, p.kind].filter(Boolean).join(" · "))}</span>
+      ${done ? `<span class="tt-pct"><i style="width:${pct}%"></i><em>${pct}%</em></span>` : ""}</button>`;
+  };
+  const pair = el(`<div class="tt-pair">${card("a")}<span class="tt-vs" aria-hidden="true">or</span>${card("b")}</div>`);
+  pair.addEventListener("click", async (e) => {
+    const c = e.target.closest("[data-side]"); if (!c || done) return;
+    haptic("medium");
+    try {
+      const r = await api("/api/boards", { op: "vote", me: ME, day: localDay(), i: m.i, pick: c.dataset.side });
+      const cur = S.playData.matchups.find((x) => x.i === m.i) || m;
+      Object.assign(cur, { pick: c.dataset.side, split: r.split, rank: r.rank });
+      if (r.streak) S.playData.streak.n = r.streak;
+      S.playIdx = i; render();
+    } catch (err) { toast(err.message); }
+  });
+  root.append(pair);
+  if (done) {
+    const w = m[m.pick];
+    root.append(el(`<p class="tt-result">${m.split.votes > 1 ? `${m.split[m.pick]}% of ${m.split.votes} voters agree with you.` : "You're the first to vote on this one."}${m.rank ? ` ${esc(w.name)} is now #${m.rank} in the votes.` : ""}</p>`));
+    const next = el(`<button class="btn primary block big" type="button">${i + 1 < d.matchups.length ? "Next" : "Done"}</button>`);
+    next.addEventListener("click", () => { S.playIdx = d.matchups.findIndex((x) => !x.pick); if (S.playIdx < 0) S.playIdx = -1; render(); scrollTo(0, 0); });
+    root.append(next);
+  }
+  return root;
 }
 
 // ---------- recent decks (this device only) ----------
@@ -1461,7 +1648,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { board: viewBoard, play: viewPlay, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -1490,7 +1677,7 @@ function takeName(input) {
 
 function viewHome() {
   const root = el(`<div class="app home"></div>`);
-  root.append(S.tab === "decks" ? homeDecks() : S.tab === "crews" ? homeCrews() : S.tab === "saved" ? homeSaved() : homePick());
+  root.append(S.tab === "decks" ? homeDecks() : S.tab === "crews" ? homeCrews() : S.tab === "top" ? homeTop() : S.tab === "saved" ? homeSaved() : homePick());
   root.append(tabBar());
   return root;
 }
@@ -1498,7 +1685,7 @@ function viewHome() {
 function tabBar() {
   const n = favs().length;
   const t = (id, label, icon, badge) => `<button type="button" class="tab" data-tab="${id}" aria-current="${S.tab === id ? "page" : "false"}">${icon}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ""}</button>`;
-  const bar = el(`<nav class="tabbar" aria-label="Sections">${t("pick", "Pick", ICON.flame)}${t("decks", "Decks", ICON.cards)}${t("crews", "Crews", ICON.crew)}${t("saved", "Saved", ICON.star, n)}</nav>`);
+  const bar = el(`<nav class="tabbar" aria-label="Sections">${t("pick", "Pick", ICON.flame)}${t("decks", "Decks", ICON.cards)}${t("top", "Top", ICON.trophy)}${t("crews", "Crews", ICON.crew)}${t("saved", "Saved", ICON.star, n)}</nav>`);
   bar.addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]"); if (!b || b.dataset.tab === S.tab) return;
     S.tab = b.dataset.tab; store.set("mb.tab", S.tab); haptic("light"); render(); scrollTo(0, 0);
@@ -1646,7 +1833,7 @@ function homeDecks() {
   if (!rec.length) list.append(el(`<div class="empty"><b>No decks yet</b><p class="muted">Start one from Pick, or enter a code a friend sent you.</p></div>`));
   for (const d of rec) {
     const b = el(`<button class="deck" type="button"><span class="dot ${COVERS[hash(d.code) % COVERS.length]}"></span>
-      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : d.area === "the hot list" ? "From the hot list" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
+      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : d.area === "the hot list" ? "From the hot list" : d.area === "Best of Manhattan" ? "Best of Manhattan" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
       <span class="code-tag">${esc(d.code)}</span></button>`);
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
@@ -1732,7 +1919,7 @@ function cardHtml(p, cls = "") {
 
 function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
-  const where = s.category === "saved" ? (fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  const where = s.category === "saved" ? (s.area === "Best of Manhattan" ? "From Best of Manhattan" : fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
   const root = el(`<div class="app swipe-view">
     <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
     ${s.swipeEndsAt ? `<div>${timerChip(s.swipeEndsAt, "swipe")}</div>` : ""}

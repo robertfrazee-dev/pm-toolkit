@@ -22,5 +22,10 @@
       "path": "/api/market?op=cron",
       "schedule": "0 10 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/boards.js": {
+      "maxDuration": 60
+    }
+  }
 }
