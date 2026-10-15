@@ -449,6 +449,11 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .scores.who td, .scores.who th { padding-inline: 10px; }
 .scores.who td:first-child, .scores.who th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--line); }
 .scores.who td.pick1 { color: var(--like); font-weight: 800; }
+.hbar { width: 100%; height: 22px; margin: 2px 0 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.hbar::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--sunk); }
+.hbar::-moz-range-track { height: 8px; border-radius: 4px; background: var(--sunk); }
+.hbar::-webkit-slider-thumb { -webkit-appearance: none; width: 64px; height: 8px; border-radius: 4px; background: var(--muted); border: 0; }
+.hbar::-moz-range-thumb { width: 64px; height: 8px; border-radius: 4px; background: var(--muted); border: 0; }
 .who-name { font-size: 15px; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .av[data-person] { cursor: pointer; }
 .sheet-bg { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; animation: pop .2s ease-out; }
@@ -1208,6 +1213,48 @@ const isHere = (pid, view) => {
   return !!x && serverNow() - x.at < 40e3 && (!view || x.view === view);
 };
 const byName = (a, b) => (a === S.me ? -1 : b === S.me ? 1 : nameOf(a).localeCompare(nameOf(b)));
+// A visible bar under the wide table: phones hide scroll bars, so this shows there's more and lets you drag to it.
+function wireTableBar(section) {
+  const wrap = $(".table-wrap", section), bar = $(".hbar", section);
+  const sync = () => {
+    const max = wrap.scrollWidth - wrap.clientWidth;
+    bar.hidden = max <= 4;
+    bar.value = max > 0 ? Math.round((wrap.scrollLeft / max) * 1000) : 0;
+  };
+  bar.addEventListener("input", () => { wrap.scrollLeft = (bar.value / 1000) * (wrap.scrollWidth - wrap.clientWidth); });
+  wrap.addEventListener("scroll", sync, { passive: true });
+  requestAnimationFrame(sync);
+  $("[data-copy]", section).addEventListener("click", (e) => copyResults(e.currentTarget));
+}
+
+// The whole result as plain text for a group chat: winner, combined ranking, then everyone's list.
+function resultsText() {
+  const { ranked, pts, per } = tally(), s = S.session, rankers = Object.keys(S.ranks).sort(byName);
+  const final = s.phase === "done" || s.announced;
+  const nm = (id) => placeById(id)?.name || "?";
+  const lines = [`Matchbook · ${s.label}${s.category === "saved" ? "" : s.area === "you" ? " nearby" : ` near ${s.area}`}`];
+  if (ranked[0]) lines.push(`${final ? "🏆 Winner" : "Leading"}: ${nm(ranked[0])} (${pts[ranked[0]]} pts)`);
+  lines.push("", "Combined ranking:");
+  ranked.forEach((id, i) => lines.push(`${i + 1}. ${nm(id)} – ${pts[id]} pts`));
+  if (rankers.length) {
+    lines.push("", `How everyone ranked (${rankers.length}):`);
+    for (const u of rankers) {
+      const order = (S.ranks[u].order || []).filter((id) => placeById(id));
+      lines.push(`${u === S.me ? S.name || "Me" : nameOf(u)}: ${order.map((id, i) => `${i + 1}. ${nm(id)}`).join(", ")}`);
+    }
+  }
+  if (!final) lines.push("", `(${rankers.length} of ${rankPeople().length} have ranked so far)`);
+  return lines.join("\n");
+}
+async function copyResults(btn) {
+  const text = resultsText();
+  try { await navigator.clipboard.writeText(text); toast("Copied. Paste it in your group chat."); haptic("light"); btn.textContent = "✓ Copied"; setTimeout(() => (btn.textContent = "📋 Copy results as text"), 2500); return; }
+  catch { /* some browsers block the clipboard: fall back to the share sheet */ }
+  if (NATIVE && Plug.Share) { try { await Plug.Share.share({ text }); } catch {} return; }
+  if (navigator.share) { try { await navigator.share({ text }); } catch {} return; }
+  toast("Couldn't copy here. Try the Share button instead.");
+}
+
 // Tap a person (their picture, or their name in the table): what they picked, in their order.
 function personSheet(pid) {
   const name = nameOf(pid), rank = S.ranks[pid]?.order?.filter((id) => placeById(id)) || [], sw = S.swipes[pid] || {};
@@ -1947,7 +1994,11 @@ function viewResults() {
       <div class="table-wrap"><table class="scores who">
       <thead><tr><th>Person</th>${ranked.map((id, i) => `<th class="n" title="${esc(placeById(id)?.name)}">${i + 1}. ${esc(short(placeById(id)?.name || ""))}</th>`).join("")}</tr></thead>
       <tbody>${[...rankers].sort(byName).map((u) => `<tr><td><button type="button" class="link who-name" data-person="${esc(u)}">${esc(nameOf(u))}</button></td>${ranked.map((id) => `<td class="n${per[id]?.[u] === 1 ? " pick1" : ""}">${per[id]?.[u] ? "#" + per[id][u] : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
-    </table></div><p class="small muted">Each number is where that person put the place. Tap a name (or anyone's picture) to see their list in order.</p></section>`));
+    </table></div>
+      <input type="range" class="hbar" min="0" max="1000" value="0" aria-label="Scroll the table sideways">
+      <p class="small muted">Each number is where that person put the place. Drag the bar or swipe the table to see more. Tap a name (or anyone's picture) to see their list in order.</p>
+      <button type="button" class="btn block" data-copy>📋 Copy results as text</button></section>`));
+    wireTableBar(root.lastElementChild);
   }
   if (final && ranked.length > 1) root.append(rankStatus());
   const row = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
