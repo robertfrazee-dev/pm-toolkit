@@ -195,7 +195,7 @@ function nameScore(a, b) {
   let both = 0; for (const w of A) if (B.has(w)) both++;
   return both / Math.min(A.size, B.size);
 }
-const meters = (a, b) => Math.hypot((a.lat - b.lat) * 111320, (a.lng - b.lng) * 84300);
+export const meters = (a, b) => Math.hypot((a.lat - b.lat) * 111320, (a.lng - b.lng) * 84300);
 export async function matchPlace({ name, lat, lng }) {
   if (lat == null || !inNYC(lat, lng)) return null;
   const c = await catalog(); if (!c.places.length) return null;
@@ -209,4 +209,15 @@ export async function matchPlace({ name, lat, lng }) {
     }
   }
   return bs >= 0.6 ? best : null;
+}
+
+// Places on the list within some meters of a point, nearest first (for checking in).
+export async function nearbyPlaces(lat, lng, within = 300, limit = 25) {
+  const c = await catalog(); if (!c.places.length) return [];
+  const cx = Math.floor(lat / CELL), cy = Math.floor(lng / CELL), reach = Math.ceil(within / 180);
+  const out = [];
+  for (let dx = -reach; dx <= reach; dx++) for (let dy = -reach; dy <= reach; dy++) {
+    for (const p of c.grid.get(`${cx + dx}:${cy + dy}`) || []) { const d = meters({ lat, lng }, p); if (d <= within) out.push([d, p]); }
+  }
+  return out.sort((a, b) => a[0] - b[0]).slice(0, limit).map(([d, p]) => ({ p, m: Math.round(d) }));
 }

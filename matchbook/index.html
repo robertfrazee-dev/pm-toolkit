@@ -445,6 +445,23 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .tt-pct i { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.35); border-radius: 13px; }
 .tt-pct em { position: relative; font-style: normal; font-weight: 800; padding: 0 12px; line-height: 26px; }
 .tt-result { font-weight: 600; text-align: center; }
+.ci-entry { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; cursor: pointer; padding: 14px 18px; border-radius: 22px; background: var(--surface); color: inherit; box-shadow: var(--soft-shadow); }
+.ci-entry .tt-icon { font-size: 24px; }
+.ci-entry b { display: block; font-family: var(--f-display); font-size: 18px; }
+.ci-entry span span { font-size: 14px; color: var(--muted); }
+.ci-entry i { font-style: normal; font-weight: 800; color: var(--muted); }
+.tonight .row { padding: 6px 0; gap: 10px; }
+.ci-list { display: flex; flex-direction: column; gap: 8px; }
+.ci-place { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; border: 0; cursor: pointer; padding: 14px 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--soft-shadow); color: inherit; }
+.ci-place b { display: block; font-size: 16px; }
+.ci-place:disabled { opacity: .6; }
+.ci-tell { gap: 8px; font-weight: 600; }
+.ci-pts { font-family: var(--f-display); font-size: 34px; font-weight: 800; color: var(--match); margin: 0; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-grid div { background: var(--surface); box-shadow: var(--soft-shadow); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; }
+.stat-grid b { font-family: var(--f-display); font-size: 30px; }
+.stat-grid span { color: var(--muted); font-size: 14px; }
+.crew-feed .row { padding: 6px 0; gap: 10px; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -615,6 +632,7 @@ if (NATIVE) {
   });
   // Tapping a notification or an invite link opens that deck.
   Plug.PushNotifications?.addListener("pushNotificationActionPerformed", ({ notification }) => {
+    const crew = crewFromUrl(notification?.data?.url || ""); if (crew) return openCrew(crew);
     const code = notification?.data?.code; if (code) openSession(code);
   });
   Plug.App?.addListener("appUrlOpen", ({ url }) => { const crew = crewFromUrl(url); if (crew) return openCrew(crew); const code = codeFromUrl(url); if (code) openSession(code); });
@@ -1066,6 +1084,10 @@ function viewCrew() {
       root.append(nt);
     }
   }
+  // Who's out: crew check-ins in the last two days, and who's out the most this month.
+  const act = d.activity || { feed: [], leaders: [] };
+  if (act.feed.length) root.append(el(`<section class="panel crew-feed"><div class="eyebrow">📍 Out and about</div>${act.feed.slice(0, 8).map((x) => `<div class="row spread"><span><b>${esc(x.name)}</b> at ${esc(x.place.name)} <span class="small muted">${esc(x.place.hood || "")}</span></span><span class="small muted">${x.tonight ? "tonight" : "last night"} · ${new Date(x.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>`).join("")}</section>`));
+  if (act.leaders.length) root.append(el(`<section class="panel"><div class="eyebrow">⭐ Out the most this month</div><ol class="board">${act.leaders.map((l) => `<li><span>${esc(l.name)}</span><span class="muted small">${l.pts} pts</span></li>`).join("")}</ol></section>`));
   // The crew's own leaderboards: members' votes, champs and nights out.
   const ct = el(`<section class="panel crew-tops"><div class="eyebrow">🏅 The crew's top 3</div>${d.boards?.length ? d.boards.slice(0, 8).map((x) => `<div class="ct"><b>${x.emoji} ${esc(x.title.replace(/^Best /, ""))}</b><div class="small muted">${x.top.map((p, i) => `${i + 1}. ${esc(p.name)}`).join(" · ")}</div></div>`).join("") : `<p class="small muted">Vote on the Top tab (This or That, King of the Hill, brackets) and the crew's favorites show up here, next to the city's.</p>`}</section>`);
   root.append(ct);
@@ -1150,7 +1172,14 @@ function homeTop() {
   const st = S.playData?.streak?.n || 0, left = S.playData ? S.playData.matchups.filter((m) => !m.pick).length : 5;
   const play = el(`<button class="tt-entry" type="button"><span class="tt-icon" aria-hidden="true">⚡</span><span><b>This or That</b><span>${left ? `${left} quick pick${left === 1 ? "" : "s"} today · every vote moves the rankings` : "Done for today. New matchups tomorrow."}</span></span><i>${st ? `🔥 ${st}` : "→"}</i></button>`);
   play.addEventListener("click", () => openPlay());
-  wrap.append(play);
+  const me = S.mine;
+  const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
+  ci.addEventListener("click", () => openCheckin());
+  wrap.append(play, ci);
+  if (d.tonight?.length) {
+    const tn = el(`<section class="panel tonight"><div class="eyebrow">🔥 Out tonight${d.near ? ` · within ${miLabel(d.near.mi)}` : ""}</div>${d.tonight.map((p) => `<div class="row spread"><span><b>${esc(p.name)}</b> <span class="small muted">${esc(placeSub(p))}</span></span><span class="small hot">${p.tonight} here</span></div>`).join("")}<p class="small muted">Anonymous counts from check-ins.</p></section>`);
+    wrap.append(tn);
+  }
   for (const [sec, title] of d.sections || [["", ""]]) {
     const list = d.boards.filter((x) => x.size && (!sec || x.sec === sec));
     if (!list.length) continue;
@@ -1172,7 +1201,8 @@ function homeTop() {
 async function loadTop() {
   if (S.topLoading) return; S.topLoading = true;
   try {
-    const [b, p] = await Promise.all([api(`/api/boards?op=boards&me=${ME}${nearQS()}`), api(`/api/boards?op=play&me=${ME}&day=${localDay()}`).catch(() => null)]);
+    const [b, p, t, m] = await Promise.all([api(`/api/boards?op=boards&me=${ME}${nearQS()}`), api(`/api/boards?op=play&me=${ME}&day=${localDay()}`).catch(() => null), api(`/api/boards?op=tonight${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
+    b.tonight = t?.places || []; S.mine = m;
     S.topData = b;
     if (S.view !== "play") S.playData = p; // never swap the game out from under someone playing it
   } catch (e) { S.topData = { error: e.message }; }
@@ -1188,7 +1218,7 @@ async function openBoard(slug, hood = S.boardSlug === slug ? S.boardHood : "") {
   if (S.view === "board") render();
 }
 const topRow = (p, i) => `<li class="mitem"><span class="rank-n${i === 0 ? " gold" : ""}">${i + 1}</span>
-  <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc(placeSub(p))}${p.wins ? `<br><span class="hot">🏆 Picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.votes ? ` <span class="muted">· ${p.votes} vote${p.votes === 1 ? "" : "s"}</span>` : ""}</span></span>
+  <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc(placeSub(p))}${p.wins ? `<br><span class="hot">🏆 Picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.votes ? ` <span class="muted">· ${p.votes} vote${p.votes === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
   <a class="maps small" data-kind="maps" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`;
 function viewBoard() {
   const d = S.boardData, hoods = S.topData?.neighborhoods || S.hoodList || [];
@@ -1356,6 +1386,89 @@ function viewBracket() {
   const restart = el(`<button class="btn ghost block" type="button">Start over</button>`);
   restart.addEventListener("click", () => { S.brSetup = true; render(); });
   root.append(restart);
+  return root;
+}
+// Check-ins: you have to be there (your phone's location), your crews get a push, you earn points and a weekly streak.
+async function openCheckin() {
+  if (!S.name) return toast("Add your name on the Pick tab first.");
+  Object.assign(S, { ciData: null, ciResult: null, ciBusy: false });
+  setView("checkin");
+  try {
+    const pos = await new Promise((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(ok, no, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60e3 }) : no(new Error("none")));
+    S.ciAt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    S.ciData = await api(`/api/boards?op=nearby&me=${ME}&lat=${S.ciAt.lat}&lng=${S.ciAt.lng}`);
+  } catch (e) { S.ciData = { error: e?.code === 1 ? "Matchbook needs your location to check you in. Allow it in your browser settings and try again." : e?.code ? "Couldn't get your location. Try again." : e?.message || "Couldn't get your location. Try again." }; }
+  if (S.view === "checkin") render();
+}
+function viewCheckin() {
+  const d = S.ciData, r = S.ciResult;
+  const root = el(`<div class="app stack-y checkin"></div>`);
+  root.append(backButton("Best of NYC", backToTop));
+  if (r) {
+    const bits = [`+${POINTS_CI.checkin} check-in`, r.newSpot ? `+${POINTS_CI.newSpot} new spot` : "", r.linked.length ? `+${POINTS_CI.linkUp} linked up with ${r.linked.join(", ")}` : ""].filter(Boolean);
+    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">📍</span><h2>You're at ${esc(r.place.name)}</h2>
+      <p class="ci-pts">+${r.pts} pts</p><p class="muted">${esc(bits.join(" · "))}</p></div>`));
+    root.append(el(`<div class="hill-stats"><span>⭐ <b>${r.stats.points}</b> pts</span><span>🔥 <b>${r.streak}</b>-week streak</span><span>📍 <b>${r.stats.spots}</b> spot${r.stats.spots === 1 ? "" : "s"}</span></div>`));
+    const lines = [];
+    if (r.told.length) lines.push(`Told ${esc(r.told.join(", "))}.`);
+    if (r.tonight) lines.push(`${r.tonight} people checked in here tonight.`);
+    if (lines.length) root.append(el(`<p class="tt-result">${lines.join(" ")}</p>`));
+    const mine = el(`<button class="btn primary block big" type="button">Your nights</button>`);
+    mine.addEventListener("click", () => openMine());
+    root.append(mine);
+    const note = pushPrompt("Get told when your crew checks in"); if (note) root.append(note);
+    return root;
+  }
+  root.append(el(`<div class="greet"><h2>📍 Check in</h2><p class="muted">Where are you? Your crews get a heads-up and you earn points.</p></div>`));
+  if (!d) { root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">🛰️</span><b>Finding you…</b></div>`)); return root; }
+  if (d.error) {
+    root.append(el(`<div class="notice">${esc(d.error)}</div>`));
+    const again = el(`<button class="btn block" type="button">Try again</button>`); again.addEventListener("click", () => openCheckin()); root.append(again);
+    return root;
+  }
+  const hasCrews = myCrews().length > 0;
+  const tell = el(`<label class="row ci-tell"><input type="checkbox" id="ciTell" ${S.ciTell === false ? "" : "checked"}> <span>Tell my crews</span></label>`);
+  tell.querySelector("input").addEventListener("change", (e) => { S.ciTell = e.target.checked; });
+  if (hasCrews) root.append(tell);
+  if (!d.places.length) root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">🤷</span><b>Nothing on the list right here</b><p class="muted">You can check in within ${d.within} m of a bar, restaurant or spot on the NYC list.</p></div>`));
+  else {
+    const list = el(`<div class="ci-list"></div>`);
+    for (const p of d.places) {
+      const row = el(`<button type="button" class="ci-place" data-id="${esc(p.id)}"><span><b></b><span class="small muted"></span></span><span class="small muted">${p.m} m</span></button>`);
+      $("b", row).textContent = p.name; $("span .small", row).textContent = [p.kind, p.hood, p.tonight ? `🔥 ${p.tonight} here tonight` : ""].filter(Boolean).join(" · ");
+      list.append(row);
+    }
+    list.addEventListener("click", async (e) => {
+      const row = e.target.closest("[data-id]"); if (!row || S.ciBusy) return;
+      S.ciBusy = true; row.disabled = true; haptic("medium");
+      try { S.ciResult = await api("/api/boards", { op: "checkin", me: ME, name: S.name, id: row.dataset.id, lat: S.ciAt.lat, lng: S.ciAt.lng, tell: S.ciTell !== false }); S.mine = S.ciResult.stats; S.topData = null; render(); scrollTo(0, 0); }
+      catch (err) { toast(err.message); row.disabled = false; }
+      S.ciBusy = false;
+    });
+    root.append(list);
+  }
+  return root;
+}
+const POINTS_CI = { checkin: 10, newSpot: 10, linkUp: 5 };
+async function openMine() {
+  S.mineData = null; setView("mine");
+  try { S.mineData = await api(`/api/boards?op=mine&me=${ME}`); } catch (e) { S.mineData = { error: e.message }; }
+  if (S.view === "mine") render();
+}
+function viewMine() {
+  const d = S.mineData;
+  const root = el(`<div class="app stack-y"></div>`);
+  root.append(backButton("Best of NYC", backToTop));
+  root.append(el(`<div class="greet"><h2>Your nights</h2><p class="muted">Points from check-ins. Keep the streak going by checking in once a week.</p></div>`));
+  if (!d) { root.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  root.append(el(`<div class="stat-grid"><div><b>${d.points}</b><span>points</span></div><div><b>${d.streak}</b><span>week streak</span></div><div><b>${d.checkins}</b><span>${d.checkins === 1 ? "check-in" : "check-ins"}</span></div><div><b>${d.spots}</b><span>${d.spots === 1 ? "spot" : "spots"}</span></div></div>`));
+  if (d.best > 1) root.append(el(`<p class="small muted" style="text-align:center">Best streak: ${d.best} weeks${d.thisWeek ? " · this week's done ✓" : d.streak ? " · check in this week to keep it" : ""}</p>`));
+  if (d.top.length) root.append(el(`<section class="panel"><div class="eyebrow">Your spots</div><ol class="board">${d.top.map((p) => `<li><span>${esc(p.name)}</span><span class="muted small">${p.n}×</span></li>`).join("")}</ol></section>`));
+  if (d.recent.length) root.append(el(`<section class="panel"><div class="eyebrow">Recent</div>${d.recent.map((x) => `<div class="row spread"><span>${esc(x.name)} <span class="small muted">${esc(x.hood || "")}</span></span><span class="small muted">${new Date(x.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · +${x.pts}</span></div>`).join("")}</section>`));
+  else root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">📍</span><b>No check-ins yet</b><p class="muted">Next time you're out, check in from the Top tab.</p></div>`));
+  const go = el(`<button class="btn primary block big" type="button">📍 Check in now</button>`); go.addEventListener("click", () => openCheckin());
+  root.append(go);
   return root;
 }
 const boardBySlugUI = (slug) => S.topData?.boards?.find((x) => x.slug === slug) || (S.boardData?.board?.slug === slug ? S.boardData.board : null);
@@ -1563,7 +1676,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { board: viewBoard, play: viewPlay, hill: viewHill, bracket: viewBracket, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { board: viewBoard, play: viewPlay, hill: viewHill, bracket: viewBracket, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
