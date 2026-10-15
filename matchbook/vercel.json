@@ -9,12 +9,19 @@
       "destination": "/index.html"
     },
     {
+      "source": "/s/:code",
+      "destination": "/index.html"
+    },
+    {
       "source": "/.well-known/apple-app-site-association",
       "destination": "/api/aasa"
     }
   ],
   "functions": {
     "api/boards.js": {
+      "maxDuration": 60
+    },
+    "api/action.js": {
       "maxDuration": 60
     }
   }
