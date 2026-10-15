@@ -3,6 +3,8 @@
 import { parseMood } from "./_mood.js";
 import { CATEGORIES, PRICE_LEVELS, CHAINS, google, shape, findPlaces } from "./_places.js";
 export { CATEGORIES };
+import { timerDue, tickDeck } from "./action.js";
+import { scheduleTimer } from "./_schedule.js";
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig } from "./_lib.js";
 
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -63,7 +65,15 @@ async function create(req, res) {
     hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
   await bump("decks_google");
-  return saveDeck(res, deck);
+  return saveDeck(res, withTimers(deck, b));
+}
+
+// The host's timers: how long swiping stays open (starts now) and how long ranking gets once it starts.
+const MINUTES = [0, 2, 5, 10, 15, 30, 60];
+function withTimers(deck, b) {
+  const pick = (v, d) => (MINUTES.includes(Math.round(Number(v))) ? Math.round(Number(v)) : d);
+  const swipeMinutes = pick(b.swipeMinutes, 0), rankMinutes = pick(b.rankMinutes, 5);
+  return { ...deck, swipeMinutes, rankMinutes, swipeEndsAt: swipeMinutes ? Date.now() + swipeMinutes * 60e3 : null, warned: {} };
 }
 
 async function saveDeck(res, deck) {
@@ -71,7 +81,7 @@ async function saveDeck(res, deck) {
     let code = "";
     for (let i = 0; i < 5; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
     const ok = await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, code }), "EX", TTL, "NX");
-    if (ok === "OK") return send(res, 201, { code });
+    if (ok === "OK") { if (deck.swipeEndsAt) await scheduleTimer(code, deck.swipeEndsAt); return send(res, 201, { code }); }
   }
   return send(res, 500, { error: "Couldn't save the deck. Try again." });
 }
@@ -97,10 +107,10 @@ async function createFromSaved(req, res, b) {
   await bump("decks_saved");
   // The same kind of deck can come from the hot list; it's labeled for where it came from.
   const hot = b.source === "hot", near = text(b.area, 60);
-  return saveDeck(res, {
+  return saveDeck(res, withTimers({
     category: "saved", mood: "", label: hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: hot ? "the hot list" : "your saved list", radius: 0, center, places,
     phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
-  });
+  }, b));
 }
 
 // Affiliate IDs are public by nature (they end up in links), so the page gets them with the deck.
@@ -116,9 +126,18 @@ function bookingConfig() {
 async function read(req, res) {
   const code = String(req.query?.code || new URL(req.url, "http://x").searchParams.get("code") || "").toUpperCase();
   if (!CODE_RE.test(code)) return send(res, 400, { error: "Deck codes are 5 letters and numbers." });
-  const [deck, swipes, ranks] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
+  const q = new URL(req.url, "http://x").searchParams;
+  // Phones say they're here every so often, so the group can tell "ranking now" from "hasn't opened it".
+  const me = q.get("me") || "", view = q.get("v") || "";
+  if (PLAYER_RE.test(me) && /^[a-z]{2,10}$/.test(view)) await pipeline([["HSET", `deck:${code}:seen`, me, JSON.stringify({ at: Date.now(), view })], ["EXPIRE", `deck:${code}:seen`, TTL]]).catch(() => {});
+  let [deck, swipes, ranks, seen] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`], ["HGETALL", `deck:${code}:seen`]]);
   if (!deck) return send(res, 404, { error: `No deck with code ${code}. It may have expired after a week.` });
-  return send(res, 200, { deck: JSON.parse(deck), swipes: hashToObject(swipes), ranks: hashToObject(ranks), booking: bookingConfig() });
+  // A timer that ran out (or hit its 2-minute warning) acts now, even without the scheduler.
+  if (timerDue(JSON.parse(deck))) {
+    await tickDeck(code);
+    [deck, swipes, ranks] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
+  }
+  return send(res, 200, { deck: JSON.parse(deck), swipes: hashToObject(swipes), ranks: hashToObject(ranks), seen: hashToObject(seen), now: Date.now(), booking: bookingConfig() });
 }
 
 export default async function handler(req, res) {

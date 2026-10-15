@@ -5,11 +5,18 @@
 //   type "phase": { minYes }                host only: close swiping and start ranking for everyone
 //   type "close": {}                        host only: ends ranking so the result is final
 //   type "more":  {}                        host only: deal 10 more cards (same search, new places)
-//   type "nudge": {}                        anyone: remind people still swiping (push where possible)
+//   type "nudge": {}                        anyone: remind people still swiping or ranking (push where possible)
+//   type "timer": { stage, minutes }        host only: set or clear the swiping or ranking timer (0 = no limit)
+//   type "remove": { target }               host only: take someone out of the deck (a duplicate or someone who left)
+//   type "tick":  { code }                  anyone (and the scheduler): runs anything that's due (2-minute warnings, time's up)
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
 import { pushToPlayers, deckPlayers } from "./_push.js";
 import { findPlaces, shape } from "./_places.js";
 import { recordPlaces, swipeChanges } from "./_hot.js";
+import { scheduleTimer } from "./_schedule.js";
+
+export const TIMER_CHOICES = [0, 2, 5, 10, 15, 30, 60];
+const cleanMinutes = (m) => (TIMER_CHOICES.includes(Math.round(Number(m))) ? Math.round(Number(m)) : null);
 
 const MAX_CARDS = 40, MAX_DEALS = 2, DEAL = 10;
 const canDeal = (deck) => !!deck.search && (deck.deals || 0) < MAX_DEALS && deck.places.length < MAX_CARDS;
@@ -48,9 +55,9 @@ async function recordWinner(code, deck) {
   await recordPlaces(deck, [{ place: winnerOf(deck, ranks), field: "win", n: 1 }]);
 }
 
-async function announceRanking(code, deck, count, exceptId) {
+async function announceRanking(code, deck, count, exceptId, title = "Time to rank") {
   const others = (await deckPlayers(code)).filter((id) => id !== exceptId);
-  await pushToPlayers(others, { title: "Time to rank", body: `${count} place${count === 1 ? "" : "s"} made the cut ${deck.category === "saved" ? "from your saved places" : `for ${deck.label.toLowerCase()} near ${deck.area}`}. Put them in order.`, code });
+  await pushToPlayers(others, { title, body: `${count} place${count === 1 ? "" : "s"} made the cut ${deck.category === "saved" ? "from your saved places" : `for ${deck.label.toLowerCase()} near ${deck.area}`}. Put them in order.`, code });
 }
 
 async function startRanking(code, deck, swipes, bar, { relax }) {
@@ -62,11 +69,77 @@ async function startRanking(code, deck, swipes, bar, { relax }) {
   if (!matches.length) return null;
   // One match is simply the winner; there's nothing to rank.
   const single = matches.length === 1;
-  await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: single ? "done" : "ranking", needsMore: false, matches, minYes: bar, voters, rankingAt: Date.now(), announced: single || deck.announced }), "KEEPTTL");
+  const rankMinutes = deck.rankMinutes ?? 5;
+  const rankEndsAt = !single && rankMinutes > 0 ? Date.now() + rankMinutes * 60e3 : null;
+  await redis("SET", `deck:${code}`, JSON.stringify({
+    ...deck, phase: single ? "done" : "ranking", needsMore: false, matches, minYes: bar, voters, rankingAt: Date.now(), announced: single || deck.announced,
+    swipeEndsAt: null, rankEndsAt, warned: { ...(deck.warned || {}), rank: false },
+  }), "KEEPTTL");
+  if (rankEndsAt) await scheduleTimer(code, rankEndsAt);
   await bump(single ? "winners" : "ranking_started");
   await recordPlaces(deck, matches.map((id) => ({ place: deck.places.find((p) => p.id === id), field: "match", n: 1 })));
   if (single) await recordWinner(code, { ...deck, matches });
   return matches;
+}
+
+// Ranking is over once everyone still in the deck has ranked: tell them where they're going (once).
+async function finishIfAllRanked(code, deck, exceptId) {
+  if (deck.announced || deck.phase !== "ranking") return false;
+  const [players, ranked] = await Promise.all([deckPlayers(code), redis("HKEYS", `deck:${code}:ranks`)]);
+  if (!ranked.length || !players.every((id) => ranked.includes(id))) return false;
+  await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, announced: true, rankEndsAt: null }), "KEEPTTL");
+  await bump("winners");
+  await recordWinner(code, deck);
+  await announceWinner(code, deck, exceptId);
+  return true;
+}
+
+// Runs whatever a timer says is due. Safe to call any time from anywhere: it only acts when the clock says so.
+export const timerDue = (deck, now = Date.now()) =>
+  (deck.phase === "swiping" && deck.swipeEndsAt && (now >= deck.swipeEndsAt || (!deck.warned?.swipe && now >= deck.swipeEndsAt - 120e3))) ||
+  (deck.phase === "ranking" && deck.rankEndsAt && !deck.announced && (now >= deck.rankEndsAt || (!deck.warned?.rank && now >= deck.rankEndsAt - 120e3)));
+
+export async function tickDeck(code) {
+  if ((await redis("SET", `tick:${code}`, "1", "EX", 5, "NX")) !== "OK") return; // another request is already on it
+  try {
+    const raw = await redis("GET", `deck:${code}`);
+    if (!raw) return;
+    const deck = JSON.parse(raw), now = Date.now();
+    if (!timerDue(deck, now)) return;
+    const what = deck.category === "saved" ? deck.label : deck.label.toLowerCase();
+    if (deck.phase === "swiping") {
+      const swipes = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:swipes`)));
+      if (now >= deck.swipeEndsAt) {
+        const n = Math.max(swipes.length, 1);
+        const matches = swipes.length >= 1 ? await startRanking(code, deck, swipes, Math.min(deck.minYes ?? defaultBar(n), n), { relax: true }) : null;
+        if (matches?.length === 1) await announceWinner(code, { ...deck, matches });
+        else if (matches) await announceRanking(code, deck, matches.length, null, "Time's up! Time to rank");
+        else {
+          await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, swipeEndsAt: null }), "KEEPTTL");
+          if (deck.hostId) await pushToPlayers([deck.hostId], { title: "Time's up, but no matches yet", body: "Nobody said yes to the same places. Deal more cards or start a new deck.", code });
+        }
+        await bump("timer_closed");
+        return;
+      }
+      await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, warned: { ...(deck.warned || {}), swipe: true } }), "KEEPTTL");
+      const late = Object.entries(hashToObject(await redis("HGETALL", `deck:${code}:swipes`))).filter(([, s]) => !s.done).map(([id]) => id);
+      await pushToPlayers(late, { title: "⏳ 2 minutes left to swipe", body: `Get your swipes in for ${what} before swiping closes.`, code });
+      return;
+    }
+    if (now >= deck.rankEndsAt) {
+      await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: now, announced: true, rankEndsAt: null }), "KEEPTTL");
+      await bump("winners"); await bump("timer_closed");
+      await recordWinner(code, deck);
+      await announceWinner(code, deck, null);
+      return;
+    }
+    await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, warned: { ...(deck.warned || {}), rank: true } }), "KEEPTTL");
+    const ranked = await redis("HKEYS", `deck:${code}:ranks`);
+    const late = (await deckPlayers(code)).filter((id) => !ranked.includes(id));
+    await pushToPlayers(late, { title: "⏳ 2 minutes left to rank", body: `Put the places in order before voting closes on ${what}.`, code });
+  } finally {
+    await redis("DEL", `tick:${code}`).catch(() => {});
+  }
 }
 
 export default async function handler(req, res) {
@@ -76,6 +149,11 @@ export default async function handler(req, res) {
   try {
     const b = body(req);
     const code = String(b.code || "").toUpperCase();
+    if (b.type === "tick") {
+      if (!CODE_RE.test(code)) return send(res, 400, { error: "Bad deck code." });
+      await tickDeck(code);
+      return send(res, 200, { ok: true });
+    }
     const playerId = String(b.playerId || "");
     if (!CODE_RE.test(code) || !PLAYER_RE.test(playerId)) return send(res, 400, { error: "Bad deck code or player." });
     if (!(await allow(`rl:act:${clientIp(req)}`, 600, 600))) return send(res, 429, { error: "Slow down a little and try again." });
@@ -127,15 +205,7 @@ export default async function handler(req, res) {
       const [newRank] = await pipeline([["HSET", `deck:${code}:ranks`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:ranks`, TTL]]);
       if (newRank === 1) await bump("rankings");
       // Once the last ranking is in, tell everyone where they're going (only once per deck).
-      if (!deck.announced) {
-        const [players, ranked] = await Promise.all([deckPlayers(code), redis("HKEYS", `deck:${code}:ranks`)]);
-        if (players.every((id) => ranked.includes(id))) {
-          await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, announced: true }), "KEEPTTL");
-          await bump("winners");
-          await recordWinner(code, deck);
-          await announceWinner(code, deck, playerId);
-        }
-      }
+      await finishIfAllRanked(code, deck, playerId);
       return send(res, 200, { ok: true });
     }
 
@@ -160,7 +230,7 @@ export default async function handler(req, res) {
     if (b.type === "close") {
       if (!isHost) return send(res, 403, { error: "Only the person who started this deck can close voting." });
       if (deck.phase === "ranking") {
-        await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: Date.now(), announced: true }), "KEEPTTL");
+        await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, phase: "done", closedAt: Date.now(), announced: true, rankEndsAt: null }), "KEEPTTL");
         if (!deck.announced) { await bump("winners"); await recordWinner(code, deck); await announceWinner(code, deck, playerId); }
       }
       return send(res, 200, { ok: true });
@@ -189,14 +259,48 @@ export default async function handler(req, res) {
     }
 
     if (b.type === "nudge") {
-      if (deck.phase !== "swiping") return send(res, 409, { error: "Everyone's past swiping already." });
-      const swipes = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
-      const waiting = Object.entries(swipes).filter(([id, sw]) => id !== playerId && !sw.done);
+      // Swiping: everyone not done. Ranking: everyone who hasn't sent their list.
+      let waiting;
+      if (deck.phase === "swiping") {
+        waiting = Object.entries(hashToObject(await redis("HGETALL", `deck:${code}:swipes`))).filter(([id, sw]) => id !== playerId && !sw.done).map(([id, sw]) => [id, sw.name]);
+      } else if (deck.phase === "ranking" && !deck.announced) {
+        const [players, ranked, swipes] = await Promise.all([deckPlayers(code), redis("HKEYS", `deck:${code}:ranks`), redis("HGETALL", `deck:${code}:swipes`)]);
+        const names = hashToObject(swipes);
+        waiting = players.filter((id) => id !== playerId && !ranked.includes(id)).map((id) => [id, names[id]?.name]);
+      } else return send(res, 409, { error: "There's nobody left to nudge." });
       if (!waiting.length) return send(res, 200, { ok: true, waiting: [], pushed: 0 });
-      if (!(await allow(`rl:nudge:${code}`, 1, 600))) return send(res, 429, { error: "Someone nudged a few minutes ago. Give them a minute." });
-      const pushed = await pushToPlayers(waiting.map(([id]) => id), { title: `${name} is waiting on you 👀`, body: `Finish swiping so the group can pick: ${deck.label}.`, code });
+      if (!(await allow(`rl:nudge:${code}:${deck.phase}`, 1, 120))) return send(res, 429, { error: "Someone just nudged. Give them a couple of minutes." });
+      const pushed = await pushToPlayers(waiting.map(([id]) => id), deck.phase === "swiping"
+        ? { title: `${name} is waiting on you 👀`, body: `Finish swiping so the group can pick: ${deck.label}.`, code }
+        : { title: `${name} is waiting on your ranking 👀`, body: "Put the places in order so the group can pick.", code });
       await bump("nudges");
-      return send(res, 200, { ok: true, waiting: waiting.map(([, sw]) => sw.name || "Someone"), pushed });
+      return send(res, 200, { ok: true, waiting: waiting.map(([, n]) => n || "Someone"), pushed });
+    }
+
+    if (b.type === "timer") {
+      if (!isHost) return send(res, 403, { error: "Only the person who started this deck can set the timer." });
+      const minutes = cleanMinutes(b.minutes);
+      if (minutes == null || !["swipe", "rank"].includes(b.stage)) return send(res, 400, { error: "Pick a time." });
+      let next = deck;
+      if (b.stage === "swipe" && deck.phase === "swiping") next = { ...deck, swipeMinutes: minutes, swipeEndsAt: minutes ? Date.now() + minutes * 60e3 : null, warned: { ...(deck.warned || {}), swipe: false } };
+      else if (b.stage === "rank" && deck.phase === "swiping") next = { ...deck, rankMinutes: minutes };
+      else if (b.stage === "rank" && deck.phase === "ranking" && !deck.announced) next = { ...deck, rankMinutes: minutes, rankEndsAt: minutes ? Date.now() + minutes * 60e3 : null, warned: { ...(deck.warned || {}), rank: false } };
+      else return send(res, 409, { error: "That step is already over." });
+      await redis("SET", `deck:${code}`, JSON.stringify(next), "KEEPTTL");
+      const endsAt = b.stage === "swipe" ? next.swipeEndsAt : next.phase === "ranking" ? next.rankEndsAt : null;
+      if (endsAt) await scheduleTimer(code, endsAt);
+      return send(res, 200, { ok: true, endsAt });
+    }
+
+    if (b.type === "remove") {
+      if (!isHost) return send(res, 403, { error: "Only the person who started this deck can remove people." });
+      const target = String(b.target || "");
+      if (!PLAYER_RE.test(target) || target === playerId) return send(res, 400, { error: "Pick someone else to remove." });
+      await pipeline([["HDEL", `deck:${code}:swipes`, target], ["HDEL", `deck:${code}:ranks`, target], ["HDEL", `deck:${code}:seen`, target]]);
+      await bump("removed");
+      // They might have been the last one everybody was waiting on.
+      if (deck.phase === "ranking") await finishIfAllRanked(code, deck, playerId);
+      return send(res, 200, { ok: true });
     }
 
     return send(res, 400, { error: "Unknown action." });
