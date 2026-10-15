@@ -511,6 +511,25 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .ci-place .pthumb { width: 46px; height: 46px; border-radius: 12px; }
 .ci-place .ci-info { flex: 1; min-width: 0; }
 .ci-photo { display: block; width: 100%; height: 180px; border-radius: 22px; background-size: cover; background-position: center; margin-bottom: 6px; }
+.tier-chip { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; font-weight: 800; font-size: 13px; color: #16120F; vertical-align: middle; }
+.t-S { background: #FF5A4E; } .t-A { background: #FF9F43; } .t-B { background: #F7D154; } .t-C { background: #7BD389; } .t-D { background: #6FA8FF; }
+.tier-card { height: min(46vh, 380px); cursor: default; }
+.tier-flags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tier-pad { display: flex; flex-direction: column; gap: 8px; }
+.tier-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.tier-row.two { grid-template-columns: 1fr 1fr; }
+.tier-btn { border: 0; cursor: pointer; height: 62px; border-radius: 16px; font-family: var(--f-display); font-weight: 800; font-size: 28px; color: #16120F; box-shadow: var(--soft-shadow); transition: transform .1s; }
+.tier-btn:active { transform: scale(.94); }
+.tl .tl-row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.tl .tl-row:first-child, .crew-tier .tl-row:first-of-type { border-top: 0; }
+.crew-tier .tl-row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.tl-row > .tier-chip { width: 44px; height: 44px; font-size: 22px; border-radius: 10px; }
+.tl-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.tl-item { display: inline-flex; align-items: center; gap: 6px; background: var(--sunk); border-radius: 999px; padding: 3px 10px 3px 3px; font-size: 13px; font-weight: 600; }
+.pthumb.sm { width: 24px; height: 24px; border-radius: 50%; }
+.hot-take { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--match) 10%, var(--surface)); font-size: 14px; }
+.say-go { margin-top: 10px; }
+.say-go .row { padding: 4px 0; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -1302,7 +1321,7 @@ async function loadCrew(id) {
     let d = await api(`/api/crew?id=${id}&me=${ME}`);
     // Opened from a crew link: you're in.
     if (!d.members.some((m) => m.me)) { await api("/api/crew", { type: "join", id, playerId: ME, name: S.name }); d = await api(`/api/crew?id=${id}&me=${ME}`); }
-    d.boards = await api(`/api/boards?op=crew&crew=${id}`).then((r) => r.boards).catch(() => []);
+    d.boards = await api(`/api/boards?op=crew&crew=${id}&me=${ME}`).then((r) => r.boards).catch(() => []);
     S.crewData = d; rememberCrew(d.crew);
   } catch (e) { S.crewData = { error: e.message }; }
   if (S.view === "crew") render();
@@ -1372,7 +1391,7 @@ function viewCrew() {
   if (act.feed.length) root.append(el(`<section class="panel crew-feed"><div class="eyebrow">📍 Out and about</div>${act.feed.slice(0, 8).map((x) => `<div class="row spread"><span><b>${esc(x.name)}</b> at ${esc(x.place.name)} <span class="small muted">${esc(x.place.hood || "")}</span></span><span class="small muted">${x.tonight ? "tonight" : "last night"} · ${new Date(x.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>`).join("")}</section>`));
   if (act.leaders.length) root.append(el(`<section class="panel"><div class="eyebrow">⭐ Out the most this month</div><ol class="board">${act.leaders.map((l) => `<li><span>${esc(l.name)}</span><span class="muted small">${l.pts} pts</span></li>`).join("")}</ol></section>`));
   // The crew's own leaderboards: members' votes, champs and nights out.
-  const ct = el(`<section class="panel crew-tops"><div class="eyebrow">🏅 The crew's top 3</div>${d.boards?.length ? d.boards.slice(0, 8).map((x) => `<div class="ct"><b>${x.emoji} ${esc(x.title.replace(/^Best /, ""))}</b><div class="small muted">${x.top.map((p, i) => `${i + 1}. ${esc(p.name)}`).join(" · ")}</div></div>`).join("") : `<p class="small muted">Play Matchups on the Top tab and the crew's favorites show up here, next to Manhattan's.</p>`}</section>`);
+  const ct = el(`<section class="panel crew-tops"><div class="eyebrow">🏷️ The crew's tier lists</div>${d.boards?.length ? d.boards.map((x) => `<div class="ct"><b>${x.emoji} ${esc(x.short)}</b><div class="small">${x.list.map((r) => `${tierChip(r.tier)} ${esc(r.place.name)}`).join(" &nbsp;")}</div>${x.hotTake ? `<div class="small hot-take">🌶️ ${esc(x.hotTake.name)} put ${esc(x.hotTake.place.name)} in ${tierChip(x.hotTake.theirs)} · crew says ${tierChip(x.hotTake.crew)}</div>` : ""}</div>`).join("") : `<p class="small muted">Tier places on the Top tab (tap S to D) and the crew's merged tier lists show up here, with the hot takes.</p>`}</section>`);
   root.append(ct);
   if (history.length) {
     const h = el(`<section class="panel"><div class="eyebrow">Past nights</div><div class="history"></div></section>`);
@@ -1414,8 +1433,8 @@ function crewPanel() {
   return box;
 }
 
-// ---------- Best of Manhattan: lists, Matchups, check-ins ----------
-// Lists start ranked by Google ratings and reviews, then move with Matchbook: matchup votes and the places groups pick.
+// ---------- Best of Manhattan: lists, Tier It, check-ins ----------
+// Lists start ranked by Google ratings and reviews, then move with the places groups actually pick and check in at.
 const RADII = [0.5, 1, 2];
 const miLabel = (mi) => (mi === 0.5 ? "½ mi" : `${mi} mi`);
 // Where: all of Manhattan, a neighborhood (pick or type one), or a radius around you. It sticks until you change it.
@@ -1508,7 +1527,7 @@ async function openBoard(slug) {
   if (S.view === "board") render();
 }
 const listRow = (p) => `<li class="mitem best-row"><span class="rank-n${p.rank === 1 ? " gold" : ""}">${p.rank}</span>${thumb(p)}
-  <span class="info"><span class="nm" style="display:block">${esc(p.name)}</span><span class="sub">${esc(placeLine(p, !S.hood))}${p.votes ? `<br><span class="mb-line">⚔️ ${p.votes} matchup${p.votes === 1 ? "" : "s"}</span>` : ""}${p.wins ? ` <span class="hot">· 🏆 picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
+  <span class="info"><span class="nm" style="display:block">${esc(p.name)}${p.mine && TIERS.includes(p.mine) ? " " + tierChip(p.mine) : p.mine === "want" ? " ♥" : ""}</span><span class="sub">${esc(placeLine(p, !S.hood))}${p.wins ? ` <span class="hot">· 🏆 picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
   <a class="maps small" data-kind="maps" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`;
 function viewBoard() {
   const d = S.boardData;
@@ -1521,12 +1540,13 @@ function viewBoard() {
   root.append(whereBar(() => openBoard(b.slug)));
   if (d.where.kind === "missing") { root.append(el(`<div class="empty"><b>Couldn't find "${esc(d.where.label)}" in Manhattan</b><p class="muted">Try a neighborhood like West Village, Hell's Kitchen or the Upper East Side.</p></div>`)); return root; }
   if (!d.places.length) { root.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">${b.emoji}</span><b>Nothing here yet</b><p class="muted">Try a bigger radius or all of Manhattan.</p></div>`)); return root; }
-  const play = el(`<button class="btn primary block big" type="button">⚔️ Play Matchups</button>`);
-  play.addEventListener("click", () => openMatch(b.slug));
+  const tiered = d.myTiers ? TIERS.reduce((a, t) => a + (d.myTiers[t] || 0), 0) : 0;
+  const play = el(`<div class="row" style="gap:8px"><button class="btn primary big" type="button" data-tier style="flex:2">🏷️ Tier It</button>${tiered ? `<button class="btn big" type="button" data-mylist style="flex:1">My list (${tiered})</button>` : ""}</div>`);
+  $("[data-tier]", play).addEventListener("click", () => openTier(b.slug));
+  $("[data-mylist]", play)?.addEventListener("click", () => openTierList(b.slug));
   root.append(play);
-  if (d.myChamp) root.append(el(`<section class="panel champ-card"><div class="row spread"><span><span class="eyebrow">Your #1</span><br><b>👑 ${esc(d.myChamp.name)}</b></span><span class="small muted">${d.places[0]?.gid === d.myChamp.gid ? "Same as the list" : `List's #1: ${esc(d.places[0].name)}`}</span></div></section>`));
+  for (const c of d.crews || []) if (c.list?.length) root.append(crewTierPanel(c, b));
   root.append(el(`<ol class="mlist top10 best-list">${d.places.map(listRow).join("")}</ol>`));
-  for (const c of d.crews || []) if (c.top.length) root.append(el(`<section class="panel crew-top"><div class="eyebrow">👥 ${esc(c.name)}'s top 3</div><ol class="board">${c.top.map((p) => `<li><span>${esc(p.name)}</span><span class="muted small">${esc(p.hood || "")}</span></li>`).join("")}</ol></section>`));
   const deck = d.places.slice(0, 10);
   if (deck.length >= 2) {
     const swipe = el(`<button class="btn block" type="button">Swipe the top ${deck.length} with friends</button>`);
@@ -1540,49 +1560,143 @@ function viewBoard() {
     });
     root.append(swipe);
   }
-  root.append(el(`<p class="attrib">Ratings and photos from Google Maps · Order by Matchbook: Google ratings to start, then matchups and group picks</p>`));
+  root.append(el(`<p class="attrib">Ratings and photos from Google Maps · Order: Google ratings to start, then the places groups pick and check in at. Tiers are yours and your crew's.</p>`));
   return root;
 }
 
-// Matchups: two places from the list, the one you pick stays on until something beats it.
-async function openMatch(slug, fresh = false) {
-  Object.assign(S, { matchSlug: slug, matchData: null, matchBusy: false });
-  setView("match");
-  try { S.matchData = await api(`/api/boards?op=match&me=${ME}&slug=${slug}${fresh ? "&fresh=1" : ""}${nearQS()}`); } catch (e) { S.matchData = { error: e.message }; }
-  if (S.view === "match") render();
+// Tier It: one tap per place. S A B C D, ♥ want to try, or skip. Your tiers are your ranking; your crew's merged
+// tiers are the crew's ranking. Places you've checked in at get a ✓ and count double for the crew.
+const TIERS = ["S", "A", "B", "C", "D"];
+const poss = (name) => `${esc(name)}${/s$/i.test(name) ? "’" : "’s"}`; // The Boys’ · Rob’s
+const tierChip = (t) => `<span class="tier-chip t-${t}">${t}</span>`;
+async function openTier(slug) {
+  Object.assign(S, { tierSlug: slug, tierData: null, tierBusy: false, tierDone: 0, tierUndo: [] });
+  setView("tier");
+  await loadTierCards();
 }
-const muCard = (p, side, badge) => `<button type="button" class="mu-card ${COVERS[hash(p.gid) % COVERS.length]}" data-side="${side}"${p.photo ? ` style="background-image:linear-gradient(180deg,rgba(0,0,0,0) 35%,rgba(0,0,0,.78)),url('${photoUrl(p, 900)}')"` : ""}>
-  <span class="mu-badge">${badge}</span><span class="mu-text"><b>${esc(p.name)}</b><span>${esc(placeLine(p))}</span></span></button>`;
-function viewMatch() {
-  const d = S.matchData, slug = S.matchSlug;
-  const root = el(`<div class="app stack-y match"></div>`);
+async function loadTierCards() {
+  try { const d = await api(`/api/boards?op=tier&me=${ME}&slug=${S.tierSlug}${nearQS()}`); S.tierData = d; }
+  catch (e) { S.tierData = { error: e.message }; }
+  if (S.view === "tier") render();
+}
+async function markTier(t) {
+  const d = S.tierData, p = d?.cards?.[0]; if (!p) return;
+  haptic(t === "skip" ? "light" : "medium");
+  d.cards.shift(); d.left = Math.max(0, (d.left || 1) - 1);
+  if (t !== "skip") { (d.mine[t] ||= []).unshift({ ...p, at: Date.now() }); S.tierDone++; }
+  S.tierUndo.push({ p, t });
+  render();
+  try { await api("/api/boards", { op: "tierset", me: ME, slug: S.tierSlug, gid: p.gid, t }); } catch (e) { toast(e.message); }
+  if (d.cards.length < 4 && d.left > d.cards.length) loadTierCards(); // keep the stack topped up
+}
+async function undoTier() {
+  const last = S.tierUndo.pop(), d = S.tierData; if (!last || !d) return;
+  d.cards.unshift(last.p); d.left++;
+  if (last.t !== "skip") { d.mine[last.t] = (d.mine[last.t] || []).filter((x) => x.gid !== last.p.gid); S.tierDone = Math.max(0, S.tierDone - 1); }
+  render();
+  try { await api("/api/boards", { op: "tierset", me: ME, slug: S.tierSlug, gid: last.p.gid, t: "clear" }); } catch {}
+}
+function viewTier() {
+  const d = S.tierData, slug = S.tierSlug;
+  const root = el(`<div class="app stack-y tier-game"></div>`);
   root.append(backButton("Back to the list", () => openBoard(slug)));
   if (!d) { root.append(el(`<div class="skeleton" style="height:520px;width:100%" aria-hidden="true"><div class="sk-img"></div></div>`)); return root; }
   if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
-  const b = d.board;
-  if (d.empty) { root.append(el(`<div class="empty"><b>Not enough ${esc(b.noun)}s ${d.where.kind === "all" ? "" : "in " + esc(d.where.label)}</b><p class="muted">Try a bigger area.</p></div>`)); return root; }
-  root.append(el(`<div class="mu-head"><span class="small muted">⚔️ Matchups · ${d.where.kind === "all" ? "Manhattan" : esc(d.where.label)}</span><h2>${b.emoji} ${esc(b.title)}</h2><p class="muted">${d.chal ? "Tap the better one. Your pick stays." : ""}</p></div>`));
-  if (!d.chal) {
-    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">👑</span><h2>${esc(d.champ.name)}</h2><p class="muted">Your #1 ${esc(b.noun)} ${d.where.kind === "all" ? "in Manhattan" : "in " + esc(d.where.label)}. It beat everything on the list. Longest streak: ${d.best}.</p></div>`));
+  const b = d.board, count = TIERS.reduce((a, t) => a + (d.mine[t]?.length || 0), 0);
+  root.append(el(`<div class="mu-head"><span class="small muted">🏷️ Tier It · ${d.where.kind === "all" ? "Manhattan" : esc(d.where.label)}</span><h2>${b.emoji} ${esc(b.title)}</h2></div>`));
+  const p = d.cards[0];
+  if (!p) {
+    root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">🏷️</span><h2>${count ? "You've tiered everything here" : "Nothing left to tier here"}</h2><p class="muted">${count ? "See your tier list and how your crew compares." : "Try a bigger area."}</p></div>`));
   } else {
-    const champBadge = d.rounds ? `👑 Your pick${d.reign > 1 ? ` · ${d.reign} wins` : ""}` : `#${d.champ.rank} on the list`;
-    const pair = el(`<div class="mu-pair">${muCard(d.champ, "champ", champBadge)}<span class="tt-vs" aria-hidden="true">vs</span>${muCard(d.chal, "chal", `Challenger · #${d.chal.rank}`)}</div>`);
-    pair.addEventListener("click", async (e) => {
-      const c = e.target.closest("[data-side]"); if (!c || S.matchBusy) return;
-      S.matchBusy = true; haptic("medium"); c.classList.add("chosen"); pair.querySelector(`[data-side="${c.dataset.side === "champ" ? "chal" : "champ"}"]`)?.classList.add("out");
-      try { S.matchData = await api("/api/boards", { op: "pick", me: ME, slug, pick: c.dataset.side, chal: d.chal.gid }); }
-      catch (err) { toast(err.message); }
-      S.matchBusy = false; if (S.view === "match") { render(); }
-    });
-    root.append(pair);
-    root.append(el(`<p class="small muted mu-left">${d.left} more to go${d.rounds ? ` · ${d.rounds} picked` : ""}</p>`));
+    const card = el(`<div class="mu-card tier-card ${COVERS[hash(p.gid) % COVERS.length]}"${p.photo ? ` style="background-image:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.8)),url('${photoUrl(p, 900)}')"` : ""}>
+      <span class="tier-flags">${p.crew ? `<span class="mu-badge">👥 Your crew tiered this</span>` : ""}${p.been ? `<span class="mu-badge">✓ You've been</span>` : ""}</span>
+      <span class="mu-text"><b>${esc(p.name)}</b><span>${esc(placeLine(p))}</span></span></div>`);
+    root.append(card);
+    const pad = el(`<div class="tier-pad"><div class="tier-row">${TIERS.map((t) => `<button type="button" class="tier-btn t-${t}" data-t="${t}" aria-label="${t} tier">${t}</button>`).join("")}</div>
+      <div class="tier-row two"><button type="button" class="btn" data-t="want">♥ Want to try</button><button type="button" class="btn ghost" data-t="skip">Skip</button></div></div>`);
+    pad.addEventListener("click", (e) => { const t = e.target.closest("[data-t]")?.dataset.t; if (t) markTier(t); });
+    root.append(pad);
+    root.append(el(`<p class="small muted mu-left">${count} tiered${d.left ? ` · ${d.left} left` : ""} · S is the best</p>`));
   }
-  const again = el(`<button class="btn ghost block" type="button">Start over</button>`);
-  again.addEventListener("click", () => openMatch(slug, true));
-  const list = el(`<button class="btn block" type="button">See the list</button>`);
-  list.addEventListener("click", () => openBoard(slug));
-  root.append(list, again);
+  const row = el(`<div class="row" style="gap:8px">${S.tierUndo.length ? `<button type="button" class="btn ghost" data-undo style="flex:1">↩ Undo</button>` : ""}<button type="button" class="btn ${p ? "" : "primary "}" data-list style="flex:2">See my tier list${count ? ` (${count})` : ""}</button></div>`);
+  $("[data-undo]", row)?.addEventListener("click", undoTier);
+  $("[data-list]", row).addEventListener("click", () => openTierList(slug));
+  root.append(row);
   return root;
+}
+
+// Your tier list, and each of your crews' merged tier lists for the same category.
+async function openTierList(slug) {
+  Object.assign(S, { tlSlug: slug, tlData: null });
+  setView("tierlist");
+  try {
+    const [t, b] = await Promise.all([api(`/api/boards?op=tier&me=${ME}&slug=${slug}${nearQS()}`), api(`/api/boards?op=board&me=${ME}&slug=${slug}${nearQS()}`)]);
+    S.tlData = { board: t.board, where: t.where, mine: t.mine, crews: b.crews || [] };
+  } catch (e) { S.tlData = { error: e.message }; }
+  if (S.view === "tierlist") render();
+}
+const tierRows = (rows) => TIERS.filter((t) => rows[t]?.length).map((t) => `<div class="tl-row">${tierChip(t)}<div class="tl-items">${rows[t].map((p) => `<span class="tl-item">${thumb(p, "pthumb sm")}<span>${esc(p.name)}${p.been ? " ✓" : ""}</span></span>`).join("")}</div></div>`).join("");
+function viewTierList() {
+  const d = S.tlData, slug = S.tlSlug;
+  const root = el(`<div class="app stack-y tierlist"></div>`);
+  root.append(backButton("Back to the list", () => openBoard(slug)));
+  if (!d) { root.append(el(`<div class="skeleton" style="height:400px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const b = d.board, count = TIERS.reduce((a, t) => a + (d.mine[t]?.length || 0), 0);
+  root.append(el(`<div class="greet"><h2>My ${esc(b.short)} tier list</h2><p class="muted">${count} place${count === 1 ? "" : "s"} · ✓ means you've checked in there</p></div>`));
+  if (count) {
+    root.append(el(`<section class="panel tl">${tierRows(d.mine)}</section>`));
+    const share = el(`<button class="btn primary block big" type="button">Share my tier list</button>`);
+    share.addEventListener("click", () => shareTierList(b, d.mine, share));
+    root.append(share);
+  } else root.append(el(`<div class="empty"><b>No tiers yet</b><p class="muted">Tap S to D on a few places and your list shows up here.</p></div>`));
+  const more = el(`<button class="btn block" type="button">🏷️ Tier more</button>`); more.addEventListener("click", () => openTier(slug)); root.append(more);
+  if (d.mine.want?.length) root.append(el(`<section class="panel"><div class="eyebrow">♥ Want to try</div>${d.mine.want.map((p) => `<div class="row spread"><span>${esc(p.name)} <span class="small muted">${esc(p.hood || "")}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></div>`).join("")}</section>`));
+  for (const c of d.crews) root.append(crewTierPanel(c, b));
+  return root;
+}
+function crewTierPanel(c, b) {
+  const rows = {}; for (const r of c.list || []) (rows[r.tier] ||= []).push({ ...r.place, been: r.been > 0 });
+  const box = el(`<section class="panel crew-tier"><div class="eyebrow">👥 ${poss(c.name)} ${esc(b.short)} tier list</div>
+    ${c.list?.length ? tierRows(rows) : `<p class="small muted">Nobody in ${esc(c.name)} has tiered this yet. Share it in the group chat.</p>`}
+    ${c.hotTake ? `<div class="hot-take">🌶️ <b>Hot take:</b> ${c.hotTake.me ? "You" : esc(c.hotTake.name)} put <b>${esc(c.hotTake.place.name)}</b> in ${tierChip(c.hotTake.theirs)} · the rest of ${esc(c.name)} says ${tierChip(c.hotTake.crew)}</div>` : ""}
+    ${c.sayGo?.length ? `<div class="say-go"><div class="eyebrow">Your crew says go</div>${c.sayGo.map((r) => `<div class="row spread"><span>${tierChip(r.tier)} ${esc(r.place.name)}</span><span class="small muted">${esc(r.by.slice(0, 2).join(", "))}</span></div>`).join("")}</div>` : ""}</section>`);
+  return box;
+}
+// A 1080×1350 tier list image for the group chat (names only: Google photos can't be drawn into an image).
+async function tierImage(b, mine) {
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  try { await Promise.all([document.fonts.load('800 80px "Bricolage Grotesque"'), document.fonts.load('600 34px Figtree')]); } catch {}
+  x.fillStyle = "#16120F"; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#FFF7EA"; x.textBaseline = "top";
+  x.font = '800 70px "Bricolage Grotesque", sans-serif'; x.fillText(`My ${b.short} tier list`, 70, 70, W - 140);
+  x.font = '600 32px Figtree, sans-serif'; x.globalAlpha = .7; x.fillText(S.hood || "Manhattan", 70, 160); x.globalAlpha = 1;
+  const colors = { S: "#FF5A4E", A: "#FF9F43", B: "#F7D154", C: "#7BD389", D: "#6FA8FF" };
+  const rows = TIERS.filter((t) => mine[t]?.length), rowH = Math.min(200, (H - 300) / Math.max(rows.length, 1));
+  rows.forEach((t, i) => {
+    const y = 240 + i * rowH;
+    x.fillStyle = colors[t]; x.fillRect(70, y, 120, rowH - 16);
+    x.fillStyle = "#16120F"; x.font = '800 72px "Bricolage Grotesque", sans-serif'; x.fillText(t, 105, y + (rowH - 16) / 2 - 40);
+    x.fillStyle = "#FFF7EA"; x.font = '600 34px Figtree, sans-serif';
+    let line = "", ly = y + 10; const names = mine[t].map((p) => p.name);
+    for (const n of names) { const tryL = line ? line + "  ·  " + n : n; if (x.measureText(tryL).width > W - 300 && line) { x.fillText(line, 220, ly); ly += 44; line = n; if (ly > y + rowH - 60) { line += "  …"; break; } } else line = tryL; }
+    if (line) x.fillText(line, 220, ly, W - 290);
+  });
+  x.font = '700 28px "JetBrains Mono", monospace'; x.globalAlpha = .7; x.fillText("TIERED ON MATCHBOOK · YOURS IS WRONG?", 70, H - 90); x.globalAlpha = 1;
+  return new Promise((ok) => c.toBlob(ok, "image/png"));
+}
+async function shareTierList(b, mine, btn) {
+  btn.disabled = true;
+  const text = `My ${b.short} tier list: ${TIERS.filter((t) => mine[t]?.length).map((t) => `${t}: ${mine[t].map((p) => p.name).join(", ")}`).join(" · ")}. Tier yours on Matchbook ${SITE}`;
+  try {
+    const blob = await tierImage(b, mine), file = blob && new File([blob], "matchbook-tiers.png", { type: "image/png" });
+    if (NATIVE && Plug.Share) await Plug.Share.share({ title: "Matchbook", text, url: SITE });
+    else if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+    else if (navigator.share) await navigator.share({ text });
+    else if (blob) { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "matchbook-tiers.png" }); a.click(); toast("Saved the image. Send it to your group chat."); }
+  } catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard?.writeText(text).catch(() => {}); toast("Copied your tier list. Paste it in your group chat."); } }
+  finally { btn.disabled = false; }
 }
 
 // Check-ins: you have to be there (your phone's location), your crews get a push, you earn points and a weekly streak.
@@ -1824,7 +1938,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { board: viewBoard, match: viewMatch, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { board: viewBoard, tier: viewTier, tierlist: viewTierList, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
