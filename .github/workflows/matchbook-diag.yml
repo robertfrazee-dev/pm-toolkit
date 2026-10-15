@@ -6,17 +6,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Live lists
+      - name: Settle up is live
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          show() { python3 -c "import sys,json; t=sys.stdin.read(); 
-          try:
-            j=json.loads(t)
-          except Exception: print(t[:300]); sys.exit()
-          if 'error' in j: print('ERROR', j['error']); sys.exit()
-          print(j.get('where'), len(j.get('places',[])), 'places')
-          [print(' ', p['rank'], p['name'], '|', p.get('hood'), '|', p.get('rating'), p.get('ratings'), '| photo' if p.get('photo') else '| no photo') for p in j.get('places',[])[:8]]"; }
-          for q in "slug=pizza" "slug=pizza&area=West%20Village" "slug=bars&area=west%20vill" "slug=guinness" "slug=sports-bars&area=Hells%20Kitchen"; do
-            echo "=== $q"; curl -s -m 60 "$S/api/boards?op=board&$q" | show
-          done
-          echo "=== nearby (Washington Sq)"; curl -s -m 60 "$S/api/boards?op=nearby&lat=40.7308&lng=-73.9973" | head -c 400; echo
+          echo "=== GET bill (expect 404 JSON, proves the function + SDK load)"; curl -s -m 60 -w "\n[%{http_code}]\n" "$S/api/action?bill=ZZZZZZ&me=diagdiagdiag"
+          echo "=== /s/ link serves the app"; curl -s -m 30 -o /dev/null -w "[%{http_code}]\n" "$S/s/ZZZZZZ"; curl -s -m 30 "$S/s/ZZZZZZ" | grep -c "billFromUrl"
+          echo "=== a deck action still works (expect 400 bad code)"; curl -s -m 30 -w "\n[%{http_code}]\n" -X POST -H 'content-type: application/json' -d '{"type":"swipe","code":"x"}' "$S/api/action"
