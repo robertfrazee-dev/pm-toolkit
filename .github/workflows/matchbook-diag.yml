@@ -6,9 +6,11 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Settle up is live
+      - name: Trending is live
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          echo "=== GET bill (expect 404 JSON, proves the function + SDK load)"; curl -s -m 60 -w "\n[%{http_code}]\n" "$S/api/action?bill=ZZZZZZ&me=diagdiagdiag"
-          echo "=== /s/ link serves the app"; curl -s -m 30 -o /dev/null -w "[%{http_code}]\n" "$S/s/ZZZZZZ"; curl -s -m 30 "$S/s/ZZZZZZ" | grep -c "billFromUrl"
-          echo "=== a deck action still works (expect 400 bad code)"; curl -s -m 30 -w "\n[%{http_code}]\n" -X POST -H 'content-type: application/json' -d '{"type":"swipe","code":"x"}' "$S/api/action"
+          sleep 60
+          echo "=== page has the Trending panel"; curl -s -m 30 "$S/" | grep -c "trendingPanel"
+          for w in tonight week month; do echo "=== trending $w (all Manhattan)"; curl -s -m 60 -w "\n[%{http_code}]\n" "$S/api/boards?op=trending&window=$w" | head -c 1500; echo; done
+          echo "=== auto fallback"; curl -s -m 60 "$S/api/boards?op=trending&window=tonight&auto=1" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["window"],len(d["places"]),[(p["name"],p["hood"],p["points"]) for p in d["places"]][:10],d["hoods"],d.get("where"))'
+          echo "=== West Village, auto"; curl -s -m 60 "$S/api/boards?op=trending&window=tonight&auto=1&area=West%20Village" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["window"],[(p["name"],p["hood"]) for p in d["places"]])'
