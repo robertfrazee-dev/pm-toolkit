@@ -1,6 +1,7 @@
 // GET  /api/deck?code=ABCDE  -> the deck plus everyone's swipes and rankings
 // POST /api/deck             -> look up places with Google and start a new deck
 import { parseMood } from "./_mood.js";
+import { track } from "./_events.js";
 import { CATEGORIES, PRICE_LEVELS, CHAINS, google, shape, findPlaces } from "./_places.js";
 export { CATEGORIES };
 import { timerDue, tickDeck } from "./action.js";
@@ -96,6 +97,7 @@ async function saveDeck(res, deck) {
     for (let i = 0; i < 5; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
     const ok = await redis("SET", `deck:${code}`, JSON.stringify({ ...deck, code }), "EX", TTL, "NX");
     if (ok === "OK") {
+      await track("session_created", { pid: deck.hostId || "", code, crew: deck.crew || "" });
       if (deck.swipeEndsAt) await scheduleTimer(code, deck.swipeEndsAt);
       if (deck.crew) await announceCrewDeck(deck, code);
       return send(res, 201, { code });
@@ -126,7 +128,7 @@ async function createFromSaved(req, res, b) {
   // The same kind of deck can come from the hot list; it's labeled for where it came from.
   const hot = b.source === "hot" || b.source === "board", near = text(b.area, 60);
   return saveDeck(res, withTimers({
-    category: "saved", mood: "", label: b.source === "board" ? text(b.label, 60) || "Best of Manhattan" : hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: b.source === "board" ? "Best of Manhattan" : hot ? "the hot list" : "your saved list", radius: 0, center, places,
+    category: "saved", mood: "", label: b.source === "quest" ? text(b.label, 60) || "Our quest" : b.source === "board" ? text(b.label, 60) || "Best of Manhattan" : hot ? (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: b.source === "quest" ? "a crew quest" : b.source === "board" ? "Best of Manhattan" : hot ? "the hot list" : "your saved list", radius: 0, center, places,
     phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   }, b));
 }

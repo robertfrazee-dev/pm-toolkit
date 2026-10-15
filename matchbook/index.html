@@ -530,6 +530,14 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .hot-take { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--match) 10%, var(--surface)); font-size: 14px; }
 .say-go { margin-top: 10px; }
 .say-go .row { padding: 4px 0; }
+.quest-progress .qp-num { font-size: 18px; font-weight: 600; } .quest-progress .qp-num b { font-family: var(--f-display); font-size: 40px; }
+.quest-progress .pbar { height: 10px; border-radius: 5px; margin: 8px 0; }
+.quest-spot { gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.quest-spot:first-of-type { border-top: 0; }
+.quest-spot .qs-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.quest-spot a { color: var(--match); font-weight: 700; text-decoration: none; }
+.pthumb.sm2 { width: 40px; height: 40px; border-radius: 10px; }
+.crew-quests .hist > span:first-child { flex: 1; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -999,6 +1007,7 @@ async function loadHot() {
 const hotOf = (p) => (p?.gid && S.hot[p.gid]) || null;
 const hotText = (h) => !h ? "" : `${h.rate}% swipe yes${h.wins ? ` · picked ${h.wins}×` : ""}`;
 const fromBoards = (a) => a === "Best of NYC" || a === "Best of Manhattan";
+const fromQuest = (a) => a === "a crew quest";
 const fromHot = (d) => d?.area === "the hot list" || fromBoards(d?.area);
 function lastArea() { try { return JSON.parse(store.get("mb.lastArea") || "null"); } catch { return null; } }
 
@@ -1321,7 +1330,7 @@ async function loadCrew(id) {
     let d = await api(`/api/crew?id=${id}&me=${ME}`);
     // Opened from a crew link: you're in.
     if (!d.members.some((m) => m.me)) { await api("/api/crew", { type: "join", id, playerId: ME, name: S.name }); d = await api(`/api/crew?id=${id}&me=${ME}`); }
-    d.boards = await api(`/api/boards?op=crew&crew=${id}&me=${ME}`).then((r) => r.boards).catch(() => []);
+    [d.boards, d.quests] = await Promise.all([api(`/api/boards?op=crew&crew=${id}&me=${ME}`).then((r) => r.boards).catch(() => []), api(`/api/boards?op=quests&crew=${id}`).then((r) => r.quests).catch(() => [])]);
     S.crewData = d; rememberCrew(d.crew);
   } catch (e) { S.crewData = { error: e.message }; }
   if (S.view === "crew") render();
@@ -1352,7 +1361,7 @@ function viewCrew() {
     root.append(card);
   }
   const start = el(`<button class="btn ${live ? "" : "primary "}block big" type="button">Start a deck for the crew</button>`);
-  start.addEventListener("click", () => { S.crewFor = { id: crew.id, name: crew.name }; S.tab = "pick"; store.set("mb.tab", "pick"); leave(); });
+  start.addEventListener("click", () => { trackEvent("same_crew", { crew: crew.id }); S.crewFor = { id: crew.id, name: crew.name }; S.tab = "pick"; store.set("mb.tab", "pick"); leave(); });
   const inv = el(`<button class="btn block" type="button">${ICON.share} Invite people to the crew</button>`);
   inv.addEventListener("click", async () => {
     const url = crewUrl(crew.id), text = `Join ${crew.name} on Matchbook, where we pick where to go:`;
@@ -1391,6 +1400,9 @@ function viewCrew() {
   if (act.feed.length) root.append(el(`<section class="panel crew-feed"><div class="eyebrow">📍 Out and about</div>${act.feed.slice(0, 8).map((x) => `<div class="row spread"><span><b>${esc(x.name)}</b> at ${esc(x.place.name)} <span class="small muted">${esc(x.place.hood || "")}</span></span><span class="small muted">${x.tonight ? "tonight" : "last night"} · ${new Date(x.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>`).join("")}</section>`));
   if (act.leaders.length) root.append(el(`<section class="panel"><div class="eyebrow">⭐ Out the most this month</div><ol class="board">${act.leaders.map((l) => `<li><span>${esc(l.name)}</span><span class="muted small">${l.pts} pts</span></li>`).join("")}</ol></section>`));
   // The crew's own leaderboards: members' votes, champs and nights out.
+  const qs = el(`<section class="panel crew-quests"><div class="eyebrow">🗺️ Quests</div>${d.quests?.length ? d.quests.map((x) => `<button type="button" class="hist" data-q="${esc(x.id)}"><span><b>${x.emoji} ${esc(x.title)}</b><span class="pbar" style="margin-top:6px"><i style="width:${x.progress.total ? Math.max(2, Math.round((x.progress.tried / x.progress.total) * 100)) : 0}%"></i></span></span><span class="small muted">${x.progress.tried} of ${x.progress.total} tried</span></button>`).join("") : `<p class="small muted">Take on a list together: open any list on the Top tab and tap "Start as a crew quest". Check in at the spots to tick them off.</p>`}</section>`);
+  qs.addEventListener("click", (e) => { const q = e.target.closest("[data-q]")?.dataset.q; if (q) openQuest(crew.id, q); });
+  root.append(qs);
   const ct = el(`<section class="panel crew-tops"><div class="eyebrow">🏷️ The crew's tier lists</div>${d.boards?.length ? d.boards.map((x) => `<div class="ct"><b>${x.emoji} ${esc(x.short)}</b><div class="small">${x.list.map((r) => `${tierChip(r.tier)} ${esc(r.place.name)}`).join(" &nbsp;")}</div>${x.hotTake ? `<div class="small hot-take">🌶️ ${esc(x.hotTake.name)} put ${esc(x.hotTake.place.name)} in ${tierChip(x.hotTake.theirs)} · crew says ${tierChip(x.hotTake.crew)}</div>` : ""}</div>`).join("") : `<p class="small muted">Tier places on the Top tab (tap S to D) and the crew's merged tier lists show up here, with the hot takes.</p>`}</section>`);
   root.append(ct);
   if (history.length) {
@@ -1545,6 +1557,9 @@ function viewBoard() {
   $("[data-tier]", play).addEventListener("click", () => openTier(b.slug));
   $("[data-mylist]", play)?.addEventListener("click", () => openTierList(b.slug));
   root.append(play);
+  const qbtn = el(`<button class="btn block" type="button" data-quest>🗺️ Start as a crew quest</button>`);
+  qbtn.addEventListener("click", () => startQuest(b, qbtn));
+  root.append(qbtn);
   for (const c of d.crews || []) if (c.list?.length) root.append(crewTierPanel(c, b));
   root.append(el(`<ol class="mlist top10 best-list">${d.places.map(listRow).join("")}</ol>`));
   const deck = d.places.slice(0, 10);
@@ -1569,13 +1584,14 @@ function viewBoard() {
 const TIERS = ["S", "A", "B", "C", "D"];
 const poss = (name) => `${esc(name)}${/s$/i.test(name) ? "’" : "’s"}`; // The Boys’ · Rob’s
 const tierChip = (t) => `<span class="tier-chip t-${t}">${t}</span>`;
-async function openTier(slug) {
-  Object.assign(S, { tierSlug: slug, tierData: null, tierBusy: false, tierDone: 0, tierUndo: [] });
+async function openTier(slug, quest = null) {
+  Object.assign(S, { tierSlug: slug, tierQuest: quest, tierData: null, tierBusy: false, tierDone: 0, tierUndo: [] });
   setView("tier");
   await loadTierCards();
 }
 async function loadTierCards() {
-  try { const d = await api(`/api/boards?op=tier&me=${ME}&slug=${S.tierSlug}${nearQS()}`); S.tierData = d; }
+  const scope = S.tierQuest ? `&crew=${S.tierQuest.crew}&quest=${S.tierQuest.id}` : nearQS();
+  try { const d = await api(`/api/boards?op=tier&me=${ME}&slug=${S.tierSlug}${scope}`); S.tierData = d; }
   catch (e) { S.tierData = { error: e.message }; }
   if (S.view === "tier") render();
 }
@@ -1599,11 +1615,12 @@ async function undoTier() {
 function viewTier() {
   const d = S.tierData, slug = S.tierSlug;
   const root = el(`<div class="app stack-y tier-game"></div>`);
-  root.append(backButton("Back to the list", () => openBoard(slug)));
+  const tq = S.tierQuest;
+  root.append(tq ? backButton("Back to the quest", () => openQuest(tq.crew, tq.id)) : backButton("Back to the list", () => openBoard(slug)));
   if (!d) { root.append(el(`<div class="skeleton" style="height:520px;width:100%" aria-hidden="true"><div class="sk-img"></div></div>`)); return root; }
   if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
   const b = d.board, count = TIERS.reduce((a, t) => a + (d.mine[t]?.length || 0), 0);
-  root.append(el(`<div class="mu-head"><span class="small muted">🏷️ Tier It · ${d.where.kind === "all" ? "Manhattan" : esc(d.where.label)}</span><h2>${b.emoji} ${esc(b.title)}</h2></div>`));
+  root.append(el(`<div class="mu-head"><span class="small muted">🏷️ Tier It · ${tq ? "🗺️ " + esc(d.quest?.title || "Quest") : d.where.kind === "all" ? "Manhattan" : esc(d.where.label)}</span><h2>${b.emoji} ${esc(b.title)}</h2></div>`));
   const p = d.cards[0];
   if (!p) {
     root.append(el(`<div class="tt-done"><span class="tt-fire" aria-hidden="true">🏷️</span><h2>${count ? "You've tiered everything here" : "Nothing left to tier here"}</h2><p class="muted">${count ? "See your tier list and how your crew compares." : "Try a bigger area."}</p></div>`));
@@ -1620,7 +1637,7 @@ function viewTier() {
   }
   const row = el(`<div class="row" style="gap:8px">${S.tierUndo.length ? `<button type="button" class="btn ghost" data-undo style="flex:1">↩ Undo</button>` : ""}<button type="button" class="btn ${p ? "" : "primary "}" data-list style="flex:2">See my tier list${count ? ` (${count})` : ""}</button></div>`);
   $("[data-undo]", row)?.addEventListener("click", undoTier);
-  $("[data-list]", row).addEventListener("click", () => openTierList(slug));
+  $("[data-list]", row).addEventListener("click", () => (tq && !p ? openQuest(tq.crew, tq.id) : openTierList(slug)));
   root.append(row);
   return root;
 }
@@ -1696,6 +1713,99 @@ async function shareTierList(b, mine, btn) {
     else if (navigator.share) await navigator.share({ text });
     else if (blob) { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "matchbook-tiers.png" }); a.click(); toast("Saved the image. Send it to your group chat."); }
   } catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard?.writeText(text).catch(() => {}); toast("Copied your tier list. Paste it in your group chat."); } }
+  finally { btn.disabled = false; }
+}
+
+// Quests: a crew takes on a list and tries the spots together. "Tried" comes from crew check-ins; the ranking is the
+// crew's own (its Tier It marks on the quest's spots, checked-in votes counting double). Never "best": it's the crew's.
+async function startQuest(b, btn) {
+  const crews = myCrews();
+  if (!crews.length) return toast("Quests are for crews. Save your group as a crew after a deck, or make one on the Crews tab.");
+  const go = async (crew) => {
+    btn.disabled = true;
+    try { const r = await api("/api/boards", { op: "queststart", me: ME, crew: crew.id, slug: b.slug, ...(S.hood ? { area: S.hood } : S.near ? { lat: S.near.lat, lng: S.near.lng, mi: S.near.mi } : {}) }); toast(`Quest started for ${crew.name}`); openQuest(r.crew, r.id); }
+    catch (e) { toast(e.message); btn.disabled = false; }
+  };
+  if (crews.length === 1) return go(crews[0]);
+  // More than one crew: pick which one.
+  const pick = el(`<div class="panel quest-pick"><div class="eyebrow">Start it with which crew?</div>${crews.map((c, i) => `<button type="button" class="btn block" data-i="${i}">👥 ${esc(c.name)}</button>`).join("")}</div>`);
+  pick.addEventListener("click", (e) => { const i = e.target.closest("[data-i]")?.dataset.i; if (i != null) { pick.remove(); go(crews[+i]); } });
+  btn.replaceWith(pick);
+}
+async function openQuest(crew, id) {
+  Object.assign(S, { questKey: { crew, id }, questData: null });
+  setView("quest");
+  try { S.questData = await api(`/api/boards?op=quest&crew=${crew}&id=${id}&me=${ME}`); } catch (e) { S.questData = { error: e.message }; }
+  if (S.view === "quest") render();
+}
+function viewQuest() {
+  const d = S.questData, k = S.questKey;
+  const root = el(`<div class="app stack-y quest"></div>`);
+  root.append(backButton(d?.quest ? d.quest.crewName : "Crew", () => openCrew(k.crew)));
+  if (!d) { root.append(el(`<div class="skeleton" style="height:400px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const q = d.quest, pr = d.progress, pct = pr.total ? Math.round((pr.tried / pr.total) * 100) : 0;
+  const untried = d.spots.filter((s) => !s.tried.length), tried = d.spots.filter((s) => s.tried.length);
+  root.append(el(`<div class="greet"><span class="small muted">🗺️ Crew quest</span><h2>${d.board.emoji} ${poss(q.crewName)} ${esc(q.title)} quest</h2></div>`));
+  root.append(el(`<section class="panel quest-progress"><div class="qp-num"><b>${pr.tried}</b> of ${pr.total} tried</div><span class="pbar"><i style="width:${Math.max(pct, 2)}%"></i></span><p class="small muted">A spot counts as tried once anyone in ${esc(q.crewName)} checks in there.</p></section>`));
+  const acts = el(`<div class="stack-y" style="gap:8px">
+    ${untried.length >= 2 ? `<button class="btn primary block big" type="button" data-swipe>Swipe what we haven't tried (${untried.length})</button>` : ""}
+    <div class="row" style="gap:8px"><button class="btn" type="button" data-tier style="flex:1">🏷️ Tier these</button><button class="btn" type="button" data-share style="flex:1">Share progress</button></div></div>`);
+  $("[data-swipe]", acts)?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget; if (!S.name) return toast("Add your name on the Pick tab first.");
+    btn.disabled = true;
+    try {
+      const { code } = await api("/api/deck", { playerId: S.me, source: "quest", label: `${q.title} quest`, saved: untried.slice(0, 30).map((p) => ({ name: p.name, maps: p.maps, gid: p.gid, lat: p.lat, lng: p.lng, kind: p.kind, website: p.website })), crewId: q.crew, swipeMinutes: S.form.swipeMin, rankMinutes: S.form.rankMin });
+      openSession(code);
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  });
+  $("[data-tier]", acts).addEventListener("click", () => openTier(q.slug, { crew: q.crew, id: q.id }));
+  $("[data-share]", acts).addEventListener("click", (e) => shareQuest(d, e.currentTarget));
+  root.append(acts);
+  // The crew's ranking for this quest.
+  const rows = {}; for (const r of d.ranking) (rows[r.tier] ||= []).push({ ...r.place, been: r.been > 0 });
+  root.append(el(`<section class="panel crew-tier"><div class="eyebrow">${poss(q.crewName)} ranking</div>
+    ${d.ranking.length ? tierRows(rows) : `<p class="small muted">Tap "Tier these" and get the crew to do the same. Your ranking builds from everyone's tiers, and tiers from people who've checked in count double.</p>`}
+    ${d.hotTake ? `<div class="hot-take">🌶️ <b>Hot take:</b> ${d.hotTake.me ? "You" : esc(d.hotTake.name)} put <b>${esc(d.hotTake.place.name)}</b> in ${tierChip(d.hotTake.theirs)} · the rest of the crew says ${tierChip(d.hotTake.crew)}</div>` : ""}</section>`));
+  const spot = (p) => `<div class="row spread quest-spot">${thumb(p, "pthumb sm2")}<span class="qs-info"><b>${esc(p.name)}</b><span class="small muted">${p.tried.length ? `✓ ${esc(p.tried.slice(0, 3).join(", "))}` : esc([p.kind, p.hood].filter(Boolean).join(" · "))}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></div>`;
+  if (untried.length) root.append(el(`<section class="panel"><div class="eyebrow">Not tried yet · ${untried.length}</div>${untried.map(spot).join("")}</section>`));
+  if (tried.length) root.append(el(`<section class="panel"><div class="eyebrow">Tried · ${tried.length}</div>${tried.map(spot).join("")}</section>`));
+  root.append(el(`<p class="attrib">Places from Google Maps · Progress from crew check-ins · Ranking from the crew's tiers</p>`));
+  return root;
+}
+// A 1080×1350 progress card for the group chat (names only: Google photos can't be drawn into an image).
+async function questImage(d) {
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d"), q = d.quest, pr = d.progress;
+  try { await Promise.all([document.fonts.load('800 80px "Bricolage Grotesque"'), document.fonts.load('600 34px Figtree')]); } catch {}
+  x.fillStyle = "#16120F"; x.fillRect(0, 0, W, H); x.textBaseline = "top";
+  x.fillStyle = "#FFF7EA"; x.font = '700 30px "JetBrains Mono", monospace'; x.globalAlpha = .7; x.fillText(`${q.crewName.toUpperCase()} · CREW QUEST`, 70, 70, W - 140); x.globalAlpha = 1;
+  x.font = '800 76px "Bricolage Grotesque", sans-serif'; x.fillText(q.title, 70, 120, W - 140);
+  x.font = '800 120px "Bricolage Grotesque", sans-serif'; x.fillStyle = "#FF5A4E"; x.fillText(`${pr.tried} of ${pr.total}`, 70, 230);
+  x.fillStyle = "#FFF7EA"; x.font = '600 40px Figtree, sans-serif'; x.fillText("tried", 70, 365);
+  x.fillStyle = "rgba(255,255,255,.15)"; x.fillRect(70, 430, W - 140, 22); x.fillStyle = "#FF5A4E"; x.fillRect(70, 430, (W - 140) * (pr.total ? pr.tried / pr.total : 0), 22);
+  const colors = { S: "#FF5A4E", A: "#FF9F43", B: "#F7D154", C: "#7BD389", D: "#6FA8FF" };
+  x.fillStyle = "#FFF7EA"; x.font = '700 30px "JetBrains Mono", monospace'; x.globalAlpha = .7; x.fillText("OUR RANKING SO FAR", 70, 510); x.globalAlpha = 1;
+  d.ranking.slice(0, 8).forEach((r, i) => {
+    const y = 570 + i * 82;
+    x.fillStyle = colors[r.tier]; x.fillRect(70, y, 64, 64); x.fillStyle = "#16120F"; x.font = '800 44px "Bricolage Grotesque", sans-serif'; x.fillText(r.tier, 88, y + 8);
+    x.fillStyle = "#FFF7EA"; x.font = '600 40px Figtree, sans-serif'; x.fillText(`${i + 1}. ${r.place.name}${r.been ? " ✓" : ""}`, 160, y + 10, W - 230);
+  });
+  if (!d.ranking.length) { x.font = '600 36px Figtree, sans-serif'; x.globalAlpha = .7; x.fillText("No tiers yet. Tier the spots on Matchbook.", 70, 570, W - 140); x.globalAlpha = 1; }
+  x.font = '700 28px "JetBrains Mono", monospace'; x.globalAlpha = .7; x.fillText("MATCHBOOK", 70, H - 90); x.globalAlpha = 1;
+  return new Promise((ok) => c.toBlob(ok, "image/png"));
+}
+async function shareQuest(d, btn) {
+  btn.disabled = true;
+  const q = d.quest, pr = d.progress;
+  const text = `${q.crewName}'s ${q.title} quest: ${pr.tried} of ${pr.total} tried.${d.ranking.length ? " Our ranking: " + d.ranking.slice(0, 5).map((r, i) => `${i + 1}. ${r.place.name} (${r.tier})`).join(", ") + "." : ""} ${SITE}`;
+  try {
+    const blob = await questImage(d), file = blob && new File([blob], "matchbook-quest.png", { type: "image/png" });
+    if (NATIVE && Plug.Share) await Plug.Share.share({ title: "Matchbook", text, url: SITE });
+    else if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
+    else if (navigator.share) await navigator.share({ text });
+    else if (blob) { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "matchbook-quest.png" }); a.click(); toast("Saved the image. Send it to your group chat."); }
+  } catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard?.writeText(text).catch(() => {}); toast("Copied the quest. Paste it in your group chat."); } }
   finally { btn.disabled = false; }
 }
 
@@ -1938,7 +2048,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { board: viewBoard, tier: viewTier, tierlist: viewTierList, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { board: viewBoard, tier: viewTier, tierlist: viewTierList, quest: viewQuest, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -2129,7 +2239,7 @@ function homeDecks() {
   if (!rec.length) list.append(el(`<div class="empty"><b>No decks yet</b><p class="muted">Start one from Pick, or enter a code a friend sent you.</p></div>`));
   for (const d of rec) {
     const b = el(`<button class="deck" type="button"><span class="dot ${COVERS[hash(d.code) % COVERS.length]}"></span>
-      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : d.area === "the hot list" ? "From the hot list" : fromBoards(d.area) ? "Best of Manhattan" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
+      <span class="info"><span class="t">${esc(d.label)}</span><span class="s">${d.area === "you" ? "Near you" : d.area === "your saved list" ? "Saved places" : d.area === "the hot list" ? "From the hot list" : fromQuest(d.area) ? "Crew quest" : fromBoards(d.area) ? "Best of Manhattan" : "Near " + esc(d.area)} · ${ago(d.at)}</span></span>
       <span class="code-tag">${esc(d.code)}</span></button>`);
     b.addEventListener("click", () => openSession(d.code));
     list.append(b);
@@ -2155,7 +2265,7 @@ function homeSaved() {
 
 function viewName() {
   const pv = S.preview, d = pv?.deck;
-  const what = !d ? "" : d.category === "saved" ? (fromHot(d) ? "from the Matchbook hot list" : "from their saved places") : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
+  const what = !d ? "" : d.category === "saved" ? (fromQuest(d.area) ? "from your crew quest" : fromHot(d) ? "from the Matchbook hot list" : "from their saved places") : `${esc(d.label.toLowerCase())}${d.area === "you" ? " nearby" : ` near ${esc(d.area)}`}`;
   const root = el(`<form class="panel invite-page" novalidate>
     <div><div class="eyebrow">You're invited · deck ${esc(S.pendingCode)}</div>
     <h2 style="font-size:28px;margin-top:6px">${d ? `${esc(pv.host || "A friend")} wants to pick ${what} with you` : "Join this deck"}</h2>
@@ -2215,7 +2325,7 @@ function cardHtml(p, cls = "") {
 
 function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
-  const where = s.category === "saved" ? (fromBoards(s.area) ? "From Best of Manhattan" : fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
+  const where = s.category === "saved" ? (fromQuest(s.area) ? "Spots your crew hasn't tried yet" : fromBoards(s.area) ? "From Best of Manhattan" : fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
   const root = el(`<div class="app swipe-view">
     <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
     ${s.swipeEndsAt ? `<div>${timerChip(s.swipeEndsAt, "swipe")}</div>` : ""}
@@ -2370,7 +2480,7 @@ function rankStatus() {
 async function invite(scope) {
   const url = inviteUrl(S.code);
   const where = S.session.category === "saved" ? "" : S.session.area === "you" ? " nearby" : " near " + S.session.area;
-  const text = S.session.category === "saved" ? (fromHot(S.session) ? `Help me pick from the hot list! Swipe with me:` : "Help me pick from our saved places! Swipe with me:") : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
+  const text = S.session.category === "saved" ? (fromQuest(S.session.area) ? `Next stop on our quest? Swipe the spots we haven't tried:` : fromHot(S.session) ? `Help me pick from the hot list! Swipe with me:` : "Help me pick from our saved places! Swipe with me:") : `Help me pick ${S.session.label.toLowerCase()}${where}! Swipe with me:`;
   if (NATIVE && Plug.Share) {
     try { await Plug.Share.share({ title: "Matchbook", text, url, dialogTitle: "Invite to Matchbook" }); return; } catch { return; }
   }
@@ -2785,6 +2895,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) refr
 
 const fromLink = codeFromUrl(location.pathname) || codeFromUrl(location.hash);
 const crewLink = crewFromUrl(location.pathname);
+// Analytics: someone opened a deck link (once per deck per device).
+function trackEvent(e, extra = {}) { fetch("/api/click", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "event", e, pid: ME, ...extra }), keepalive: true }).catch(() => {}); }
+if (fromLink && store.get("mb.opened." + fromLink.toUpperCase()) !== "1") { store.set("mb.opened." + fromLink.toUpperCase(), "1"); trackEvent("link_opened", { code: fromLink.toUpperCase() }); }
 const bookingLink = (location.pathname.match(/^\/b\/([A-Za-z0-9]{6,24})/) || [])[1];
 if (bookingLink) { if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Your card is only charged once everyone's paid."); openBooking(bookingLink); }
 else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
