@@ -6,11 +6,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Trending is live
+      - name: What's popping is live
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          sleep 60
-          echo "=== page has the Trending panel"; curl -s -m 30 "$S/" | grep -c "trendingPanel"
-          for w in tonight week month; do echo "=== trending $w (all Manhattan)"; curl -s -m 60 -w "\n[%{http_code}]\n" "$S/api/boards?op=trending&window=$w" | head -c 1500; echo; done
-          echo "=== auto fallback"; curl -s -m 60 "$S/api/boards?op=trending&window=tonight&auto=1" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["window"],len(d["places"]),[(p["name"],p["hood"],p["points"]) for p in d["places"]][:10],d["hoods"],d.get("where"))'
-          echo "=== West Village, auto"; curl -s -m 60 "$S/api/boards?op=trending&window=tonight&auto=1&area=West%20Village" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["window"],[(p["name"],p["hood"]) for p in d["places"]])'
+          sleep 75
+          echo "=== page has the new Top tab"; curl -s -m 30 "$S/" | grep -c "hoodStrip"
+          for q in "window=tonight&auto=1" "window=month" "window=month&area=East%20Village"; do echo "=== $q"; curl -s -m 60 -w "\n[%{http_code} %{time_total}s]\n" "$S/api/boards?op=trending&$q" | python3 -c 'import json,sys;t=sys.stdin.read();j,_,tail=t.rpartition("}");d=json.loads(j+"}");print(d["window"],"| hoods:",[(h["hood"],h["points"],h["spots"],(h["top"] or {}).get("name")) for h in d["hoods"]][:10]);print("bars:",[(p["name"],p["hood"],p["kind"],p["points"]) for p in d["bars"]]);print("places:",len(d["places"]),tail)'; done
+          echo "=== second call (cached)"; curl -s -m 60 -o /dev/null -w "[%{http_code} %{time_total}s]\n" "$S/api/boards?op=trending&window=month"
