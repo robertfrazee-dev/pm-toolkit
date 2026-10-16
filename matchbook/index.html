@@ -1257,7 +1257,7 @@ function crewPanel() {
 }
 
 // ---------- Best of Manhattan: lists, Tier It, check-ins ----------
-// Lists start ranked by Google ratings and reviews, then move with the places groups actually pick and check in at.
+// Lists start ranked by Google ratings and reviews, then move with the places crews actually pick and check in at.
 const RADII = [0.5, 1, 2];
 const miLabel = (mi) => (mi === 0.5 ? "½ mi" : `${mi} mi`);
 // Where: all of Manhattan, a neighborhood (pick or type one), or a radius around you. It sticks until you change it.
@@ -1312,7 +1312,7 @@ const heat = (pts, max) => (pts > 0 ? Math.max(1, Math.ceil((3 * pts) / (max || 
 const flames = (n) => (n ? "🔥".repeat(n) : "");
 function trendLine(p) {
   const bits = [];
-  if (p.win) bits.push(`picked by ${p.win} group${p.win === 1 ? "" : "s"}`);
+  if (p.win) bits.push(`picked by ${p.win} crew${p.win === 1 ? "" : "s"}`);
   if (p.checkin) bits.push(`${p.checkin} checked in`);
   if (p.match > p.win) bits.push(`on ${p.match} shortlist${p.match === 1 ? "" : "s"}`);
   if (p.yes) bits.push(`${p.yes} swipe yes${p.yes === 1 ? "" : "es"}`);
@@ -1340,7 +1340,7 @@ function homeTop() {
   const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
   ci.addEventListener("click", () => openCheckin());
   wrap.append(ci);
-  wrap.append(el(`<div class="lists-head"><h3>Best of ${esc(S.hood || "Manhattan")}</h3><p class="small muted">Google ratings to start, then the places groups actually pick.</p></div>`));
+  wrap.append(el(`<div class="lists-head"><h3>Best of ${esc(S.hood || "Manhattan")}</h3><p class="small muted">Google ratings to start, then the places crews actually pick.</p></div>`));
   for (const [sec, title] of d.sections || []) {
     const list = d.boards.filter((x) => x.sec === sec);
     wrap.append(el(`<h3 class="sec-h">${esc(title)}</h3>`));
@@ -1388,7 +1388,7 @@ function trendingPanel(t) {
   const box = el(`<section class="trending stack-y">
     <div class="pop-head"><h3>🍸 Bars popping off${where}</h3>${bars.length > 3 ? `<button type="button" class="link small" data-more>${S.barsAll ? "Top 3" : `See all ${bars.length}`}</button>` : ""}</div>
     ${bars.length ? `<ol class="pop-list">${(S.barsAll ? bars : bars.slice(0, 3)).map(bigCard).join("")}</ol>`
-      : `<p class="panel small muted">No bars buzzing ${WIN_LABEL[win].toLowerCase()}${where} yet. When groups swipe, pick and check in, they show up here, ranked only by what people actually do. Never paid.</p>`}
+      : `<p class="panel small muted">No bars buzzing ${WIN_LABEL[win].toLowerCase()}${where} yet. When crews swipe, pick and check in, they show up here, ranked only by what people actually do. Never paid.</p>`}
     ${others.length ? `<div class="panel"><div class="eyebrow">🔥 Also trending${where}</div><ol class="trend-list">${others.map(row).join("")}</ol></div>` : ""}
     ${places.length >= 2 ? `<button class="btn primary block big" type="button" data-swipe-hot>Swipe ${win === "tonight" ? "tonight" : WIN_LABEL[win].toLowerCase()}'s hottest ${places.length} with friends</button>` : ""}
   </section>`);
@@ -1433,7 +1433,7 @@ async function openBoard(slug) {
   if (S.view === "board") render();
 }
 const listRow = (p) => `<li class="mitem best-row"><span class="rank-n${p.rank === 1 ? " gold" : ""}">${p.rank}</span>${thumb(p)}
-  <span class="info"><span class="nm" style="display:block">${esc(p.name)}${p.mine && TIERS.includes(p.mine) ? " " + tierChip(p.mine) : p.mine === "want" ? " ♥" : ""}</span><span class="sub">${esc(placeLine(p, !S.hood))}${p.wins ? ` <span class="hot">· 🏆 picked by ${p.wins} group${p.wins === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
+  <span class="info"><span class="nm" style="display:block">${esc(p.name)}${p.mine && TIERS.includes(p.mine) ? " " + tierChip(p.mine) : p.mine === "want" ? " ♥" : ""}</span><span class="sub">${esc(placeLine(p, !S.hood))}${p.wins ? ` <span class="hot">· 🏆 picked by ${p.wins} crew${p.wins === 1 ? "" : "s"}</span>` : ""}${p.tonight ? ` <span class="hot">· 🔥 ${p.tonight} here tonight</span>` : ""}</span></span>
   <a class="maps small" data-kind="maps" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`;
 function viewBoard() {
   const d = S.boardData;
@@ -1469,7 +1469,7 @@ function viewBoard() {
     });
     root.append(swipe);
   }
-  root.append(el(`<p class="attrib">Ratings and photos from Google Maps · Order: Google ratings to start, then the places groups pick and check in at. Tiers are yours and your crew's.</p>`));
+  root.append(el(`<p class="attrib">Ratings and photos from Google Maps · Order: Google ratings to start, then the places crews pick and check in at. Tiers are yours and your crew's.</p>`));
   return root;
 }
 
