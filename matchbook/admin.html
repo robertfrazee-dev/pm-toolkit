@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Matchbook Admin</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root { --bg: #F4F5F7; --surface: #fff; --sunk: #ECEEF2; --ink: #10151D; --muted: #5E6875; --match: #D33A2C; --like: #23895B; --sulfur: #E9A92E; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0B0E13; --surface: #151A21; --sunk: #1D232C; --ink: #EEF1F5; --muted: #98A2B1; --match: #F0624F; --like: #44C089; --sulfur: #F2BB4A; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0B0E13; --surface: #151A21; --sunk: #1D232C; --ink: #EEF1F5; --muted: #98A2B1; --match: #F0624F; --like: #44C089; --sulfur: #F2BB4A; color-scheme: dark; }
+* { box-sizing: border-box; } [hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, sans-serif; padding: 16px; }
+main { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2 { margin: 0; } .muted { color: var(--muted); }
+.panel { background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--sunk); background: var(--sunk); color: inherit; }
+button { font: inherit; font-weight: 700; padding: 8px 12px; border-radius: 10px; border: 0; cursor: pointer; background: var(--sunk); color: var(--ink); }
+button.go { background: var(--like); color: #fff; } button.no { background: var(--match); color: #fff; }
+.v { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 12px; border-radius: 12px; background: var(--sunk); }
+.v .sub { font-size: 13px; color: var(--muted); }
+.badge { font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--surface); }
+.badge.approved { color: var(--like); } .badge.pending { color: var(--sulfur); } .badge.rejected { color: var(--match); }
+.nums { display: flex; gap: 24px; flex-wrap: wrap; } .nums b { display: block; font-size: 24px; }
+.err { color: var(--match); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Matchbook admin</h1>
+  <form class="panel" id="keyForm"><label for="key"><b>Admin key</b> <span class="muted">(ADMIN_KEY in Vercel; remembered on this device)</span></label>
+    <div style="display:flex;gap:8px"><input id="key" type="password" autocomplete="current-password" style="flex:1"><button type="submit">Open</button></div><p class="err" id="err" hidden></p></form>
+  <section class="panel" id="sum" hidden></section>
+  <section class="panel" id="pending" hidden></section>
+  <section class="panel" id="all" hidden></section>
+  <section class="panel" id="boosts" hidden></section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let key = store.get("mb.adminKey");
+async function call(op, data) {
+  const r = await fetch("/api/market?op=" + op, { method: data ? "POST" : "GET", headers: { "Content-Type": "application/json", "x-admin-key": key }, body: data ? JSON.stringify(data) : undefined });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Failed"); return j;
+}
+const row = (v) => `<div class="v"><div><b>${esc(v.name)}</b> <span class="badge ${v.status}">${v.status}</span><div class="sub">${esc(v.address)} · ${esc(v.kind)} · ${esc(v.email)}${v.phone ? " · " + esc(v.phone) : ""}${v.contact ? " · " + esc(v.contact) : ""}</div>
+  <div class="sub">Signed up ${new Date(v.createdAt).toLocaleDateString()} · payouts ${v.payoutsReady ? "ready" : "not set up"} · ${v.offers.length} offer${v.offers.length === 1 ? "" : "s"}${v.gid ? " · Google listing linked" : ""}</div></div>
+  <div style="display:flex;gap:6px;align-items:center">${v.status !== "approved" ? `<button class="go" data-set="approved" data-id="${v.id}">Approve</button>` : ""}${v.status !== "rejected" ? `<button class="no" data-set="rejected" data-id="${v.id}">Reject</button>` : `<button data-set="pending" data-id="${v.id}">Reopen</button>`}</div></div>`;
+async function load() {
+  $("#err").hidden = true;
+  try {
+    const d = await call("admin"); store.set("mb.adminKey", key);
+    const pending = d.venues.filter((v) => v.status === "pending");
+    $("#sum").innerHTML = `<div class="nums"><span><b>${d.venues.length}</b>venues</span><span><b>${pending.length}</b>waiting on you</span><span><b>${d.live}</b>live offers</span><span><b>${d.holding}</b>bookings waiting on payment</span><span><b>$${(d.boosts.reduce((a, b) => a + b.cents, 0) / 100).toFixed(0)}</b>boost sales</span></div>`;
+    $("#pending").innerHTML = `<h2>Waiting for approval</h2>` + (pending.length ? pending.map(row).join("") : `<p class="muted">Nothing to review.</p>`) + `<p class="muted">Before approving, check the business is real: look it up on Google Maps and call the phone number if anything looks off.</p>`;
+    $("#all").innerHTML = `<h2>All venues</h2>` + (d.venues.filter((v) => v.status !== "pending").map(row).join("") || `<p class="muted">None yet.</p>`);
+    $("#boosts").innerHTML = `<h2>Recent boosts</h2>` + (d.boosts.length ? d.boosts.map((b) => `<div class="v"><span>${new Date(b.at).toLocaleString()} · ${b.days} day${b.days > 1 ? "s" : ""}</span><b>$${(b.cents / 100).toFixed(2)}</b></div>`).join("") : `<p class="muted">None yet.</p>`);
+    for (const id of ["sum", "pending", "all", "boosts"]) $("#" + id).hidden = false;
+  } catch (e) { $("#err").textContent = e.message; $("#err").hidden = false; }
+}
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-set]"); if (!b) return;
+  b.disabled = true;
+  try { await call("adminset", { venueId: b.dataset.id, status: b.dataset.set }); await load(); } catch (err) { alert(err.message); b.disabled = false; }
+});
+$("#keyForm").addEventListener("submit", (e) => { e.preventDefault(); key = $("#key").value.trim(); if (key) load(); });
+if (key) { $("#key").value = key; load(); }
+</script>
+</body>
+</html>

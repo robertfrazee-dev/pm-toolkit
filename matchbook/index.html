@@ -409,6 +409,34 @@ html:has(body.with-tabs) { scroll-padding-bottom: calc(170px + env(safe-area-ins
 .hot-list .mitem:first-child .rank-n { background: var(--sulfur); color: #2a1a00; }
 .hot-list .mitem a { font-size: 13px; font-weight: 700; color: var(--match); text-decoration: none; }
 
+/* Group deals: offers venues list, booked with everyone paying their share */
+.deal { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; border: 0; cursor: pointer; padding: 16px; border-radius: 20px; background: var(--surface); box-shadow: var(--soft-shadow); color: inherit; }
+.deal .top-line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.deal .v { font-size: 13px; font-weight: 700; color: var(--muted); }
+.deal h3 { font-size: 19px; }
+.deal .price { font-weight: 800; }
+.deal .inc { font-size: 14px; color: var(--muted); }
+.sponsor { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted); white-space: nowrap; }
+.card .deal-tag { align-self: flex-start; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: #fff; color: #1b1b1b; }
+.card.ad-card .card-body { bottom: 22px; }
+.card.ad-card .see-deal { align-self: flex-start; margin-top: 6px; background: #fff; color: #1b1b1b; box-shadow: none; }
+.offer-hero { border-radius: 26px; padding: 22px; color: var(--cov-ink); display: flex; flex-direction: column; gap: 8px; box-shadow: var(--soft-shadow); }
+.offer-hero h2 { font-size: 30px; line-height: 1.05; }
+.offer-hero .price { font-family: var(--f-display); font-size: 22px; font-weight: 800; }
+.inc-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.days { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+.days::-webkit-scrollbar { display: none; }
+.days .chip { flex: none; }
+.total { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; }
+.total b { font-family: var(--f-display); font-size: 22px; }
+.shares { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.share { padding: 10px; border-radius: 14px; background: var(--sunk); display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.share b { color: var(--ink); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share.paid { background: color-mix(in srgb, var(--like) 18%, var(--surface)); color: var(--like); }
+.share.pending { background: color-mix(in srgb, var(--sulfur) 22%, var(--surface)); }
+.big-status h2 { font-size: 30px; letter-spacing: -.02em; }
+.meter { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--like); border-radius: 4px; transition: width .3s; }
 /* Timers, live status, removing people */
 .timer { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 700; padding: 5px 11px; border-radius: 999px; background: var(--sunk); color: var(--ink); font-variant-numeric: tabular-nums; }
 .timer.urgent { background: color-mix(in srgb, var(--match) 18%, var(--surface)); color: var(--match); }
@@ -685,6 +713,7 @@ const S = {
   form: { cat: "bars", mood: "", area: "", lat: null, lng: null, radius: 3, count: 15, openNow: false, maxPrice: 0, swipeMin: 15, rankMin: 5, ...lastForm() },
   error: "", pollTimer: null, pendingCode: null, minYes: null, confirmEarly: false, history: [], tab: store.get("mb.tab") || "pick", filtersOpen: false, editName: false,
   hot: {}, hotCat: "all", hotList: null,
+  offers: [], ads: [], adPending: null, adSeen: new Set(), adCount: 0, sinceAd: 0, deals: null, offerData: null, offerForm: null, offerFrom: "", booking: null, bookingTimer: null,
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -749,7 +778,7 @@ if (NATIVE) {
     const crew = crewFromUrl(notification?.data?.url || ""); if (crew) return openCrew(crew);
     const code = notification?.data?.code; if (code) openSession(code);
   });
-  Plug.App?.addListener("appUrlOpen", ({ url }) => { const crew = crewFromUrl(url); if (crew) return openCrew(crew); const code = codeFromUrl(url); if (code) openSession(code); });
+  Plug.App?.addListener("appUrlOpen", ({ url }) => { const crew = crewFromUrl(url); if (crew) return openCrew(crew); const b = (String(url).match(/\/b\/([A-Za-z0-9]{6,24})/) || [])[1]; if (b) return openBooking(b); const code = codeFromUrl(url); if (code) openSession(code); });
   // Keep the token fresh on each launch once someone has opted in.
   if (pushOn()) Plug.PushNotifications?.register().catch(() => {});
 }
@@ -1083,6 +1112,234 @@ async function openHot() {
   try { S.hotList = await api(`/api/hot?lat=${a.lat}&lng=${a.lng}&cat=${S.hotCat}`); }
   catch (e) { S.hotList = { error: e.message }; }
   if (S.view === "hot") render();
+}
+
+// ---------- group deals ----------
+// Venues list packages for groups; a group books a time and everyone pays their own share from one link.
+const money = (c) => "$" + (c / 100).toLocaleString(undefined, { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 });
+const fmt12 = (t) => { const [h, m] = t.split(":").map(Number); return `${((h + 11) % 12) + 1}${m ? ":" + String(m).padStart(2, "0") : ""}${h < 12 ? "am" : "pm"}`; };
+const fmtDay = (d) => new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const away = (mi) => (mi < 0.1 ? "nearby" : `${mi} mi`);
+const dealOf = (p) => (p?.gid && S.offers.find((o) => o.venue.gid === p.gid)) || null;
+function adlog(offerId, kind) {
+  try { navigator.sendBeacon("/api/market?op=adlog", new Blob([JSON.stringify({ offerId, kind })], { type: "application/json" })); } catch {}
+}
+async function loadOffers() {
+  const code = S.code, c = S.session?.center; if (!c) return;
+  try {
+    const r = await api(`/api/market?op=offers&lat=${c.latitude}&lng=${c.longitude}&radius=${Math.max((S.session.radius || 3) + 2, 5)}`);
+    if (S.code !== code) return;
+    S.offers = r.offers || []; S.ads = S.offers.filter((o) => o.boosted);
+    // Redraw so deal tags show, but never under a finger mid-swipe.
+    if (S.offers.length && !animating && !$(".card.dragging")) render();
+  } catch { /* deals are extra */ }
+}
+// Every 8 swipes, at most twice a deck, a boosted deal nearby gets a card.
+function maybeQueueAd() {
+  S.sinceAd++;
+  if (S.sinceAd < 8 || S.adCount >= 2) return;
+  const ad = S.ads.find((o) => !S.adSeen.has(o.id)); if (!ad) return;
+  Object.assign(S, { adPending: ad, sinceAd: 0, adCount: S.adCount + 1 }); S.adSeen.add(ad.id);
+  adlog(ad.id, "view");
+}
+function adCardHtml(o) {
+  return `<article class="card ad-card ${COVERS[hash(o.id) % COVERS.length]}" data-ad="${esc(o.id)}">
+    <div class="card-shade" aria-hidden="true"></div>
+    <div class="stamp yes">COOL</div><div class="stamp no">SKIP</div>
+    <div class="card-body">
+      <div class="tags-row"><span class="kind">Sponsored · Group deal</span></div>
+      <h3>${esc(o.title)}</h3>
+      <div class="meta"><span>${esc(o.venue.name)}</span><span>${esc(money(o.ppp))}/person</span><span>${away(o.distance)}</span></div>
+      <div class="where">Groups of ${o.minGroup}–${o.maxGroup}${o.includes.length ? " · " + esc(o.includes.slice(0, 3).join(" · ")) : ""}</div>
+      <button type="button" class="btn see-deal">See the deal</button>
+    </div>
+    <div class="striker" aria-hidden="true"></div>
+  </article>`;
+}
+
+function dealButton(o) {
+  return `<button class="deal" type="button" data-offer="${esc(o.id)}"><span class="top-line"><span class="v">${esc(o.venue.name)} · ${away(o.distance)}</span>${o.boosted ? `<span class="sponsor">Sponsored</span>` : ""}</span>
+    <h3>${esc(o.title)}</h3><span><span class="price">${esc(money(o.ppp))}</span> per person · groups of ${o.minGroup}–${o.maxGroup}</span>
+    ${o.includes.length ? `<span class="inc">${esc(o.includes.join(" · "))}</span>` : ""}</button>`;
+}
+async function openDeals() {
+  const a = lastArea(); if (!a) return;
+  S.deals = null; setView("deals");
+  try { S.deals = (await api(`/api/market?op=offers&lat=${a.lat}&lng=${a.lng}&radius=15`)).offers; }
+  catch (e) { S.deals = { error: e.message }; }
+  if (S.view === "deals") render();
+}
+function viewDeals() {
+  const a = lastArea(), list = S.deals;
+  const root = el(`<div class="app stack-y"><button type="button" class="link" data-back style="align-self:flex-start">← Back</button>
+    <div class="greet"><h2>🎟 Group deals ${a?.label === "you" ? "near you" : "near " + esc(a?.label || "you")}</h2><p class="muted">Packages venues made for groups. Pick a time, then everyone pays their own share from one link.</p></div>
+    <div class="list stack-y" id="dealList"></div></div>`);
+  const box = $("#dealList", root);
+  if (!list) box.append(el(`<div class="skeleton" style="height:180px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>`));
+  else if (list.error) box.append(el(`<div class="notice">${esc(list.error)}</div>`));
+  else if (!list.length) box.append(el(`<div class="empty"><span style="font-size:30px" aria-hidden="true">🎟</span><b>No group deals here yet</b><p class="muted">Know a spot that should be on here? Send them to <a href="/venue.html">Matchbook for venues</a>.</p></div>`));
+  else for (const o of list) box.append(el(dealButton(o)));
+  root.addEventListener("click", (e) => {
+    if (e.target.closest("[data-back]")) return leave();
+    const d = e.target.closest("[data-offer]"); if (d) openOffer(d.dataset.offer, "deals");
+  });
+  return root;
+}
+
+async function openOffer(id, from = "") {
+  Object.assign(S, { offerData: null, offerFrom: from, offerForm: { date: "", time: "", size: 0 } });
+  setView("offer");
+  await loadOffer(id);
+}
+async function loadOffer(id, date = "") {
+  try {
+    const d = await api(`/api/market?op=offer&id=${encodeURIComponent(id)}${date ? "&date=" + date : ""}`);
+    S.offerData = d;
+    const f = S.offerForm, people = S.code ? participants().length : 0;
+    f.date = d.date; if (!d.times.some((t) => t.time === f.time)) f.time = d.times[0]?.time || "";
+    if (!f.size) f.size = Math.min(Math.max(people || d.offer.minGroup, d.offer.minGroup), d.offer.maxGroup);
+  } catch (e) { S.offerData = { error: e.message }; }
+  if (S.view === "offer") render();
+}
+function offerBack() {
+  if (S.offerFrom === "deck" && S.code) { S.view = ""; route(); }
+  else if (S.offerFrom === "deals") setView("deals");
+  else leave();
+}
+function viewOffer() {
+  const d = S.offerData, f = S.offerForm;
+  const root = el(`<div class="app stack-y"><button type="button" class="link" data-back style="align-self:flex-start">← Back</button></div>`);
+  $("[data-back]", root).addEventListener("click", offerBack);
+  if (!d) { root.append(el(`<div class="skeleton" style="height:300px;width:100%" aria-hidden="true"><div class="sk-img"></div></div>`)); return root; }
+  if (d.error) { root.append(el(`<div class="notice">${esc(d.error)}</div>`)); return root; }
+  const o = d.offer, v = d.venue, total = o.ppp * f.size;
+  root.append(el(`<section class="offer-hero ${COVERS[hash(o.id) % COVERS.length]}"><span style="font-weight:700;opacity:.85">${esc(v.name)} · ${esc(v.address)}</span>
+    <h2>${esc(o.title)}</h2><span class="price">${esc(money(o.ppp))} per person</span>
+    <span style="opacity:.9">Groups of ${o.minGroup}–${o.maxGroup} · about ${o.duration >= 60 ? `${Math.round(o.duration / 6) / 10} hours` : `${o.duration} minutes`}</span></section>`));
+  if (o.about || o.includes.length || v.about) root.append(el(`<section class="panel">${o.about ? `<p>${esc(o.about)}</p>` : ""}
+    ${o.includes.length ? `<div><div class="eyebrow">What's included</div><ul class="inc-list">${o.includes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+    ${v.about ? `<p class="small muted">${esc(v.about)}</p>` : ""}</section>`));
+  const form = el(`<section class="panel">
+    <div class="field"><span class="label">Day</span>${d.openDays.length ? `<div class="days" role="group" aria-label="Day">${d.openDays.map((day) => `<button type="button" class="chip" data-date="${day}" aria-pressed="${day === f.date}">${esc(fmtDay(day))}</button>`).join("")}</div>` : `<p class="muted">No open times in the next three weeks.</p>`}</div>
+    ${f.date ? `<div class="field"><span class="label">Time</span><div class="chips" role="group" aria-label="Time">${d.times.map((t) => `<button type="button" class="chip" data-time="${t.time}" aria-pressed="${t.time === f.time}">${esc(fmt12(t.time))}</button>`).join("") || `<span class="muted">Fully booked that day.</span>`}</div></div>` : ""}
+    <div class="field"><span class="label">How many people?</span><div class="stepper"><button type="button" class="btn" data-size="-1" ${f.size <= o.minGroup ? "disabled" : ""} aria-label="Fewer">−</button><span class="stepper-val"><b>${f.size}</b> people</span><button type="button" class="btn" data-size="1" ${f.size >= o.maxGroup ? "disabled" : ""} aria-label="More">+</button></div></div>
+    <div class="total"><span>${f.size} × ${esc(money(o.ppp))}</span><b>${esc(money(total))}</b></div>
+    <p class="small muted">You pay your share now, then send the link so everyone pays theirs. Cards are only charged once everyone has paid. If the group isn't fully paid in time, the booking is canceled and nobody is charged.</p>
+    ${S.name ? "" : nameField("dealName")}
+    <button class="btn primary block big" type="button" data-book ${f.time && d.paymentsOn ? "" : "disabled"}>${d.paymentsOn ? `Book and pay my share · ${esc(money(o.ppp))}` : "Booking opens soon"}</button>
+  </section>`);
+  form.addEventListener("click", async (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.date) { f.date = t.dataset.date; f.time = ""; haptic("light"); await loadOffer(o.id, f.date); return; }
+    if (t.dataset.time) { f.time = t.dataset.time; haptic("light"); render(); return; }
+    if (t.dataset.size) { f.size = Math.min(Math.max(f.size + +t.dataset.size, o.minGroup), o.maxGroup); render(); return; }
+    if (t.matches("[data-book]")) {
+      const input = $("#dealName", form); if (input && !takeName(input)) return toast("Add your name first.");
+      t.disabled = true; t.textContent = "Holding your time…";
+      try {
+        const { id } = await api("/api/market?op=book", { offerId: o.id, date: f.date, time: f.time, size: f.size, playerId: S.me, name: S.name, deckCode: S.offerFrom === "deck" ? S.code : "" });
+        store.set("mb.lastBooking", id);
+        const { url } = await api("/api/market?op=pay", { id, playerId: S.me, name: S.name });
+        location.href = url;
+      } catch (err) { toast(err.message); t.disabled = false; t.textContent = `Book and pay my share · ${money(o.ppp)}`; if (err.status === 409) loadOffer(o.id, f.date); }
+    }
+  });
+  root.append(form);
+  return root;
+}
+
+// ---------- a booking: who has paid, and paying your share ----------
+async function openBooking(id) {
+  stopPolling(); clearInterval(S.bookingTimer);
+  Object.assign(S, { code: null, session: null, booking: { id, loading: true } });
+  try { history.replaceState(null, "", "/b/" + id); } catch {}
+  setView("booking");
+  const load = async () => {
+    if (document.hidden) return;
+    try { const r = await api(`/api/market?op=booking&id=${id}&playerId=${S.me}`); S.booking = r.booking; }
+    catch (e) { S.booking = { id, error: e.message }; }
+    if (S.view === "booking") render();
+    if (S.booking.status && S.booking.status !== "holding") clearInterval(S.bookingTimer);
+  };
+  await load();
+  S.bookingTimer = setInterval(load, 4000);
+}
+const bookingUrl = (id) => `${NATIVE ? SITE : location.origin}/b/${id}`;
+function calendarFile(b) {
+  const stamp = (t) => new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const clean = (x) => String(x).replace(/[\\,;]/g, (c) => "\\" + c).replace(/\n/g, " ");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Matchbook//Group booking//EN", "BEGIN:VEVENT", `UID:${b.id}@matchbook`, `DTSTAMP:${stamp(Date.now())}`,
+    `DTSTART:${stamp(b.slotAt)}`, `DTEND:${stamp(b.slotAt + b.duration * 60e3)}`, `SUMMARY:${clean(`${b.title} at ${b.venueName}`)}`, `LOCATION:${clean(b.venueAddress)}`,
+    `DESCRIPTION:${clean(`Group of ${b.size}, booked and paid on Matchbook. ${bookingUrl(b.id)}`)}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  return new Blob([ics], { type: "text/calendar" });
+}
+function viewBooking() {
+  const b = S.booking;
+  const root = el(`<div class="app stack-y"></div>`);
+  if (b.loading) { root.append(el(`<div class="skeleton" style="height:260px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i><i class="w60"></i></div></div>`)); return root; }
+  if (b.error) { root.append(el(`<section class="panel"><h2 style="font-size:22px">${esc(b.error)}</h2><button class="btn" type="button" data-home>Back to start</button></section>`)); $("[data-home]", root).addEventListener("click", leave); return root; }
+  const paid = b.shares.filter((s) => s.status === "paid").length, open = b.shares.filter((s) => s.status === "open").length;
+  const mine = b.shares.some((s) => s.mine && (s.status === "paid" || s.status === "pending"));
+  const deadline = new Date(b.holdUntil).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  const when = `${fmtDay(b.date)} at ${fmt12(b.time)}`;
+  const head = {
+    holding: [`${paid} of ${b.size} paid`, `Everyone needs to pay by ${deadline}. Cards are only charged once the whole group has paid.`],
+    confirmed: ["You're booked 🎉", "Everyone paid. See you there."],
+    expired: ["This booking ran out of time", "Not everyone paid in time, so it was canceled. Nobody was charged."],
+    canceled: ["Booking canceled", "The organizer canceled it. Nobody was charged."],
+    canceled_by_venue: ["The venue canceled", "Everyone has been refunded in full."],
+  }[b.status] || [b.status, ""];
+  root.append(el(`<div class="big-status"><div class="eyebrow">${esc(b.venueName)} · ${esc(when)}</div><h2>${esc(head[0])}</h2><p class="muted" style="margin-top:4px">${esc(head[1])}</p></div>`));
+  if (b.status === "holding") root.append(el(`<div class="meter" aria-hidden="true"><i style="width:${(paid / b.size) * 100}%"></i></div>`));
+  root.append(el(`<section class="panel"><div class="eyebrow">${esc(b.title)} · group of ${b.size} · ${esc(money(b.ppp))} each</div>
+    <div class="shares">${b.shares.map((s) => `<div class="share ${s.status}"><b>${s.status === "open" ? "Open" : esc(s.mine ? "You" : s.name || "Someone")}</b><span>${{ paid: "Paid ✓", pending: "Paying…", open: "Waiting", released: "Released", refunded: "Refunded" }[s.status] || ""}</span></div>`).join("")}</div>
+    <p class="small muted">Organized by ${esc(b.organizer.mine ? "you" : b.organizer.name)} · ${esc(b.venueAddress)}</p></section>`));
+  const go = el(`<div style="display:flex;flex-direction:column;gap:8px"></div>`);
+  if (b.status === "holding") {
+    if (!mine && open) {
+      if (!S.name) go.append(el(`<div class="panel" style="padding:16px">${nameField("payName")}</div>`));
+      const pay = el(`<button class="btn primary block big" type="button">Pay my share · ${esc(money(b.ppp))}</button>`);
+      pay.addEventListener("click", () => payShare(pay, false));
+      go.append(pay);
+    }
+    const inv = el(`<button class="btn ${mine ? "primary" : ""} block" type="button">${ICON.share} Send the link to the group</button>`);
+    inv.addEventListener("click", () => shareBooking(b));
+    go.append(inv);
+    if (b.organizer.mine && open) {
+      const cover = el(`<button class="btn block" type="button">Cover the ${open} open share${open === 1 ? "" : "s"} · ${esc(money(open * b.ppp))}</button>`);
+      cover.addEventListener("click", () => payShare(cover, true));
+      go.append(cover);
+    }
+    if (b.organizer.mine) {
+      const cancel = el(`<button class="btn ghost block" type="button">Cancel booking</button>`);
+      cancel.addEventListener("click", async () => {
+        if (!confirm("Cancel this booking? Nobody has been charged yet, and everyone's card hold is released.")) return;
+        try { await api("/api/market?op=cancel", { id: b.id, playerId: S.me }); toast("Canceled"); openBooking(b.id); } catch (e) { toast(e.message); }
+      });
+      go.append(cancel);
+    }
+  }
+  if (b.status === "confirmed") {
+    const cal = el(`<button class="btn primary block" type="button">Add to my calendar</button>`);
+    cal.addEventListener("click", () => { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(calendarFile(b)), download: "matchbook-booking.ics" }); a.click(); });
+    go.append(cal, el(`<a class="btn block" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.venueName + ", " + b.venueAddress)}" target="_blank" rel="noopener">Directions</a>`));
+  }
+  if (b.deckCode) { const back = el(`<button class="btn ghost block" type="button">Back to the deck</button>`); back.addEventListener("click", () => { clearInterval(S.bookingTimer); openSession(b.deckCode); }); go.append(back); }
+  const home = el(`<button class="btn ghost block" type="button">Matchbook home</button>`); home.addEventListener("click", leave); go.append(home);
+  root.append(go);
+  return root;
+}
+async function payShare(btn, rest) {
+  const input = $("#payName"); if (input && !takeName(input)) return toast("Add your name first.");
+  btn.disabled = true;
+  try { const { url } = await api("/api/market?op=pay", { id: S.booking.id, playerId: S.me, name: S.name, rest }); location.href = url; }
+  catch (e) { btn.disabled = false; toast(e.message); }
+}
+async function shareBooking(b) {
+  const url = bookingUrl(b.id), text = `We're booked for ${b.title} at ${b.venueName}, ${fmtDay(b.date)} at ${fmt12(b.time)}! Pay your share (${money(b.ppp)}) so it's locked in:`;
+  if (NATIVE && Plug.Share) { try { await Plug.Share.share({ title: "Matchbook", text, url }); } catch {} return; }
+  if (navigator.share) { try { await navigator.share({ title: "Matchbook", text, url }); return; } catch (e) { if (e?.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast("Link copied. Paste it in your group chat."); } catch { toast(url); }
 }
 
 // ---------- crews ----------
@@ -2220,7 +2477,7 @@ function setView(v) { S.view = v; render(); window.scrollTo(0, 0); }
 function render() {
   const pill = $("#codePill");
   pill.hidden = !S.code; pill.textContent = S.code ? "CODE " + S.code : "";
-  const fn = { bill: viewBill, board: viewBoard, tier: viewTier, tierlist: viewTierList, quest: viewQuest, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
+  const fn = { bill: viewBill, board: viewBoard, tier: viewTier, tierlist: viewTierList, quest: viewQuest, checkin: viewCheckin, mine: viewMine, crew: viewCrew, crewName: viewCrewName, claim: viewClaim, home: viewHome, hot: viewHot, deals: viewDeals, offer: viewOffer, booking: viewBooking, name: viewName, loading: viewLoading, swipe: viewSwipe, waiting: viewWaiting, rank: viewRank, results: viewResults, missing: viewMissing }[S.view];
   const v = $("#view"), next = fn(), cur = v.firstElementChild;
   document.body.classList.toggle("with-tabs", S.view === "home");
   if (S.lastView === S.view && cur && cur.tagName === next.tagName && cur.className === next.className) patch(cur, next);
@@ -2303,6 +2560,9 @@ function homePick() {
     const hot = el(`<button class="hot-entry" type="button"><span class="fire" aria-hidden="true">🔥</span><span><b>Hot on Matchbook</b><span>Where groups ${area.label === "you" ? "near you" : "near " + esc(area.label)} actually go</span></span><i aria-hidden="true">→</i></button>`);
     hot.addEventListener("click", openHot);
     wrap.append(hot);
+    const deals = el(`<button class="hot-entry" type="button"><span class="fire" aria-hidden="true">🎟</span><span><b>Group deals</b><span>Packages for groups ${area.label === "you" ? "near you" : "near " + esc(area.label)}, book and split it</span></span><i aria-hidden="true">→</i></button>`);
+    deals.addEventListener("click", openDeals);
+    wrap.append(deals);
   }
   if (S.crewFor) {
     const banner = el(`<div class="notice crew-banner"><b>👥 New deck for ${esc(S.crewFor.name)}</b><br><span class="small">Everyone in the crew gets it as a notification, with no link to send.</span> <button type="button" class="link small">Not for the crew</button></div>`);
@@ -2481,7 +2741,7 @@ function cardHtml(p, cls = "") {
     <button type="button" class="fav-btn" data-fav="${esc(p.id)}" aria-pressed="${isFav(p)}" aria-label="Save to favorites">${ICON.star}</button>
     <a class="maps map-btn" href="${esc(mapsUrl(p))}" target="_blank" rel="noopener" aria-label="Open in Google Maps">${ICON.pin}</a>
     <div class="card-body">
-      <div class="tags-row"><span class="kind">${esc(p.kind || S.session.label)}</span>${hotOf(p)?.hot ? `<span class="hot-tag">🔥 Hot on Matchbook</span>` : ""}</div>
+      <div class="tags-row"><span class="kind">${esc(p.kind || S.session.label)}</span>${hotOf(p)?.hot ? `<span class="hot-tag">🔥 Hot on Matchbook</span>` : ""}${dealOf(p) ? `<span class="deal-tag">🎟 Group deal</span>` : ""}</div>
       <h3>${esc(p.name)}</h3>
       <div class="meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div>
       <div class="where">${esc(p.address)}</div>
@@ -2508,8 +2768,15 @@ function viewSwipe() {
     ${S.history.length ? "" : `<p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe right if you'd go, left if you wouldn't." : "Drag the card, tap the buttons, or use ← and → keys."}</p>`}
   </div>`);
   const stack = $("#stack", root);
-  if (left[1]) stack.append(el(cardHtml(left[1], "behind")));
-  if (left[0]) { const c = el(cardHtml(left[0])); stack.append(c); wireCard(c); }
+  if (S.adPending && left[0]) {
+    // A sponsored group deal, every so often between swipes. Either swipe just moves on.
+    stack.append(el(cardHtml(left[0], "behind")));
+    const c = el(adCardHtml(S.adPending)); stack.append(c); wireCard(c);
+    $(".see-deal", c).addEventListener("click", () => { adlog(S.adPending.id, "tap"); openOffer(S.adPending.id, "deck"); });
+  } else {
+    if (left[1]) stack.append(el(cardHtml(left[1], "behind")));
+    if (left[0]) { const c = el(cardHtml(left[0])); stack.append(c); wireCard(c); }
+  }
   if (left[2]?.photo) { const i = new Image(); i.src = photoUrl(left[2]); } // warm the next photo
   $("#passBtn", root).addEventListener("click", () => flyTop(-1));
   $("#likeBtn", root).addEventListener("click", () => flyTop(1));
@@ -2549,7 +2816,7 @@ function fly(card, dir, dy) {
   card.style.transition = reduce ? "none" : "transform .32s ease-in, opacity .32s";
   card.style.transform = `translate(${dir * (window.innerWidth + 200)}px, ${dy * 0.4 + 40}px) rotate(${dir * 28}deg)`;
   card.style.opacity = 0;
-  setTimeout(() => { animating = false; decide(card.dataset.id, dir > 0); }, reduce ? 0 : 300);
+  setTimeout(() => { animating = false; if (card.dataset.ad) { S.adPending = null; render(); } else decide(card.dataset.id, dir > 0); }, reduce ? 0 : 300);
 }
 document.addEventListener("keydown", (e) => {
   if (S.view !== "swipe" || e.target.closest("input,textarea")) return;
@@ -2567,6 +2834,7 @@ function decide(id, liked) {
     if (others.length) { haptic("match"); showMatch(placeById(id), others); }
   }
   m.done = remaining().length === 0;
+  if (!m.done) maybeQueueAd();
   S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: m.done };
   saveMine();
   if (m.done) setView("waiting"); else render();
@@ -2865,6 +3133,14 @@ function viewResults() {
     <div class="row spread"><a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
     <button type="button" class="fav-inline" data-fav="${esc(top.id)}" aria-pressed="${isFav(top)}">${ICON.star}<span>${isFav(top) ? "Saved" : "Save"}</span></button></div>
   </div></section>`));
+  const winDeal = top && dealOf(top);
+  if (winDeal) {
+    const d = el(`<section class="panel"><div class="eyebrow">🎟 Group deal at ${esc(top.name)}</div><h3 style="font-size:20px">${esc(winDeal.title)}</h3>
+      <p class="muted">${esc(money(winDeal.ppp))} per person · groups of ${winDeal.minGroup}–${winDeal.maxGroup}${winDeal.includes.length ? " · " + esc(winDeal.includes.slice(0, 3).join(", ")) : ""}</p>
+      <button class="btn primary block" type="button">Book it for the group</button></section>`);
+    $("button", d).addEventListener("click", () => { adlog(winDeal.id, "tap"); openOffer(winDeal.id, "deck"); });
+    root.append(d);
+  }
   if (ranked.length > 1) {
     const opts = el(`<section class="panel"><div class="eyebrow">Book any of them</div>
       <p class="small muted">Winner booked up? Go down the list.</p>
@@ -2965,7 +3241,7 @@ async function createSavedDeck(btn) {
 
 function stopPolling() { clearInterval(S.pollTimer); S.pollTimer = null; }
 function leave() {
-  stopPolling();
+  stopPolling(); clearInterval(S.bookingTimer);
   Object.assign(S, { code: null, session: null, lastSig: null, me: ME, crewId: null, crewData: null, swipes: {}, ranks: {}, rankOrder: null, minYes: null, confirmEarly: false, history: [], mine: { likes: [], passes: [], done: false }, error: "" });
   try { history.replaceState(null, "", "/"); } catch {}
   setView("home");
@@ -2986,6 +3262,7 @@ async function refresh() {
     S.lastSig = sig;
     S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
     if (remaining().length) S.mine.done = false; // more cards were dealt
+    if (["offer", "booking", "deals", "hot"].includes(S.view)) return; // looking at a deal; the deck catches up when they come back
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
     route();
   } catch { /* keep showing what we have; the next poll tries again */ }
@@ -3030,6 +3307,7 @@ async function openSession(raw) {
   remember(r.deck);
   if (r.deck.center && r.deck.category !== "saved") store.set("mb.lastArea", JSON.stringify({ lat: r.deck.center.latitude, lng: r.deck.center.longitude, label: r.deck.area }));
   S.hot = {}; loadHot();
+  Object.assign(S, { offers: [], ads: [], adPending: null, adSeen: new Set(), adCount: 0, sinceAd: 0 }); loadOffers();
   const mine = S.swipes[S.me];
   if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };
   else { S.swipes[S.me] = { name: S.name, likes: [], passes: [], done: false }; saveMine(); } // join as a swiper
@@ -3051,7 +3329,9 @@ const billLink = billFromUrl(location.pathname);
 // Analytics: someone opened a deck link (once per deck per device).
 function trackEvent(e, extra = {}) { fetch("/api/click", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "event", e, pid: ME, ...extra }), keepalive: true }).catch(() => {}); }
 if (fromLink && store.get("mb.opened." + fromLink.toUpperCase()) !== "1") { store.set("mb.opened." + fromLink.toUpperCase(), "1"); trackEvent("link_opened", { code: fromLink.toUpperCase() }); }
-if (billLink) openBill(billLink); else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
+const bookingLink = (location.pathname.match(/^\/b\/([A-Za-z0-9]{6,24})/) || [])[1];
+if (bookingLink) { if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Your card is only charged once everyone's paid."); openBooking(bookingLink); }
+else if (billLink) openBill(billLink); else if (crewLink) openCrew(crewLink); else if (fromLink) openSession(fromLink); else render();
 </script>
 </body>
 </html>
