@@ -1643,7 +1643,7 @@ function trendingPanel(t) {
   const row = (p, i) => `<li class="trend-row">${thumb(p, "pthumb sm2")}<span class="tr-info"><b>${i + 1}. ${esc(p.name)}</b><span class="small muted">${esc([p.hood, trendLine(p)].filter(Boolean).join(" · "))}</span></span><a class="small" href="${esc(p.maps)}" target="_blank" rel="noopener">Map</a></li>`;
   const others = places.filter((p) => !bars.some((b) => b.gid === p.gid));
   const box = el(`<section class="trending stack-y">
-    <div class="pop-head"><h3>🍸 Bars popping off${where}</h3>${bars.length > 3 ? `<button type="button" class="link small" data-more>${S.barsAll ? "Top 3" : `See all ${bars.length}`}</button>` : ""}</div>
+    <div class="pop-head"><h3>🍸 Bars popping off ${win === "tonight" ? "tonight" : WIN_LABEL[win].toLowerCase()}${where}</h3>${bars.length > 3 ? `<button type="button" class="link small" data-more>${S.barsAll ? "Top 3" : `See all ${bars.length}`}</button>` : ""}</div>
     ${bars.length ? `<ol class="pop-list">${(S.barsAll ? bars : bars.slice(0, 3)).map(bigCard).join("")}</ol>`
       : `<p class="panel small muted">No bars buzzing ${WIN_LABEL[win].toLowerCase()}${where} yet. When crews swipe, pick and check in, they show up here, ranked only by what people actually do. Never paid.</p>`}
     ${others.length ? `<div class="panel"><div class="eyebrow">🔥 Also trending${where}</div><ol class="trend-list">${others.map(row).join("")}</ol></div>` : ""}
