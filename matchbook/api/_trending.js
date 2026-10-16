@@ -5,6 +5,8 @@ import { pipeline, hashToObject } from "./_lib.js";
 import { inManhattan, hoodOf, details } from "./_best.js";
 import { cellOf, month, boardKey } from "./_hot.js";
 
+// One answer per window + where for a minute, so opening the Top tab is quick and doesn't re-ask Google.
+const memo = new Map(), MEMO_MS = 60e3;
 export const POINTS = { yes: 1, match: 3, win: 8, checkin: 5 };
 const N_KEEP = 3 * 86400, W_KEEP = 21 * 86400, LOC_KEEP = 30 * 86400;
 const nyDate = (t) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t));
@@ -15,6 +17,7 @@ const periods = () => { const n = nightOf(); return [[`tr:n:${n}`, N_KEEP], [`tr
 // Redis commands that count one bit of activity on a place (n may be negative after an undo).
 export function trendCmds(p, field, n = 1) {
   if (!POINTS[field] || !n || !p?.gid || !inManhattan(p.lat, p.lng)) return [];
+  memo.clear(); // this instance shows its own new activity right away (others within a minute)
   const hood = hoodOf(p.lat, p.lng), cmds = [["HSET", "tr:loc", p.gid, `${(+p.lat).toFixed(4)},${(+p.lng).toFixed(4)},${hood}`], ["EXPIRE", "tr:loc", LOC_KEEP]];
   for (const [key, ttl] of periods()) {
     cmds.push(["ZINCRBY", key, POINTS[field] * n, p.gid], ["HINCRBY", `${key}:c`, `${p.gid}|${field}`, n], ["ZINCRBY", `${key}:h`, POINTS[field] * n, hood]);
@@ -41,10 +44,24 @@ async function ranked(window) {
   return { list: pairs(flat).filter(([, s]) => s > 0), counts: c, hoods: pairs(hoods).filter(([, s]) => s > 0) };
 }
 
-// The trending list for a window and a where ({kind, label, lat, lng, mi} from whereFrom).
-export async function trending(window, where, { limit = 10, checkinMin = 2 } = {}) {
+// Bars (and pubs, lounges, clubs...), by Google's type name or the place's own name.
+export const isBar = (p) => /\b(bar|pub|tavern|lounge|club|brew|saloon|beer|taproom|tap room|speakeasy|ale ?house|wine|cocktail|cantina|izakaya|biergarten|beer garden)/i.test(`${p.kind || ""} ${p.name || ""}`);
+
+const whereKey = (w) => (w.kind === "hood" ? "h:" + w.label : w.lat != null ? `n:${(+w.lat).toFixed(3)},${(+w.lng).toFixed(3)},${w.mi}` : "all");
+
+// The trending list for a window and a where ({kind, label, lat, lng, mi} from whereFrom):
+//   places: the top places; bars: the top bars; hoods: every neighborhood with activity (points, spots, its top place).
+export async function trending(window, where, opts = {}) {
+  const key = window + "|" + whereKey(where) + "|" + (opts.limit || 10), hit = memo.get(key);
+  if (hit && Date.now() - hit.at < MEMO_MS) return hit.v;
+  const v = await compute(window, where, opts);
+  memo.set(key, { at: Date.now(), v }); if (memo.size > 200) memo.delete(memo.keys().next().value);
+  return v;
+}
+
+async function compute(window, where, { limit = 10, checkinMin = 2 } = {}) {
   const r = await ranked(window);
-  if (!r.list.length) return { window, places: [], hoods: [] };
+  if (!r.list.length) return { window, places: [], bars: [], hoods: [] };
   const locRows = await pipeline([["HMGET", "tr:loc", ...r.list.map(([g]) => g)]]);
   const loc = {}; (locRows[0] || []).forEach((v, i) => { if (v) { const [lat, lng, hood] = String(v).split(","); loc[r.list[i][0]] = { lat: +lat, lng: +lng, hood }; } });
   // Places counted before coordinates were kept: look them up (names come from Google anyway).
@@ -57,17 +74,20 @@ export async function trending(window, where, { limit = 10, checkinMin = 2 } = {
     if (where.lat != null) return MI(where, l) <= where.mi;
     return true;
   };
-  const top = r.list.filter(([g]) => inWhere(g)).slice(0, limit);
+  const here = r.list.filter(([g]) => inWhere(g));
+  const top = here.slice(0, Math.max(limit, 30));
   const names = await details(top.map(([g]) => g));
   // Lifetime counts for this month's view (the monthly lists keep points only).
   let life = {};
   if (window === "month" && top.length) { const rows = await pipeline(top.map(([g]) => ["HGETALL", `place:${g}`])); top.forEach(([g], i) => { life[g] = Object.fromEntries(Object.entries(hashToObject(rows[i])).map(([k, v]) => [k, Number(v) || 0])); }); }
-  const places = top.filter(([g]) => names[g]).map(([g, pts]) => {
+  const full = top.filter(([g]) => names[g]).map(([g, pts]) => {
     const c = r.counts ? r.counts[g] || {} : life[g] || {};
     return { ...names[g], hood: loc[g]?.hood || names[g].hood, points: pts, yes: Math.max(0, c.yes || 0), match: Math.max(0, c.match || 0), win: Math.max(0, c.win || 0), checkin: (c.checkin || 0) >= checkinMin ? c.checkin : 0 };
   });
-  // Hottest neighborhoods (tonight / this week), or worked out from the places (this month).
-  let hoods = r.hoods || [];
-  if (window === "month") { const h = {}; for (const [g, s] of r.list) if (loc[g]?.hood && loc[g].manhattan !== false) h[loc[g].hood] = (h[loc[g].hood] || 0) + s; hoods = Object.entries(h).sort((a, b) => b[1] - a[1]); }
-  return { window, places, hoods: hoods.slice(0, 5).map(([hood, points]) => ({ hood, points })) };
+  // Neighborhoods: everything with activity here, with its hottest place we know by name.
+  const h = {};
+  for (const [g, pts] of here) { const n = loc[g].hood; if (!n) continue; const x = (h[n] ||= { hood: n, points: 0, spots: 0, top: null }); x.points += pts; x.spots++; }
+  for (const p of full) { const x = h[p.hood]; if (x && !x.top) x.top = { gid: p.gid, name: p.name, photo: p.photo }; }
+  const hoods = Object.values(h).sort((a, b) => b.points - a.points);
+  return { window, places: full.slice(0, limit), bars: full.filter(isBar).slice(0, limit), hoods };
 }
