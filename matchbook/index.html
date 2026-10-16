@@ -575,7 +575,7 @@ button.pill { cursor: pointer; }
 @keyframes live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--match) 60%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 .quiet-note { margin: -4px 0 0; }
-.hood-strip h3, .pop-head h3, .lists-head h3 { font-size: 19px; letter-spacing: -.01em; }
+.hood-strip h3, .pop-head h3 { font-size: 19px; letter-spacing: -.01em; }
 .hood-strip { display: flex; flex-direction: column; gap: 10px; }
 .hood-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .hood-box { border: 0; border-radius: 18px; padding: 12px 14px; min-height: 96px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; text-align: left; cursor: pointer; background: color-mix(in srgb, var(--match) var(--mix, 0%), var(--sunk)); color: var(--ink); }
@@ -597,8 +597,7 @@ button.pill { cursor: pointer; }
 .pop-meta { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 14px; }
 .pop-bar { display: block; height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
 .pop-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--sulfur), var(--match)); }
-.lists-head { margin-top: 10px; }
-.lists-head p { margin: 2px 0 0; }
+.lists-note { margin: -4px 0 0; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -1516,6 +1515,7 @@ const miLabel = (mi) => (mi === 0.5 ? "½ mi" : `${mi} mi`);
 // Where: all of Manhattan, a neighborhood (pick or type one), or a radius around you. It sticks until you change it.
 S.near = (() => { try { const n = JSON.parse(store.get("mb.near") || "null"); return n && Number.isFinite(n.lat) && RADII.includes(n.mi) ? n : null; } catch { return null; } })();
 S.hood = store.get("mb.hood") || "";
+S.topMode = store.get("mb.topMode") === "rankings" ? "rankings" : "tonight";
 try { S.hoodList = JSON.parse(store.get("mb.hoods") || "null"); } catch {}
 const nearQS = () => (S.hood ? `&area=${encodeURIComponent(S.hood)}` : S.near ? `&lat=${S.near.lat}&lng=${S.near.lng}&mi=${S.near.mi}` : "");
 const whereName = () => S.hood || (S.near ? `within ${miLabel(S.near.mi)} of you` : "Manhattan");
@@ -1560,7 +1560,7 @@ const thumb = (p, cls = "pthumb") => `<span class="${cls} ${COVERS[hash(p.gid ||
 const FEATURED_HOODS = ["Lower East Side", "East Village", "West Village", "Chelsea", "Murray Hill", "Upper East Side", "Financial District"];
 const SHORT_HOOD = { "Lower East Side": "LES", "Upper East Side": "UES", "Upper West Side": "UWS", "Financial District": "FiDi", "Meatpacking District": "Meatpacking", "Greenwich Village": "Greenwich Vil.", "Battery Park City": "Battery Park" };
 const WIN_LABEL = { tonight: "Tonight", week: "This week", month: "This month" };
-const topKey = () => `mb.top:${S.hood || (S.near ? `${S.near.lat},${S.near.lng},${S.near.mi}` : "all")}:${S.trendWin || "tonight"}`;
+const topKey = () => `mb.top:${S.hood || (S.near ? `${S.near.lat},${S.near.lng},${S.near.mi}` : "all")}:tonight`;
 function trendLine(p) {
   const bits = [];
   if (p.win) bits.push(`picked by ${p.win} crew${p.win === 1 ? "" : "s"}`);
@@ -1574,24 +1574,28 @@ function homeTop() {
   let d = S.topData;
   if (!d) { const c = store.get(topKey()); try { if (c) { d = S.topData = JSON.parse(c); d.stale = true; } } catch {} }
   if (!d || d.stale) loadTop();
-  const t = d?.trending, win = t?.window || S.trendWin || "tonight", where = S.hood || (S.near ? "Near you" : "Manhattan");
+  // Two views: Tonight (what's popping) and Rankings (the best-of lists), one tap apart.
+  const t = d?.trending, where = S.hood || (S.near ? "Near you" : "Manhattan"), ranks = S.topMode === "rankings";
   const wrap = el(`<div class="stack-y top-home"><div class="pulse-head">
-      <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span>Live · ${esc(where)}</div>
-      <h2>${win === "tonight" ? "What's popping tonight" : win === "week" ? "What's popping this week" : "What's popping this month"}</h2>
-      <div class="chips trend-tabs" role="group" aria-label="When">${["tonight", "week", "month"].map((w) => `<button type="button" class="chip" data-win="${w}" aria-pressed="${(S.trendWin || "tonight") === w}">${WIN_LABEL[w]}</button>`).join("")}</div></div></div>`);
+      ${ranks ? `<div class="eyebrow">🏆 Rankings</div><h2>Best of ${esc(S.hood || (S.near ? "your area" : "Manhattan"))}</h2>` : `<div class="eyebrow"><span class="live-dot" aria-hidden="true"></span>Live · ${esc(where)}</div><h2>What's popping tonight</h2>`}
+      <div class="chips trend-tabs" role="group" aria-label="View"><button type="button" class="chip" data-mode="tonight" aria-pressed="${!ranks}">🔥 Tonight</button><button type="button" class="chip" data-mode="rankings" aria-pressed="${ranks}">🏆 Rankings</button></div></div></div>`);
   wrap.addEventListener("click", onTopClick);
   const where_ = () => whereBar(() => { S.topData = null; S.barsAll = false; render(); });
-  if (!d || S.hood) wrap.append(where_());
+  if (!d || S.hood || ranks) wrap.append(where_());
   if (!d) { wrap.append(el(`<div class="skeleton" style="height:200px;width:100%" aria-hidden="true"><div class="sk-body"><i class="w40"></i><i class="w80"></i></div></div>`)); return wrap; }
   if (d.error) { wrap.append(el(`<div class="notice">${esc(d.error)}</div>`)); return wrap; }
-  if (t && t.window !== (S.trendWin || "tonight") && t.places.length) wrap.append(el(`<p class="small muted quiet-note">Quiet ${S.trendWin === "week" ? "this week" : "tonight"} so far. Showing ${WIN_LABEL[t.window].toLowerCase()}.</p>`));
-  if (!S.hood) wrap.append(hoodStrip(t), where_());
-  wrap.append(trendingPanel(t));
-  const me = S.ciStats;
-  const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
-  ci.addEventListener("click", () => openCheckin());
-  wrap.append(ci);
-  wrap.append(el(`<div class="lists-head"><h3>Best of ${esc(S.hood || "Manhattan")}</h3><p class="small muted">Google ratings to start, then the places crews actually pick.</p></div>`));
+  if (!ranks) {
+    if (t && t.window !== "tonight" && t.places.length) wrap.append(el(`<p class="small muted quiet-note">Quiet tonight so far. Showing ${WIN_LABEL[t.window].toLowerCase()}.</p>`));
+    if (!S.hood) wrap.append(hoodStrip(t), where_());
+    wrap.append(trendingPanel(t));
+    const me = S.ciStats;
+    const ci = el(`<button class="ci-entry" type="button"><span class="tt-icon" aria-hidden="true">📍</span><span><b>Check in</b><span>${me?.points ? `⭐ ${me.points} pts${me.streak ? ` · 🔥 ${me.streak}-week streak` : ""}` : "Out somewhere? Tell your crew and earn points"}</span></span><i>→</i></button>`);
+    ci.addEventListener("click", () => openCheckin());
+    wrap.append(ci);
+    wrap.append(el(`<p class="attrib">What's popping is only what people do on Matchbook, never paid</p>`));
+    return wrap;
+  }
+  wrap.append(el(`<p class="small muted lists-note">Google ratings to start, then the places crews actually pick.</p>`));
   for (const [sec, title] of d.sections || []) {
     const list = d.boards.filter((x) => x.sec === sec);
     wrap.append(el(`<h3 class="sec-h">${esc(title)}</h3>`));
@@ -1604,7 +1608,7 @@ function homeTop() {
     }
     wrap.append(grid);
   }
-  wrap.append(el(`<p class="attrib">Photos from Google Maps · What's popping is only what people do on Matchbook, never paid</p>`));
+  wrap.append(el(`<p class="attrib">Ratings and photos from Google Maps · Rankings by Matchbook</p>`));
   return wrap;
 }
 
@@ -1627,7 +1631,7 @@ function hoodStrip(t) {
 
 // Bars popping off (big photo cards), then everything else trending. Real activity only.
 function trendingPanel(t) {
-  const win = t?.window || S.trendWin || "tonight", places = t?.places || [], bars = t?.bars || [];
+  const win = t?.window || "tonight", places = t?.places || [], bars = t?.bars || [];
   const where = S.hood ? " in " + esc(S.hood) : S.near ? " near you" : "";
   const max = Math.max(1, ...places.map((p) => p.points), ...bars.map((p) => p.points));
   const bigCard = (p, i) => `<li class="pop-card"><a class="pop-photo ${COVERS[hash(p.gid || p.name) % COVERS.length]}" href="${esc(p.maps)}" target="_blank" rel="noopener"${p.photo ? ` style="background-image:linear-gradient(180deg,rgba(0,0,0,0) 35%,rgba(0,0,0,.8)),url('${photoUrl(p, 800)}')"` : ""}>
@@ -1656,8 +1660,8 @@ function trendingPanel(t) {
   return box;
 }
 async function onTopClick(e) {
-  const w = e.target.closest("[data-win]")?.dataset.win;
-  if (w) { S.trendWin = w; S.topData = null; render(); return; }
+  const m = e.target.closest("[data-mode]")?.dataset.mode;
+  if (m) { if (m !== (S.topMode || "tonight")) { S.topMode = m; store.set("mb.topMode", m); render(); scrollTo(0, 0); } return; }
   if (e.target.closest("[data-hoods-all]")) { S.hoodsAll = !S.hoodsAll; return render(); }
   const h = e.target.closest("[data-hood]")?.dataset.hood;
   if (h) { setHood(h); S.topData = null; S.barsAll = false; render(); scrollTo(0, 0); }
@@ -1665,7 +1669,7 @@ async function onTopClick(e) {
 async function loadTop() {
   const key = topKey(); if (S.topLoading === key) return; S.topLoading = key;
   try {
-    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=trending&auto=1&window=${S.trendWin || "tonight"}${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
+    const [b, t, m] = await Promise.all([api("/api/boards?op=boards"), api(`/api/boards?op=trending&auto=1&window=tonight${nearQS()}`).catch(() => null), api(`/api/boards?op=mine&me=${ME}`).catch(() => null)]);
     b.trending = t; S.ciStats = m; S.hoodList = b.hoods; store.set("mb.hoods", JSON.stringify(b.hoods));
     if (key !== topKey()) { S.topLoading = false; return; } // the where or window changed while loading
     S.topData = b; store.set(key, JSON.stringify(b));
