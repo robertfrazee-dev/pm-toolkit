@@ -3,7 +3,7 @@
 // A group is a crew, or 2+ players who shared a deck; sessions join the same group when they share a crew or 2+ players.
 import { pipeline, today } from "./_lib.js";
 
-export const EVENTS = ["session_created", "link_opened", "joined", "swiped", "matched", "revealed", "checked_in", "rated", "same_crew", "tab_started", "tab_opened", "tab_split", "tab_paid"];
+export const EVENTS = ["session_created", "link_opened", "joined", "swiped", "matched", "revealed", "checked_in", "rated", "same_crew", "tab_started", "tab_opened", "tab_split", "tab_paid", "rsvp"];
 const KEEP = 120 * 86400;
 
 // Never throws: analytics must not break the app.

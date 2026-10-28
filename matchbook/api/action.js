@@ -7,6 +7,7 @@
 //   type "more":  {}                        host only: deal 10 more cards (same search, new places)
 //   type "nudge": {}                        anyone: remind people still swiping or ranking (push where possible)
 //   type "timer": { stage, minutes }        host only: set or clear the swiping or ranking timer (0 = no limit)
+//   type "rsvp":  { going }                 anyone, once the winner is in: "I'm in" / "can't make it"
 //   type "remove": { target }               host only: take someone out of the deck (a duplicate or someone who left)
 //   type "tick":  { code }                  anyone (and the scheduler): runs anything that's due (2-minute warnings, time's up)
 import { TTL, CODE_RE, PLAYER_RE, bump, underDailyCap, redis, pipeline, hashToObject, send, body, clientIp, allow, missingConfig, cleanName, cleanIds } from "./_lib.js";
@@ -17,6 +18,7 @@ import { findPlaces, shape } from "./_places.js";
 import { recordPlaces, swipeChanges } from "./_hot.js";
 import { scheduleTimer } from "./_schedule.js";
 import { recordCrewDeck, getCrew, addMember, saveCrew } from "./_crew.js";
+import { trendCmds } from "./_trending.js";
 
 export const TIMER_CHOICES = [0, 2, 5, 10, 15, 30, 60];
 const cleanMinutes = (m) => (TIMER_CHOICES.includes(Math.round(Number(m))) ? Math.round(Number(m)) : null);
@@ -29,11 +31,13 @@ const MAX_RANKED = 10; // more than this is a chore to drag around on a phone
 // Everyone for small groups; two-thirds once the group is bigger than three.
 export const defaultBar = (n) => (n <= 3 ? n : Math.ceil((n * 2) / 3));
 
+// A place anyone vetoed (one veto each) can't make the cut, however many yeses it has.
 function qualifying(deck, swipes, bar) {
-  const valid = new Set(deck.places.map((p) => p.id));
+  const vetoed = new Set(swipes.map((s) => s.veto).filter(Boolean));
+  const valid = new Set(deck.places.map((p) => p.id).filter((id) => !vetoed.has(id)));
   const yes = {};
   for (const s of swipes) for (const id of s.likes || []) if (valid.has(id)) yes[id] = (yes[id] || 0) + 1;
-  return deck.places.map((p) => p.id).filter((id) => (yes[id] || 0) >= bar).sort((x, y) => yes[y] - yes[x]).slice(0, MAX_RANKED);
+  return deck.places.map((p) => p.id).filter((id) => valid.has(id) && (yes[id] || 0) >= bar).sort((x, y) => yes[y] - yes[x]).slice(0, MAX_RANKED);
 }
 
 // Same scoring as the results screen: a list of n places gives n points to its top pick, n-1 to the next...
@@ -49,7 +53,7 @@ async function announceWinner(code, deck, exceptId) {
   const top = winnerOf(deck, ranks);
   if (!top) return;
   const others = (await deckPlayers(code)).filter((id) => id !== exceptId);
-  await pushToPlayers(others, { title: "It's decided", body: `You're going to ${top.name}.`, code });
+  await pushToPlayers(others, { title: "It's decided 🎉", body: `You're going to ${top.name}${deck.when?.label ? `, ${deck.when.label}` : ""}. Tap to say you're in.`, code });
 }
 
 // Counts the winner toward the place's lifetime picks and its area's hot list.
@@ -181,9 +185,10 @@ export default async function handler(req, res) {
     const isHost = !deck.hostId || deck.hostId === playerId;
 
     if (b.type === "swipe") {
-      const likes = cleanIds(b.likes, valid);
-      const passes = cleanIds(b.passes, valid).filter((id) => !likes.includes(id));
-      const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now() };
+      const veto = valid.has(String(b.veto || "")) ? String(b.veto) : "";
+      const likes = cleanIds(b.likes, valid).filter((id) => id !== veto);
+      const passes = [...new Set([...cleanIds(b.passes, valid), ...(veto ? [veto] : [])])].filter((id) => !likes.includes(id));
+      const entry = { playerId, name, likes, passes, done: !!b.done, at: Date.now(), ...(veto ? { veto } : {}) };
       const before = hashToObject(await redis("HGETALL", `deck:${code}:swipes`));
       const [added] = await pipeline([["HSET", `deck:${code}:swipes`, playerId, JSON.stringify(entry)], ["EXPIRE", `deck:${code}:swipes`, TTL]]);
       if (added === 1) { await bump("joins"); await track("joined", { pid: playerId, code, crew: deck.crew || "" }); }
@@ -309,6 +314,21 @@ export default async function handler(req, res) {
       const endsAt = b.stage === "swipe" ? next.swipeEndsAt : next.phase === "ranking" ? next.rankEndsAt : null;
       if (endsAt) await scheduleTimer(code, endsAt);
       return send(res, 200, { ok: true, endsAt });
+    }
+
+    if (b.type === "rsvp") {
+      if (!(deck.phase === "done" || deck.announced)) return send(res, 409, { error: "The group hasn't picked yet." });
+      const going = !!b.going, key = `deck:${code}:rsvp`;
+      const was = hashToObject(await redis("HGETALL", key))[playerId];
+      await pipeline([["HSET", key, playerId, JSON.stringify({ name, going, at: Date.now() })], ["EXPIRE", key, TTL]]);
+      // Someone saying they're going counts toward what's popping tonight (and comes back off if they drop out).
+      if (!!was?.going !== going) {
+        const ranks = Object.values(hashToObject(await redis("HGETALL", `deck:${code}:ranks`)));
+        const top = deck.matches.length === 1 ? deck.places.find((p) => p.id === deck.matches[0]) : winnerOf(deck, ranks);
+        if (top) await pipeline(trendCmds(top, "commit", going ? 1 : -1));
+        if (going) await track("rsvp", { pid: playerId, code, crew: deck.crew || "" });
+      }
+      return send(res, 200, { ok: true, going });
     }
 
     if (b.type === "remove") {

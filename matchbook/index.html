@@ -598,6 +598,23 @@ button.pill { cursor: pointer; }
 .pop-bar { display: block; height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
 .pop-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--sulfur), var(--match)); }
 .lists-note { margin: -4px 0 0; }
+.veto-btn { align-self: center; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.veto-btn span { font-weight: 500; }
+.veto-btn:hover { color: var(--match); }
+.veto-line { margin: 0; }
+.when-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.when-time { width: auto; min-width: 110px; padding: 8px 12px; }
+.blind p { margin: 0; }
+.my-rank { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
+.rsvp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rsvp-head h3 { font-size: 22px; letter-spacing: -.01em; margin: 2px 0; }
+.rsvp-head p { margin: 0; }
+.rsvp-n { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 76px; padding: 8px 10px; border-radius: 16px; background: var(--match); color: var(--match-ink); }
+.rsvp-n b { font-size: 30px; line-height: 1; }
+.rsvp-n span { font-size: 12px; font-weight: 700; }
+.rsvp-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rsvp-btns .picked { outline: 2px solid var(--muted); }
+.rsvp p:last-child { margin: 0; }
 .sec-h { font-family: var(--f-display); font-size: 18px; margin: 10px 0 -2px; }
 .near-chips .chip { white-space: nowrap; }
 .hood-pick { width: 100%; }
@@ -961,7 +978,7 @@ function rememberForm(f) {
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 function showMatch(p, others) {
   if (!p) return;
-  const who = others.length <= 2 ? others.join(" & ") : `${others.length} others`;
+  const who = others === 1 ? "1 other" : `${others} others`;
   const o = el(`<div class="moment ${coverFor(p)}" role="status"><div class="moment-inner">
     <div class="moment-kicker">It's a match</div><h2>${esc(p.name)}</h2><p>You and ${esc(who)} said yes</p></div></div>`);
   document.body.append(o);
@@ -992,7 +1009,7 @@ function confetti(canvas) {
 }
 
 // A 1080×1350 image of the plan for the group chat (no Google photo: it can't be drawn into an image).
-async function planImage(p) {
+async function planImage(p, extra = "") {
   const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
   const x = c.getContext("2d"), css = getComputedStyle(document.documentElement);
   const bg = css.getPropertyValue("--" + coverFor(p)).trim() || "#1F3A5F", ink = css.getPropertyValue("--cov-ink").trim() || "#FFF7EA";
@@ -1012,14 +1029,17 @@ async function planImage(p) {
   x.font = '600 42px Figtree, sans-serif'; x.globalAlpha = .9;
   x.fillText([p.kind, p.rating ? "★ " + p.rating.toFixed(1) : "", p.price].filter(Boolean).join("  ·  "), 80, y);
   x.fillText(p.address || "", 80, y + 62, W - 160); x.globalAlpha = 1;
+  if (extra) { x.font = '800 64px "Bricolage Grotesque", sans-serif'; x.fillText(extra, 80, y + 170, W - 160); }
   x.font = '700 30px "JetBrains Mono", monospace'; x.fillText("PICKED TOGETHER WITH MATCHBOOK", 80, H - 200);
   return new Promise((ok) => c.toBlob(ok, "image/png"));
 }
 async function sharePlan(p, btn) {
   btn.disabled = true;
-  const text = `We're going to ${p.name}! ${mapsUrl(p)}`;
+  const r = rsvpTally(), when = S.session?.when?.label;
+  const extra = [when, r.everyone.length > 1 ? `${r.ins.length} of ${r.everyone.length} in` : ""].filter(Boolean).join(" · ");
+  const text = `We're going to ${p.name}${when ? `, ${when}` : ""}!${r.everyone.length > 1 ? ` ${r.ins.length} of ${r.everyone.length} in so far. Tap to say if you're in: ${inviteUrl(S.code)}` : ""} ${mapsUrl(p)}`;
   try {
-    const blob = await planImage(p), file = blob && new File([blob], "matchbook-plan.png", { type: "image/png" });
+    const blob = await planImage(p, extra), file = blob && new File([blob], "matchbook-plan.png", { type: "image/png" });
     if (NATIVE && Plug.Share) await Plug.Share.share({ title: "Matchbook", text, url: SITE });
     else if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text });
     else if (navigator.share) await navigator.share({ text });
@@ -1563,6 +1583,7 @@ const WIN_LABEL = { tonight: "Tonight", week: "This week", month: "This month" }
 const topKey = () => `mb.top:${S.hood || (S.near ? `${S.near.lat},${S.near.lng},${S.near.mi}` : "all")}:tonight`;
 function trendLine(p) {
   const bits = [];
+  if (p.commit) bits.push(`${p.commit} going`);
   if (p.win) bits.push(`picked by ${p.win} crew${p.win === 1 ? "" : "s"}`);
   if (p.checkin) bits.push(`${p.checkin} checked in`);
   if (p.match > p.win) bits.push(`on ${p.match} shortlist${p.match === 1 ? "" : "s"}`);
@@ -2340,6 +2361,8 @@ const participants = () => Object.keys(S.swipes);
 const nameOf = (pid) => pid === S.me ? "You" : (S.swipes[pid]?.name || S.ranks[pid]?.name || "Someone");
 function likeCounts() {
   const c = {};
+  // Before the reveal the server sends everyone else's yeses as counts only; add your own.
+  if (S.yes) { Object.assign(c, S.yes); for (const id of S.mine.likes) c[id] = (c[id] || 0) + 1; return c; }
   for (const s of Object.values(S.swipes)) for (const id of s.likes || []) c[id] = (c[id] || 0) + 1;
   return c;
 }
@@ -2415,7 +2438,9 @@ function personSheet(pid) {
   const name = nameOf(pid), rank = S.ranks[pid]?.order?.filter((id) => placeById(id)) || [], sw = S.swipes[pid] || {};
   const winner = S.session.phase === "done" || S.session.announced ? tally().ranked[0] : null;
   const likes = (sw.likes || []).filter((id) => placeById(id));
-  const body = rank.length
+  const hidden = pid !== S.me && (sw.hidden || S.ranks[pid]?.hidden);
+  const body = hidden ? `<p class="muted">🙈 Blind vote: ${esc(name)}'s picks stay hidden until the winner is revealed.</p>`
+    : rank.length
     ? `<div class="eyebrow">${pid === S.me ? "Your ranking" : `${esc(name)}'s ranking`}</div><ol>${rank.map((id) => `<li${id === winner ? ' class="win"' : ""}>${esc(placeById(id).name)}</li>`).join("")}</ol>`
     : likes.length ? `<div class="eyebrow">Said yes to ${likes.length} of ${S.session.places.length} while swiping</div><ol>${likes.map((id) => `<li>${esc(placeById(id).name)}</li>`).join("")}</ol>`
     : `<p class="muted">${esc(name)} hasn't picked anything yet.</p>`;
@@ -2529,6 +2554,24 @@ function tabBar() {
 }
 
 const filterSummary = (f) => [`${f.radius} mi`, ["Any price", "$", "$$ and under", "$$$ and under"][f.maxPrice] || "Any price", f.openNow ? "Open now" : "", `${f.count} cards`, f.swipeMin ? `${f.swipeMin} min to swipe` : "No time limit"].filter(Boolean).join(" · ");
+// When the group is going. "Now" or a day and time; places we know are closed then are left out.
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const hm = (min) => { const h = Math.floor(min / 60) % 24, m = min % 60; return `${h % 12 || 12}${m ? ":" + String(m).padStart(2, "0") : ""}${h < 12 ? "am" : "pm"}`; };
+const WHEN_TIMES = Array.from({ length: 31 }, (_, i) => 11 * 60 + i * 30); // 11am to 2am; after midnight counts as the same night
+const dayName = (off) => (off === 0 ? "Tonight" : off === 1 ? "Tomorrow" : DAYS[(new Date().getDay() + off) % 7]);
+function whenOf(f) {
+  if (f.when == null || f.when === "now") return null;
+  const off = +f.when, t = f.whenTime ?? 20 * 60, d = new Date();
+  d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + off); d.setMinutes(t);
+  return { at: d.getTime(), day: d.getDay(), min: d.getHours() * 60 + d.getMinutes(), label: `${off === 0 && t < 17 * 60 ? "Today" : dayName(off)} ${hm(t)}` };
+}
+// The times still ahead (today) or all of them (later days).
+const whenTimes = (off) => WHEN_TIMES.filter((t) => off > 0 || whenOf({ when: 0, whenTime: t }).at > Date.now() - 15 * 60e3);
+function openAt(hours, day, min) {
+  if (!hours?.length) return null;
+  const t = day * 1440 + min, W = 7 * 1440;
+  return hours.some(([o, c]) => c == null || (t >= o && t < c) || (t + W >= o && t + W < c));
+}
 const minLabel = (m) => (m ? (m === 60 ? "1 hr" : `${m} min`) : "No limit");
 
 function homePick() {
@@ -2579,6 +2622,9 @@ function homePick() {
     <div class="field"><label for="area">Where?</label>
       <div class="area-row"><input class="input" id="area" placeholder="Neighborhood, city or ZIP" value="${esc(f.lat != null ? "Current location" : f.area)}" autocomplete="off">
       <button class="btn locbtn" type="button" id="locBtn">${ICON.pin} Near me</button></div></div>
+    <div class="field"><span class="label" id="whenLbl">When?</span>
+      <div class="chips scroll" role="group" aria-labelledby="whenLbl"><button type="button" class="chip" data-when="now" aria-pressed="${f.when == null || f.when === "now"}">Now</button>${[0, 1, 2, 3, 4, 5, 6].filter((o) => whenTimes(o).length).map((o) => `<button type="button" class="chip" data-when="${o}" aria-pressed="${String(f.when) === String(o)}">${dayName(o)}</button>`).join("")}</div>
+      ${f.when != null && f.when !== "now" ? `<div class="when-row"><span class="small muted">at</span><select class="input when-time" id="whenTime" aria-label="Time">${whenTimes(+f.when).map((t) => `<option value="${t}"${t === f.whenTime ? " selected" : ""}>${hm(t)}</option>`).join("")}</select><span class="small muted">Only places open then</span></div>` : ""}</div>
     <button type="button" class="filters-toggle" id="filtersBtn" aria-expanded="${!!S.filtersOpen}"><span>Filters</span><b id="filterSum">${esc(filterSummary(f))}</b><i aria-hidden="true">${S.filtersOpen ? "−" : "+"}</i></button>
     <div class="filters" id="filters" ${S.filtersOpen ? "" : "hidden"}>
       <div class="field"><label for="radius">Radius</label>
@@ -2613,6 +2659,12 @@ function homePick() {
     if (e.target.closest("#moodClear")) { setMood(""); $("#mood", form).focus(); }
     if (n) { f.count = +n.dataset.count; pressOnly("data-count", n); sum(); }
     if (p) { f.maxPrice = +p.dataset.price; pressOnly("data-price", p); sum(); }
+    const wh = e.target.closest("[data-when]");
+    if (wh) {
+      f.when = wh.dataset.when === "now" ? "now" : +wh.dataset.when;
+      if (f.when !== "now") { const ts = whenTimes(f.when); if (!ts.includes(f.whenTime)) f.whenTime = ts.includes(20 * 60) ? 20 * 60 : ts[0]; }
+      render(); return;
+    }
     const sw = e.target.closest("[data-swmin]"), rk = e.target.closest("[data-rkmin]");
     if (sw) { f.swipeMin = +sw.dataset.swmin; pressOnly("data-swmin", sw); sum(); }
     if (rk) { f.rankMin = +rk.dataset.rkmin; pressOnly("data-rkmin", rk); }
@@ -2631,6 +2683,7 @@ function homePick() {
       if (f.cat !== "any" && f.mood.trim()) { f.cat = "any"; pressOnly("data-cat", form.querySelector('[data-cat="any"]')); }
     }
     if (t.id === "openNow") { f.openNow = t.checked; sum(); }
+    if (t.id === "whenTime") f.whenTime = +t.value;
   });
   $("#locBtn", form).addEventListener("click", () => {
     const btn = $("#locBtn", form);
@@ -2732,7 +2785,8 @@ function cardHtml(p, cls = "") {
   const meta = [
     p.rating ? `★ ${p.rating.toFixed(1)}${p.ratings ? ` <span class="dim">(${p.ratings.toLocaleString()})</span>` : ""}` : "",
     esc(p.price), p.distance != null ? `${p.distance} mi` : "",
-    p.openNow === true ? `<span class="open">Open now</span>` : p.openNow === false ? `<span class="closed">Closed</span>` : "",
+    ...(S.session?.when ? [openAt(p.hours, S.session.when.day, S.session.when.min) === true ? `<span class="open">Open ${esc(S.session.when.label.replace(/^(Tonight|Today|Tomorrow|\w{3}) /, ""))}</span>` : ""]
+      : [p.openNow === true ? `<span class="open">Open now</span>` : p.openNow === false ? `<span class="closed">Closed</span>` : ""]),
   ].filter(Boolean);
   return `<article class="card ${coverFor(p)} ${cls}${p.photo ? " has-photo" : ""}" data-id="${esc(p.id)}">
     ${p.photo ? `<img class="card-img" src="${esc(photoUrl(p))}" alt="" loading="eager" draggable="false" onerror="this.closest('.card').classList.remove('has-photo'); this.remove()">` : ""}
@@ -2756,7 +2810,7 @@ function viewSwipe() {
   const s = S.session, total = s.places.length, left = remaining(), seen = total - left.length, n = participants().length;
   const where = s.category === "saved" ? (fromQuest(s.area) ? "Spots your crew hasn't tried yet" : fromBoards(s.area) ? "From Best of Manhattan" : fromHot(s) ? "From the Matchbook hot list" : "Your saved places") : s.area === "you" ? `Within ${s.radius} mi of you` : `Near ${s.area}`;
   const root = el(`<div class="app swipe-view">
-    <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
+    <div class="deck-head"><div class="dh-text"><b>${esc(s.label)}</b><span>${esc(where)}${s.when ? ` · ${esc(s.when.label)}` : ""}${n > 1 ? ` · ${n} swiping` : ""}</span></div><span class="count">${Math.min(seen + 1, total)}/${total}</span></div>
     ${s.swipeEndsAt ? `<div>${timerChip(s.swipeEndsAt, "swipe")}</div>` : ""}
     <div class="bar" aria-hidden="true"><i style="width:${(seen / total) * 100}%"></i></div>
     <div class="stack" id="stack"></div>
@@ -2765,6 +2819,8 @@ function viewSwipe() {
       <button class="round undo" type="button" id="undoBtn" aria-label="Undo last swipe" ${S.history.length ? "" : "disabled"}>${ICON.undo}</button>
       <button class="round yes" type="button" id="likeBtn" aria-label="Like">${ICON.heart}</button>
     </div>
+    ${S.mine.veto ? `<p class="hint veto-line">🚫 You vetoed ${esc(placeById(S.mine.veto)?.name || "a place")} · <button type="button" class="link small" id="unvetoBtn">Take it back</button></p>`
+      : left[0] ? `<button type="button" class="veto-btn" id="vetoBtn">🚫 Veto this one <span>· you get 1</span></button>` : ""}
     ${S.history.length ? "" : `<p class="hint">${matchMedia("(pointer: coarse)").matches ? "Swipe right if you'd go, left if you wouldn't." : "Drag the card, tap the buttons, or use ← and → keys."}</p>`}
   </div>`);
   const stack = $("#stack", root);
@@ -2781,6 +2837,9 @@ function viewSwipe() {
   $("#passBtn", root).addEventListener("click", () => flyTop(-1));
   $("#likeBtn", root).addEventListener("click", () => flyTop(1));
   $("#undoBtn", root).addEventListener("click", undo);
+  // One veto each: that place can't make the cut, however many yeses it gets. Nobody sees who vetoed it.
+  $("#vetoBtn", root)?.addEventListener("click", () => { const c = $("#stack .card:not(.behind)", root); if (!c || animating) return; S.mine.veto = c.dataset.id; fly(c, -1, 0); toast("Vetoed. It can't win this round."); });
+  $("#unvetoBtn", root)?.addEventListener("click", () => { S.mine.veto = ""; S.swipes[S.me] = { ...(S.swipes[S.me] || {}), veto: "" }; saveMine(); render(); });
   return root;
 }
 
@@ -2830,12 +2889,13 @@ function decide(id, liked) {
   S.history.push(id);
   if (liked) m.likes = [...m.likes, id]; else m.passes = [...m.passes, id];
   if (liked) {
-    const others = Object.entries(S.swipes).filter(([pid, s]) => pid !== S.me && (s.likes || []).includes(id)).map(([pid]) => nameOf(pid));
-    if (others.length) { haptic("match"); showMatch(placeById(id), others); }
+    // Blind vote: you learn how many others said yes, never who.
+    const others = S.yes ? S.yes[id] || 0 : Object.entries(S.swipes).filter(([pid, s]) => pid !== S.me && (s.likes || []).includes(id)).length;
+    if (others) { haptic("match"); showMatch(placeById(id), others); }
   }
   m.done = remaining().length === 0;
   if (!m.done) maybeQueueAd();
-  S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: m.done };
+  S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: m.done, veto: m.veto || "" };
   saveMine();
   if (m.done) setView("waiting"); else render();
 }
@@ -2846,7 +2906,8 @@ function undo() {
   if (S.session.phase !== "swiping") { toast("Ranking has started, so swipes are locked."); return; }
   const id = S.history.pop(), m = S.mine;
   m.likes = m.likes.filter((x) => x !== id); m.passes = m.passes.filter((x) => x !== id); m.done = false;
-  S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: false };
+  if (m.veto === id) m.veto = "";
+  S.swipes[S.me] = { ...(S.swipes[S.me] || {}), name: S.name, likes: m.likes, passes: m.passes, done: false, veto: m.veto || "" };
   haptic("light"); saveMine();
   setView("swipe");
 }
@@ -2856,7 +2917,7 @@ async function saveMine() {
   if (saving) { saveAgain = true; return; }
   saving = true;
   try {
-    const r = await api("/api/action", { type: "swipe", code: S.code, playerId: S.me, name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done });
+    const r = await api("/api/action", { type: "swipe", code: S.code, playerId: S.me, name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done, veto: S.mine.veto || "" });
     if (r.phase === "ranking") refresh();
   } catch (e) {
     toast(e.message);
@@ -2883,7 +2944,7 @@ function avatarRow(kind = "swipe") {
   const order = [...ppl].sort((a, b) => (done(a) ? 1 : 0) - (done(b) ? 1 : 0) || byName(a, b));
   const host = isHost();
   return el(`<div class="avatars${ppl.length > 6 ? " many" : ""}" aria-label="${kind === "rank" ? "Who has ranked" : "Who's done swiping"}">${order.map((pid) => {
-    const sw = S.swipes[pid] || {}, n = (sw.likes?.length || 0) + (sw.passes?.length || 0);
+    const sw = S.swipes[pid] || {}, n = sw.n ?? (sw.likes?.length || 0) + (sw.passes?.length || 0);
     let label, cls = "";
     if (done(pid)) { label = kind === "rank" ? "Ranked" : "Done"; cls = " done"; }
     else if (kind === "rank") [label, cls] = isHere(pid, "rank") ? ["Ranking now", " live"] : ["Hasn't ranked", " away"];
@@ -2930,9 +2991,10 @@ function matchItem(id, idx, extra = "") {
 const isHost = () => !S.session.hostId || S.session.hostId === S.me;
 const hostName = () => S.session.hostId ? nameOf(S.session.hostId) : "the host";
 function defaultBar(n) { return n <= 3 ? n : Math.ceil((n * 2) / 3); }
+const vetoedIds = () => new Set([...(S.vetoed || []), ...(S.mine?.veto ? [S.mine.veto] : [])]);
 function qualifying(minYes) {
-  const c = likeCounts();
-  return S.session.places.filter((p) => (c[p.id] || 0) >= minYes).sort((a, b) => c[b.id] - c[a.id]).map((p) => p.id);
+  const c = likeCounts(), v = vetoedIds();
+  return S.session.places.filter((p) => !v.has(p.id) && (c[p.id] || 0) >= minYes).sort((a, b) => c[b.id] - c[a.id]).map((p) => p.id);
 }
 
 function viewWaiting() {
@@ -2969,6 +3031,7 @@ function viewWaiting() {
   if (shown.length) mp.append(el(`<ul class="mlist">${shown.map((id) => matchItem(id, null, n >= 2 ? `<span class="yes">${counts[id]}/${n}</span>` : "")).join("")}</ul>`));
   else mp.append(el(`<p class="muted">${n < 2 ? "You passed on everything." : "Nothing has that many yeses yet. Lower the bar or wait for more swipes."}</p>`));
   if (ids.length > 10) mp.append(el(`<p class="small muted">The 10 with the most yeses go to the ranking round.</p>`));
+  if (vetoedIds().size) mp.append(el(`<p class="small muted">🚫 Vetoed: ${esc([...vetoedIds()].map((id) => placeById(id)?.name).filter(Boolean).join(", "))}. Nobody sees who vetoed what.</p>`));
   mp.addEventListener("click", (e) => {
     const b = e.target.closest("[data-step]"); if (!b || !host) return;
     S.minYes = minYes + +b.dataset.step; render(); saveBar();
@@ -3103,6 +3166,32 @@ function tally() {
   return { ranked, pts, per };
 }
 
+// Who's in for the plan: everyone in the deck, by what they said after the pick.
+function rsvpTally() {
+  const everyone = [...new Set([...participants(), ...Object.keys(S.ranks || {})])], r = S.rsvp || {};
+  return { everyone, ins: everyone.filter((p) => r[p]?.going), outs: everyone.filter((p) => r[p] && !r[p].going), quiet: everyone.filter((p) => !r[p]) };
+}
+function rsvpCard(top) {
+  const { everyone, ins, outs, quiet } = rsvpTally(), mine = S.rsvp?.[S.me]?.going;
+  const names = (l) => l.sort(byName).map(nameOf).join(", ");
+  const card = el(`<section class="panel rsvp" id="rsvpCard">
+    <div class="rsvp-head"><div><div class="eyebrow">The plan</div><h3>${esc(top.name)}</h3>
+      <p class="small muted">${esc([S.session.when?.label, top.address].filter(Boolean).join(" · "))}</p></div>
+      <div class="rsvp-n" aria-label="${ins.length} of ${everyone.length} in"><b>${ins.length}</b><span>of ${everyone.length} in</span></div></div>
+    <div class="rsvp-btns"><button type="button" class="btn${mine === true ? " primary" : ""}" data-rsvp="1" aria-pressed="${mine === true}">🙌 I'm in</button>
+      <button type="button" class="btn${mine === false ? " picked" : ""}" data-rsvp="0" aria-pressed="${mine === false}">Can't make it</button></div>
+    <p class="small muted">${[ins.length ? `In: ${esc(names(ins))}` : "", outs.length ? `Out: ${esc(names(outs))}` : "", quiet.length ? `Haven't said: ${esc(names(quiet))}` : ""].filter(Boolean).join(" · ")}</p></section>`);
+  card.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-rsvp]"); if (!b) return;
+    const going = b.dataset.rsvp === "1", prev = S.rsvp?.[S.me];
+    if (prev?.going === going) return;
+    S.rsvp = { ...(S.rsvp || {}), [S.me]: { name: S.name, going, at: Date.now() } }; haptic(going ? "match" : "light"); render();
+    try { await api("/api/action", { type: "rsvp", code: S.code, playerId: S.me, name: S.name, going }); }
+    catch (err) { S.rsvp = { ...S.rsvp, [S.me]: prev }; if (!prev) delete S.rsvp[S.me]; render(); toast(err.message); }
+  });
+  return card;
+}
+
 function viewResults() {
   const rankers = Object.keys(S.ranks);
   const everyone = [...new Set([...participants(), ...rankers])];
@@ -3119,11 +3208,18 @@ function viewResults() {
   </div>`);
   if (!final && S.session.rankEndsAt) root.append(el(`<div>${timerChip(S.session.rankEndsAt, "rank")}</div>`));
   if (!final) root.append(rankStatus()); // while votes are coming in, who's ranked is the main thing to see
+  // Blind vote: no "leading", no standings, no one else's list until the reveal. Just yours.
+  if (!final) {
+    const mineList = (S.ranks[S.me]?.order || []).map((id) => placeById(id)?.name).filter(Boolean);
+    root.append(el(`<section class="panel blind"><div class="eyebrow">🙈 Blind vote</div>
+      <p>Nobody sees anyone's ranking until ${isHost() ? "everyone's in or you close voting" : `everyone's in or ${esc(hostName())} closes voting`}. Then the winner is revealed for everyone at once.</p>
+      ${mineList.length ? `<div class="small muted">Your ranking</div><ol class="my-rank">${mineList.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>` : ""}</section>`));
+  }
 
-  if (top) root.append(el(`<section class="winner ${coverFor(top)}">
+  if (top && final) root.append(el(`<section class="winner ${coverFor(top)}">
     ${top.photo ? `<img src="${esc(photoUrl(top))}" alt="" style="width:calc(100% + 44px);margin:-22px -22px 4px;height:180px;object-fit:cover;display:block" onerror="this.remove()">` : ""}
     <div class="pad">
-    <div class="eyebrow" style="color:inherit;opacity:.85">${final ? "Winner" : "Leading"}${ranked.length > 1 ? ` · ${pts[top.id]} pts` : " · the only place you all agreed on"}</div>
+    <div class="eyebrow" style="color:inherit;opacity:.85">Winner${ranked.length > 1 ? ` · ${pts[top.id]} pts` : " · the only place you all agreed on"}</div>
     <h2>${esc(top.name)}</h2>
     <div>${esc([top.kind, top.rating ? "★ " + top.rating.toFixed(1) : "", top.price].filter(Boolean).join(" · "))}</div>
     <div>${esc(top.address)}</div>
@@ -3133,7 +3229,8 @@ function viewResults() {
     <div class="row spread"><a class="maps" style="font-weight:700" href="${esc(mapsUrl(top))}" target="_blank" rel="noopener">Open in Google Maps</a>
     <button type="button" class="fav-inline" data-fav="${esc(top.id)}" aria-pressed="${isFav(top)}">${ICON.star}<span>${isFav(top) ? "Saved" : "Save"}</span></button></div>
   </div></section>`));
-  const winDeal = top && dealOf(top);
+  if (final && top) root.append(rsvpCard(top));
+  const winDeal = final && top && dealOf(top);
   if (winDeal) {
     const d = el(`<section class="panel"><div class="eyebrow">🎟 Group deal at ${esc(top.name)}</div><h3 style="font-size:20px">${esc(winDeal.title)}</h3>
       <p class="muted">${esc(money(winDeal.ppp))} per person · groups of ${winDeal.minGroup}–${winDeal.maxGroup}${winDeal.includes.length ? " · " + esc(winDeal.includes.slice(0, 3).join(", ")) : ""}</p>
@@ -3141,7 +3238,7 @@ function viewResults() {
     $("button", d).addEventListener("click", () => { adlog(winDeal.id, "tap"); openOffer(winDeal.id, "deck"); });
     root.append(d);
   }
-  if (ranked.length > 1) {
+  if (final && ranked.length > 1) {
     const opts = el(`<section class="panel"><div class="eyebrow">Book any of them</div>
       <p class="small muted">Winner booked up? Go down the list.</p>
       <ul class="mlist">${ranked.map((id, i) => placeRow(placeById(id), i)).join("")}</ul></section>`);
@@ -3149,12 +3246,12 @@ function viewResults() {
   }
   // Who put each place first: the quickest read on how split the group was.
   const firstFor = (id) => rankers.filter((u) => per[id]?.[u] === 1).sort(byName).map(nameOf);
-  if (ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><table class="scores">
+  if (final && ranked.length > 1) root.append(el(`<section class="panel"><div class="eyebrow">Combined ranking</div><table class="scores">
     <thead><tr><th>#</th><th>Place</th><th class="n">Pts</th></tr></thead>
     <tbody>${ranked.map((id, i) => { const f = firstFor(id); return `<tr><td>${i + 1}</td><td>${esc(placeById(id)?.name)}${f.length ? `<div class="small muted">#1 for ${esc(f.join(", "))}</div>` : ""}</td><td class="n">${pts[id]}</td></tr>`; }).join("")}</tbody>
   </table><p class="small muted">Each person's list gives their top pick ${ranked.length} points, the next ${Math.max(ranked.length - 1, 0)}, and so on.</p></section>`));
   // Everyone's picks: a person per row (name pinned on the left), places across in the combined order. Scrolls sideways.
-  if (ranked.length > 1 && rankers.length) {
+  if (final && ranked.length > 1 && rankers.length) {
     const short = (n) => (n.length > 16 ? n.slice(0, 15) + "…" : n);
     root.append(el(`<section class="panel"><div class="row spread"><div class="eyebrow">How everyone ranked (${rankers.length})</div>${ranked.length > 3 ? `<span class="small muted">Scroll sideways →</span>` : ""}</div>
       <div class="table-wrap"><table class="scores who">
@@ -3198,6 +3295,7 @@ function viewResults() {
 // ---------- flows ----------
 async function createDeck() {
   const f = S.form; S.error = "";
+  const w = whenOf(f);
   if (f.cat === "any" && !f.mood.trim()) { S.error = "Type what you're in the mood for, or pick a kind of place."; return render(); }
   if (f.lat == null && !f.area.trim() && !f.mood.trim()) { S.error = "Add a city, neighborhood or ZIP code, or tap Near me."; return render(); }
   setView("loading");
@@ -3205,6 +3303,7 @@ async function createDeck() {
     const { code } = await api("/api/deck", {
       category: f.cat, mood: f.mood, area: f.area, lat: f.lat, lng: f.lng, areaLabel: f.lat != null ? "you" : "",
       playerId: S.me, radiusMi: f.radius, count: f.count, openNow: f.openNow, maxPrice: f.maxPrice, swipeMinutes: f.swipeMin, rankMinutes: f.rankMin, crewId: S.crewFor?.id,
+      ...(w ? { whenAt: w.at, whenDay: w.day, whenMin: w.min, whenLabel: w.label } : {}),
     });
     S.crewFor = null;
     rememberForm(f);
@@ -3252,15 +3351,16 @@ async function refresh() {
   if (!S.code || document.hidden) return;
   try {
     // Every 4th refresh (about 12 seconds) also says "I'm here, on this screen" for the live status.
-    const ping = (S.polls = (S.polls || 0) + 1) % 4 === 1 ? `&me=${S.me}&v=${presenceView()}` : "";
-    const r = await api("/api/deck?code=" + S.code + ping);
+    // "me" every time: until the reveal, the server only sends back your own picks in full.
+    const ping = (S.polls = (S.polls || 0) + 1) % 4 === 1 ? `&v=${presenceView()}` : "";
+    const r = await api(`/api/deck?code=${S.code}&me=${S.me}${ping}`);
     S.skew = r.now ? r.now - Date.now() : 0; S.seen = r.seen || {};
     // Most polls bring nothing new: leave the screen alone. (Who's here counts as news.)
     const here = Object.keys(S.seen).filter((pid) => isHere(pid)).sort().map((pid) => pid + S.seen[pid].view);
-    const sig = JSON.stringify([r.deck, r.swipes, r.ranks, here]);
+    const sig = JSON.stringify([r.deck, r.swipes, r.ranks, r.yes, r.rsvp, here]);
     if (sig === S.lastSig) return;
     S.lastSig = sig;
-    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+    S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking; S.yes = r.yes; S.vetoed = r.vetoed || []; S.rsvp = r.rsvp || {};
     if (remaining().length) S.mine.done = false; // more cards were dealt
     if (["offer", "booking", "deals", "hot"].includes(S.view)) return; // looking at a deal; the deck catches up when they come back
     if (!S.swipes[S.me]) S.swipes[S.me] = { name: S.name, likes: S.mine.likes, passes: S.mine.passes, done: S.mine.done };
@@ -3302,14 +3402,14 @@ async function openSession(raw) {
     if (twin) { S.claim = { code, pid: twin[0], name: twin[1].name }; S.code = null; return setView("claim"); }
   }
   S.skew = r.now ? r.now - Date.now() : 0; S.seen = r.seen || {};
-  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking;
+  S.session = r.deck; S.swipes = r.swipes; S.ranks = r.ranks; S.booking = r.booking; S.yes = r.yes; S.vetoed = r.vetoed || []; S.rsvp = r.rsvp || {};
   if (pushOnHere()) subscribeWebPush(true); // keep this browser's subscription pointed at whoever it is in this deck
   remember(r.deck);
   if (r.deck.center && r.deck.category !== "saved") store.set("mb.lastArea", JSON.stringify({ lat: r.deck.center.latitude, lng: r.deck.center.longitude, label: r.deck.area }));
   S.hot = {}; loadHot();
   Object.assign(S, { offers: [], ads: [], adPending: null, adSeen: new Set(), adCount: 0, sinceAd: 0 }); loadOffers();
   const mine = S.swipes[S.me];
-  if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done };
+  if (mine) S.mine = { likes: [...(mine.likes || [])], passes: [...(mine.passes || [])], done: !!mine.done, veto: mine.veto || "" };
   else { S.swipes[S.me] = { name: S.name, likes: [], passes: [], done: false }; saveMine(); } // join as a swiper
   // Cards are swiped in deck order, so the swiped ones in that order are the undo history.
   { const decided = new Set([...S.mine.likes, ...S.mine.passes]); S.history = S.session.places.map((p) => p.id).filter((id) => decided.has(id)); }
