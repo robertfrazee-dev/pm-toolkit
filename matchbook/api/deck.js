@@ -50,11 +50,12 @@ async function create(req, res) {
     areaLabel = area;
   }
 
+  const when = parseWhen(b);
   const textQuery = cat === "any" ? mood : mood ? `${mood} ${CATEGORIES[cat].query}` : CATEGORIES[cat].query;
   const maxPrice = Math.round(Number(b.maxPrice) || parsed.maxPrice || 0);
   // Kept with the deck so "Deal 10 more" can run the same search again.
   const search = {
-    textQuery, center, radius, openNow: !!(b.openNow || parsed.openNow),
+    textQuery, center, radius, openNow: !when && !!(b.openNow || parsed.openNow), when: when ? { day: when.day, min: when.min } : undefined,
     priceLevels: maxPrice >= 1 && maxPrice <= 4 ? PRICE_LEVELS.slice(0, maxPrice) : [],
     skipChains: !CHAINS.test(mood),
   };
@@ -64,11 +65,20 @@ async function create(req, res) {
   const places = kept.map((p, i) => shape(p, i, center));
   const deck = {
     category: cat, mood, label: mood ? mood.charAt(0).toUpperCase() + mood.slice(1) : CATEGORIES[cat].label,
-    area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(), search, deals: 0,
+    area: areaLabel, radius, center, places, phase: "swiping", matches: [], createdAt: Date.now(), search, deals: 0, when: when || undefined,
     hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
   };
   await bump("decks_google");
   return saveDeck(res, withTimers(deck, b));
+}
+
+// When the group is going: the phone sends its local weekday and minute (the places' hours are local too),
+// the moment itself, and a label like "Tonight 9pm". Up to two weeks out.
+function parseWhen(b) {
+  const day = Math.round(Number(b.whenDay)), min = Math.round(Number(b.whenMin)), at = Number(b.whenAt);
+  if (b.whenDay == null || b.whenDay === "" || !(day >= 0 && day <= 6 && min >= 0 && min < 1440) || !Number.isFinite(at)) return null;
+  if (at < Date.now() - 3 * 3600e3 || at > Date.now() + 14 * 864e5) return null;
+  return { day, min, at, label: text(b.whenLabel, 30) || "Later" };
 }
 
 // The host's timers: how long swiping stays open (starts now) and how long ranking gets once it starts.
@@ -129,7 +139,7 @@ async function createFromSaved(req, res, b) {
   const hot = b.source === "hot" || b.source === "board", near = text(b.area, 60);
   return saveDeck(res, withTimers({
     category: "saved", mood: "", label: b.source === "quest" ? text(b.label, 60) || "Our quest" : b.source === "board" ? text(b.label, 60) || "Best of Manhattan" : hot ? text(b.label, 60) || (near ? `Hot near ${near}` : "Hot nearby") : "Our saved places", area: b.source === "quest" ? "a crew quest" : b.source === "board" ? "Best of Manhattan" : hot ? "the hot list" : "your saved list", radius: 0, center, places,
-    phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null,
+    phase: "swiping", matches: [], createdAt: Date.now(), hostId: PLAYER_RE.test(String(b.playerId || "")) ? b.playerId : null, when: parseWhen(b) || undefined,
   }, b));
 }
 
@@ -150,14 +160,31 @@ async function read(req, res) {
   // Phones say they're here every so often, so the group can tell "ranking now" from "hasn't opened it".
   const me = q.get("me") || "", view = q.get("v") || "";
   if (PLAYER_RE.test(me) && /^[a-z]{2,10}$/.test(view)) await pipeline([["HSET", `deck:${code}:seen`, me, JSON.stringify({ at: Date.now(), view })], ["EXPIRE", `deck:${code}:seen`, TTL]]).catch(() => {});
-  let [deck, swipes, ranks, seen] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`], ["HGETALL", `deck:${code}:seen`]]);
+  let [deck, swipes, ranks, seen, rsvp] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`], ["HGETALL", `deck:${code}:seen`], ["HGETALL", `deck:${code}:rsvp`]]);
   if (!deck) return send(res, 404, { error: `No deck with code ${code}. It may have expired after a week.` });
   // A timer that ran out (or hit its 2-minute warning) acts now, even without the scheduler.
   if (timerDue(JSON.parse(deck))) {
     await tickDeck(code);
     [deck, swipes, ranks] = await pipeline([["GET", `deck:${code}`], ["HGETALL", `deck:${code}:swipes`], ["HGETALL", `deck:${code}:ranks`]]);
   }
-  return send(res, 200, { deck: JSON.parse(deck), swipes: hashToObject(swipes), ranks: hashToObject(ranks), seen: hashToObject(seen), now: Date.now(), booking: bookingConfig() });
+  const d = JSON.parse(deck);
+  return send(res, 200, { deck: d, ...blind(d, hashToObject(swipes), hashToObject(ranks), me), rsvp: hashToObject(rsvp), seen: hashToObject(seen), now: Date.now(), booking: bookingConfig() });
+}
+
+// Blind vote: until the winner is in, nobody sees anyone else's yeses, vetoes or ranking, only that they're done.
+// The group still gets the yes count per place (to see what's matching) and which places were vetoed (not by whom).
+// (It keeps an honest group honest; it isn't a secret: the data is someone's own picks, and nothing else rides on it.)
+function blind(deck, swipes, ranks, me) {
+  const vetoed = [...new Set(Object.values(swipes).map((s) => s.veto).filter(Boolean))];
+  if (deck.phase === "done" || deck.announced) return { swipes, ranks, vetoed, yes: null };
+  const yes = {}, sw = {}, rk = {};
+  for (const [pid, s] of Object.entries(swipes)) {
+    if (pid === me) { sw[pid] = s; continue; }
+    for (const id of s.likes || []) yes[id] = (yes[id] || 0) + 1;
+    sw[pid] = { name: s.name, done: !!s.done, n: (s.likes?.length || 0) + (s.passes?.length || 0), at: s.at, hidden: true };
+  }
+  for (const [pid, r] of Object.entries(ranks)) rk[pid] = pid === me ? r : { name: r.name, at: r.at, hidden: true };
+  return { swipes: sw, ranks: rk, vetoed, yes };
 }
 
 export default async function handler(req, res) {
