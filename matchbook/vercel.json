@@ -5,6 +5,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/b/:id",
+      "destination": "/index.html"
+    },
+    {
       "source": "/c/:id",
       "destination": "/index.html"
     },
@@ -15,6 +19,12 @@
     {
       "source": "/.well-known/apple-app-site-association",
       "destination": "/api/aasa"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/market?op=cron",
+      "schedule": "0 10 * * *"
     }
   ],
   "functions": {

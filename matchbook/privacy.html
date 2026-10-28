@@ -54,15 +54,19 @@ a { color: var(--match); }
 <li><b>Saved places</b> you star are kept only on your device. We never see your list.</li>
 <li><b>A random ID</b> saved on your device so the app remembers which swipes are yours. It is not tied to your identity.</li>
 <li><b>Your location</b>, only if you tap <i>Near me</i>. It is used to search for places and saved as the center of that deck, rounded to about 100 meters.</li>
+<li><b>Group deal bookings</b>, if you book one or pay a share: your first name, which share you paid, and the booking's date, time and venue. Payments are handled by <a href="https://stripe.com/privacy" rel="noopener">Stripe</a>; Matchbook never sees or stores your card number.</li>
+<li><b>Venue accounts</b> (businesses only): the business name, address, phone, contact name, email and a scrambled (hashed) password. Bank and identity details for payouts go to Stripe, not to us.</li>
 <li><b>A push notification token</b>, only if you turn on notifications in the iPhone app. It lets us tell you when it's time to rank or when a winner is picked.</li>
 </ul>
 <h2>How long we keep it</h2>
-<p>Decks, names, swipes and rankings are deleted automatically 7 days after a deck is created. Separately, Matchbook keeps anonymous running totals for each place (how many swipes it got, how many were yes, and how often groups picked it) to build the "Hot on Matchbook" list. Those totals contain no names, IDs or anything else about who swiped. Notification tokens are deleted after 90 days without use, or as soon as Apple tells us the app was removed.</p>
+<p>Booking records are kept so venues and groups have a record of what was paid and refunded. Decks, names, swipes and rankings are deleted automatically 7 days after a deck is created. Separately, Matchbook keeps anonymous running totals for each place (how many swipes it got, how many were yes, and how often groups picked it) to build the "Hot on Matchbook" list. Those totals contain no names, IDs or anything else about who swiped. Notification tokens are deleted after 90 days without use, or as soon as Apple tells us the app was removed.</p>
 <h2>Who we share it with</h2>
 <ul>
 <li><b>People in your deck</b> see your first name, whether you've finished, and your rankings.</li>
 <li><b>Google Maps</b> receives your search (category, area or location, and radius) to find places. Place details and photos come from Google. See <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy policy</a>.</li>
 <li><b>Apple</b> delivers notifications if you turn them on.</li>
+<li><b>The venue you book</b> sees the organizer's first name, the group size, and who has paid.</li>
+<li><b>Stripe</b> processes payments for group deals and pays venues.</li>
 <li>Our hosting providers (Vercel and Upstash) store the data above to run the service.</li>
 <li><b>Booking sites</b> (OpenTable, Resy, Viator, Uber) only if you tap one of their buttons. You leave Matchbook for their site, which may know you came from us so we can earn a referral fee. We count how many times each kind of button is tapped, with nothing about who tapped it.</li>
 </ul>
