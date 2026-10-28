@@ -6,10 +6,25 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: What's popping is live
+      - name: Group session upgrades are live
         run: |
           S=https://pm-toolkit-matchbook.vercel.app
-          sleep 75
-          echo "=== page has the new Top tab"; curl -s -m 30 "$S/" | grep -c "hoodStrip"
-          for q in "window=tonight&auto=1" "window=month" "window=month&area=East%20Village"; do echo "=== $q"; curl -s -m 60 -w "\n[%{http_code} %{time_total}s]\n" "$S/api/boards?op=trending&$q" | python3 -c 'import json,sys;t=sys.stdin.read();j,_,tail=t.rpartition("}");d=json.loads(j+"}");print(d["window"],"| hoods:",[(h["hood"],h["points"],h["spots"],(h["top"] or {}).get("name")) for h in d["hoods"]][:10]);print("bars:",[(p["name"],p["hood"],p["kind"],p["points"]) for p in d["bars"]]);print("places:",len(d["places"]),tail)'; done
-          echo "=== second call (cached)"; curl -s -m 60 -o /dev/null -w "[%{http_code} %{time_total}s]\n" "$S/api/boards?op=trending&window=month"
+          sleep 80
+          echo "=== page has the new code"; curl -s -m 30 "$S/" | grep -c "rsvpCard"
+          # A real deck: bars in the West Village, tonight at 9pm New York time.
+          read DAY MIN AT <<< $(TZ=America/New_York python3 -c 'import datetime,time;n=datetime.datetime.now();t=n.replace(hour=21,minute=0,second=0,microsecond=0);t=t if t>n else t+datetime.timedelta(days=1);print((t.weekday()+1)%7, 21*60, int(time.mktime(t.timetuple())*1000))')
+          echo "day=$DAY min=$MIN at=$AT"
+          R=$(curl -s -m 60 -X POST -H 'content-type: application/json' -d "{\"playerId\":\"diagrob00001\",\"area\":\"West Village, New York\",\"category\":\"bars\",\"count\":10,\"radiusMi\":1,\"whenAt\":$AT,\"whenDay\":$DAY,\"whenMin\":$MIN,\"whenLabel\":\"Tonight 9pm\"}" "$S/api/deck"); echo "$R"
+          C=$(echo "$R" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("code",""))')
+          curl -s -m 30 "$S/api/deck?code=$C&me=diagrob00001" | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["deck"];w=d.get("when");print("when:",w)
+          def op(h,day,m):
+              if not h: return None
+              t=day*1440+m
+              return any(c is None or o<=t<c or o<=t+10080<c for o,c in h)
+          for p in d["places"]: print(" ", p["name"], "|", p.get("kind"), "| hours:", len(p["hours"]) if p.get("hours") else None, "| open 9pm:", op(p.get("hours"), w["day"], w["min"]))'
+          # Veto + blind on the live deck.
+          curl -s -m 30 -X POST -H 'content-type: application/json' -d "{\"type\":\"swipe\",\"code\":\"$C\",\"playerId\":\"diagrob00001\",\"name\":\"Rob\",\"likes\":[\"p1\",\"p2\"],\"passes\":[],\"veto\":\"p3\"}" "$S/api/action"; echo
+          curl -s -m 30 -X POST -H 'content-type: application/json' -d "{\"type\":\"swipe\",\"code\":\"$C\",\"playerId\":\"diagjess0001\",\"name\":\"Jess\",\"likes\":[\"p1\"],\"passes\":[]}" "$S/api/action"; echo
+          curl -s -m 30 "$S/api/deck?code=$C&me=diagjess0001" | python3 -c 'import json,sys;d=json.load(sys.stdin);print("as Jess: rob =",d["swipes"]["diagrob00001"],"| yes =",d["yes"],"| vetoed =",d["vetoed"])'
