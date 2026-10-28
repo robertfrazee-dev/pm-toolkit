@@ -7,7 +7,7 @@ import { cellOf, month, boardKey } from "./_hot.js";
 
 // One answer per window + where for a minute, so opening the Top tab is quick and doesn't re-ask Google.
 const memo = new Map(), MEMO_MS = 60e3;
-export const POINTS = { yes: 1, match: 3, win: 8, checkin: 5 };
+export const POINTS = { yes: 1, match: 3, win: 8, checkin: 5, commit: 4 };
 const N_KEEP = 3 * 86400, W_KEEP = 21 * 86400, LOC_KEEP = 30 * 86400;
 const nyDate = (t) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t));
 export const nightOf = (t = Date.now()) => nyDate(t - 5 * 3600e3); // 5am to 5am New York time
@@ -82,7 +82,7 @@ async function compute(window, where, { limit = 10, checkinMin = 2 } = {}) {
   if (window === "month" && top.length) { const rows = await pipeline(top.map(([g]) => ["HGETALL", `place:${g}`])); top.forEach(([g], i) => { life[g] = Object.fromEntries(Object.entries(hashToObject(rows[i])).map(([k, v]) => [k, Number(v) || 0])); }); }
   const full = top.filter(([g]) => names[g]).map(([g, pts]) => {
     const c = r.counts ? r.counts[g] || {} : life[g] || {};
-    return { ...names[g], hood: loc[g]?.hood || names[g].hood, points: pts, yes: Math.max(0, c.yes || 0), match: Math.max(0, c.match || 0), win: Math.max(0, c.win || 0), checkin: (c.checkin || 0) >= checkinMin ? c.checkin : 0 };
+    return { ...names[g], hood: loc[g]?.hood || names[g].hood, points: pts, yes: Math.max(0, c.yes || 0), match: Math.max(0, c.match || 0), win: Math.max(0, c.win || 0), commit: Math.max(0, c.commit || 0), checkin: (c.checkin || 0) >= checkinMin ? c.checkin : 0 };
   });
   // Neighborhoods: everything with activity here, with its hottest place we know by name.
   const h = {};

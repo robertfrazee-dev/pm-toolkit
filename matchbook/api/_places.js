@@ -5,7 +5,7 @@ const PLACES = "https://places.googleapis.com/v1/places:searchText";
 const FIELDS = [
   "places.id", "places.displayName", "places.formattedAddress", "places.shortFormattedAddress", "places.location",
   "places.rating", "places.userRatingCount", "places.priceLevel", "places.primaryTypeDisplayName", "places.photos",
-  "places.googleMapsUri", "places.websiteUri", "places.nationalPhoneNumber", "places.editorialSummary", "places.businessStatus", "places.currentOpeningHours.openNow",
+  "places.googleMapsUri", "places.websiteUri", "places.nationalPhoneNumber", "places.editorialSummary", "places.businessStatus", "places.currentOpeningHours.openNow", "places.regularOpeningHours.periods",
   "nextPageToken",
 ].join(",");
 
@@ -73,6 +73,7 @@ export function shape(p, i, center) {
     price: PRICE[p.priceLevel] || "",
     summary: p.editorialSummary?.text || "",
     openNow: p.currentOpeningHours?.openNow ?? null,
+    hours: weekHours(p.regularOpeningHours?.periods),
     maps: p.googleMapsUri || "",
     website: p.websiteUri || "",
     phone: p.nationalPhoneNumber || "",
@@ -83,14 +84,32 @@ export function shape(p, i, center) {
   };
 }
 
+// Opening hours as [open, close] minutes from Sunday 00:00 (local time); close is null for open 24/7.
+const WEEK = 7 * 1440;
+export function weekHours(periods) {
+  if (!Array.isArray(periods) || !periods.length) return null;
+  const at = (x) => x.day * 1440 + (x.hour || 0) * 60 + (x.minute || 0);
+  return periods.filter((p) => p?.open).map((p) => {
+    if (!p.close) return [at(p.open), null];
+    const o = at(p.open); let c = at(p.close); if (c <= o) c += WEEK;
+    return [o, c];
+  });
+}
+// Is it open at this local day (0 = Sunday) and minute? null when we don't know its hours.
+export function openAt(hours, day, min) {
+  if (!hours?.length) return null;
+  const t = day * 1440 + min;
+  return hours.some(([o, c]) => c == null || (t >= o && t < c) || (t + WEEK >= o && t + WEEK < c));
+}
+
 // Big national chains rarely win a "where should we go" vote, so they're left out unless asked for by name.
 export const CHAINS = /^(?:mcdonald'?s|starbucks|dunkin'?(?: donuts)?|subway|chipotle(?: mexican grill)?|taco bell|wendy'?s|burger king|kfc|popeyes|chick-fil-a|domino'?s|pizza hut|papa john'?s|little caesars|panera(?: bread)?|applebee'?s|olive garden|chili'?s|tgi friday'?s|buffalo wild wings|five guys|panda express|jersey mike'?s|jimmy john'?s|qdoba|denny'?s|ihop|outback steakhouse|red lobster|the cheesecake factory|cheesecake factory|p\.?f\.? chang'?s|hooters|7-eleven|tim hortons|krispy kreme|baskin-robbins|dairy queen|cold stone creamery|arby'?s|white castle|pret a manger|potbelly|sweetgreen|cava|just salad|dig|joe & the juice|le pain quotidien|au bon pain|sbarro|nathan'?s famous)\b/i;
 
 // Run a search (up to 3 pages of 20), keeping open places inside the circle that aren't excluded.
 export async function findPlaces(search, { want, exclude = new Set() }) {
-  const { textQuery, center, radius, openNow, priceLevels, skipChains } = search;
+  const { textQuery, center, radius, openNow, priceLevels, skipChains, when } = search;
   const query = { textQuery, pageSize: 20, locationRestriction: { rectangle: box(center, radius) } };
-  if (openNow) query.openNow = true;
+  if (openNow && !when) query.openNow = true;
   if (priceLevels?.length) query.priceLevels = priceLevels;
   const seen = new Set(), kept = [];
   let pageToken;
@@ -101,6 +120,8 @@ export async function findPlaces(search, { want, exclude = new Set() }) {
       seen.add(p.id);
       if (p.location && miles(center, p.location) > radius) continue;
       if (skipChains && CHAINS.test(p.displayName?.text || "")) continue;
+      // Going later: leave out places we know are closed then (unknown hours stay in).
+      if (when && openAt(weekHours(p.regularOpeningHours?.periods), when.day, when.min) === false) continue;
       kept.push(p);
     }
     pageToken = r.nextPageToken;
