@@ -1,0 +1,110 @@
+// Fragments data model (spec section 4). SQLite for local dev; enum-like
+// fields are strings because SQLite has no native enums.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Area {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String    @default("")
+  color       String    @default("#64748b")
+  createdAt   DateTime  @default(now())
+  projects    Project[]
+  items       Item[]
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  areaId    String
+  area      Area     @relation(fields: [areaId], references: [id])
+  name      String
+  summary   String   @default("")
+  status    String   @default("active") // active | paused | done
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     Item[]
+}
+
+model Item {
+  id               String         @id @default(cuid())
+  projectId        String?
+  project          Project?       @relation(fields: [projectId], references: [id])
+  areaId           String
+  area             Area           @relation(fields: [areaId], references: [id])
+  type             String // task | idea | reminder | habit | event | note
+  title            String
+  body             String         @default("")
+  status           String         @default("open") // open | done | dismissed
+  dueAt            DateTime?
+  remindAt         DateTime?
+  recurrence       String? // RRULE
+  priority         String         @default("normal") // low | normal | high
+  confidence       Float          @default(1)
+  sourceFragmentId String?
+  sourceFragment   Fragment?      @relation(fields: [sourceFragmentId], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  linksFrom        Link[]         @relation("LinkFrom")
+  linksTo          Link[]         @relation("LinkTo")
+  notifications    Notification[]
+  actionRuns       ActionRun[]
+}
+
+model Fragment {
+  id              String    @id @default(cuid())
+  rawText         String
+  source          String    @default("web") // web | watch | phone | api
+  createdAt       DateTime  @default(now())
+  processedAt     DateTime?
+  organizerOutput String? // JSON
+  error           String?
+  items           Item[]
+}
+
+model Link {
+  id         String @id @default(cuid())
+  fromItemId String
+  fromItem   Item   @relation("LinkFrom", fields: [fromItemId], references: [id], onDelete: Cascade)
+  toItemId   String
+  toItem     Item   @relation("LinkTo", fields: [toItemId], references: [id], onDelete: Cascade)
+  reason     String @default("")
+}
+
+model Notification {
+  id      String    @id @default(cuid())
+  itemId  String
+  item    Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  sendAt  DateTime
+  sentAt  DateTime?
+  channel String    @default("push")
+  message String
+}
+
+model ActionRun {
+  id           String   @id @default(cuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  kind         String // draft | plan | code_context
+  status       String   @default("pending")
+  inputContext String   @default("")
+  output       String   @default("")
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+}
+
+// Single-user app: one row with id "singleton".
+model Settings {
+  id                String  @id @default("singleton")
+  userApiKey        String? // encrypted at rest (Phase 5)
+  monthlyBudgetUsd  Float   @default(10)
+  spentThisMonthUsd Float   @default(0)
+  timezone          String  @default("America/New_York")
+  quietHours        String  @default("22:00-07:00")
+}
