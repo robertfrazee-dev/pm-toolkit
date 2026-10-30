@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <style>
-  /* Layout: one calm phone-width column; bottom tab bar with a raised Capture button. Single dark look by design. */
+  /* Layout: a calm one-column command center. Static "Tell me anything" bar + 3 tabs at the bottom. Single dark look by design. */
   :root {
     --bg: #0e0f12;
     --surface: #17191e;
@@ -25,172 +25,174 @@
   body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
-  button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   a { color: inherit; }
 
-  .wrap { max-width: 38rem; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 130px; display: flex; flex-direction: column; gap: 18px; }
-  .topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--faint); flex-wrap: wrap; }
+  .wrap { max-width: 36rem; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 190px; display: flex; flex-direction: column; gap: 18px; }
+  .topline { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--faint); }
   .brand { font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .top-right { display: flex; gap: 8px; align-items: center; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
-  .seg button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
+  .seg button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
   .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--fg); }
-  .view { display: flex; flex-direction: column; gap: 22px; }
-  h1 { font-size: 1.6rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+  .gear { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; }
+  .gear svg { width: 16px; height: 16px; }
+  .view { display: flex; flex-direction: column; gap: 24px; }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0; text-wrap: balance; }
   h2 { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
   .section { display: flex; flex-direction: column; gap: 10px; }
-  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .sub { color: var(--muted); margin: 0; }
-  .back { color: var(--muted); text-decoration: none; font-size: 15px; }
-  .greet { display: flex; flex-direction: column; gap: 4px; }
-  .greet .sub { font-size: 15px; }
+  .back { color: var(--muted); text-decoration: none; font-size: 15px; background: none; border: 0; padding: 0; text-align: left; }
+  .greet { display: flex; flex-direction: column; gap: 6px; }
+  .brief { font-size: 1.1rem; color: var(--fg); margin: 0; text-wrap: pretty; }
+  .brief b { color: var(--accent); font-weight: 700; }
+  .demo-pill { font-size: 12px; color: var(--accent); border: 1px dashed rgba(242,184,75,.5); border-radius: 999px; padding: 3px 10px; align-self: flex-start; }
 
-  .note { border: 1px dashed rgba(242,184,75,.45); color: var(--muted); border-radius: 14px; padding: 10px 14px; font-size: 14px; display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-  .note strong { color: var(--accent); }
+  /* Exchange card: what you just said and what Fragments did */
+  .exchange { background: var(--surface-2); border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .exchange .you { color: var(--muted); font-size: 14px; margin: 0; }
+  .exchange .me { margin: 0; white-space: pre-wrap; }
+  .exchange ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+  .exchange .from { color: var(--faint); font-size: 13px; margin: 0; }
+  .exchange .row { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
 
-  /* Ask */
-  .ask { display: flex; gap: 8px; }
-  .ask input { flex: 1; min-width: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 12px 14px; font-size: 1rem; }
-  .answer { background: var(--surface-2); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
-  .answer p { margin: 0; white-space: pre-wrap; }
-  .answer .q { color: var(--muted); font-size: 14px; }
-
-  /* Next-up card */
-  .next { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
-  .next .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
-  .next .big { font-size: 1.9rem; font-weight: 700; line-height: 1.15; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
-  .next .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .step { font-size: 15px; color: var(--fg); background: var(--surface-2); border-radius: 12px; padding: 8px 12px; }
-  .step span { color: var(--accent); font-weight: 700; }
-  .steps { gap: 4px; }
-  .stepline { display: flex; gap: 10px; align-items: center; font-size: 15px; color: var(--muted); }
-  .stepline.now { color: var(--fg); font-weight: 700; }
-  .stepline.done span { text-decoration: line-through; color: var(--faint); }
-  .stepline small { color: var(--faint); font-weight: 400; }
-  .check.small { width: 22px; height: 22px; }
-  .check.small svg { width: 12px; height: 12px; }
-  .fixes { display: flex; flex-wrap: wrap; gap: 6px; }
-  .fix { border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+  /* Now card */
+  .now { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .now .big { font-size: 2rem; font-weight: 700; line-height: 1.12; margin: 0; text-wrap: balance; overflow-wrap: anywhere; background: none; border: 0; padding: 0; text-align: left; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .step { font-size: 15px; background: var(--surface-2); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .step .lbl { color: var(--accent); font-weight: 700; }
+  .step small { color: var(--faint); }
   .btn { border: 0; border-radius: 14px; padding: 12px 18px; font-weight: 700; background: var(--surface-2); text-decoration: none; display: inline-block; }
   .btn:hover { filter: brightness(1.15); }
   .btn.primary { background: var(--accent); color: var(--accent-ink); }
   .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
   .btn.small { padding: 8px 12px; font-size: 14px; border-radius: 10px; }
-  .btn:disabled { opacity: .35; cursor: default; filter: none; }
+  .draftchip { display: flex; gap: 10px; align-items: center; border: 1px solid rgba(242,184,75,.35); background: rgba(242,184,75,.07); color: var(--fg); border-radius: 14px; padding: 10px 12px; text-align: left; width: 100%; }
+  .draftchip b { color: var(--accent); }
+  .draftchip span { flex: 1; min-width: 0; }
 
   .alarm { background: var(--accent); color: var(--accent-ink); border-radius: 18px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
   .alarm strong { font-size: 1.15rem; }
-  .alarm .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .alarm .btn { background: rgba(0,0,0,.15); color: var(--accent-ink); }
 
-  /* Item rows */
+  /* "I took care of" */
+  .did { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .did li { border-bottom: 1px solid var(--line); }
+  .did li:last-child { border-bottom: 0; }
+  .did button { width: 100%; display: flex; gap: 12px; align-items: flex-start; background: none; border: 0; padding: 11px 0; text-align: left; }
+  .did .ico { flex: none; width: 28px; height: 28px; border-radius: 9px; background: var(--surface-2); display: grid; place-items: center; font-size: 14px; }
+  .did .txt { flex: 1; min-width: 0; }
+  .did .txt small { display: block; color: var(--faint); font-size: 13px; }
+
+  /* Compact rows */
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .item { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; min-width: 0; }
-  .check { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--faint); background: transparent; display: grid; place-items: center; margin-top: 1px; padding: 0; }
+  .item { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 11px 14px; min-width: 0; }
+  .check { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--faint); background: transparent; display: grid; place-items: center; padding: 0; }
   .check:hover { border-color: var(--muted); }
   .check.on { background: var(--ok); border-color: var(--ok); }
-  .check svg { width: 16px; height: 16px; }
-  .glyph { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--bg); margin-top: 1px; }
-  .item-main { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-  .item-title { font-size: 1.05rem; overflow-wrap: anywhere; }
+  .check svg { width: 15px; height: 15px; }
+  .glyph { flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--bg); }
+  .item-main { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .item-title { font-size: 1.02rem; overflow-wrap: anywhere; }
   .item.done .item-title { color: var(--faint); text-decoration: line-through; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .meta .hot { color: var(--accent); }
-  .meta .late { color: var(--accent); }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; flex: none; }
+  .habits { display: flex; flex-wrap: wrap; gap: 8px; }
+  .habit { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px 6px 6px; font-size: 14px; }
+  .habit .check { width: 24px; height: 24px; }
+  .habit small { color: var(--accent); font-weight: 700; }
+  .soon { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .soon li button { width: 100%; display: grid; grid-template-columns: 76px 1fr; gap: 10px; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 0; text-align: left; align-items: baseline; }
+  .soon li:last-child button { border-bottom: 0; }
+  .soon .when { color: var(--accent); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .soon small { display: block; color: var(--muted); font-size: 13px; }
 
-  /* Habits */
-  .streak { font-size: 13px; color: var(--accent); font-weight: 700; white-space: nowrap; }
-  .days { display: flex; gap: 4px; margin-top: 4px; }
-  .days i { width: 10px; height: 10px; border-radius: 3px; background: transparent; border: 1px solid var(--faint); }
-  .days i.done { border-color: transparent; }
-  .days i.off { border: 0; background: var(--line); width: 10px; height: 10px; transform: scale(.45); }
-
-  /* Life */
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .stat b { font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
-  .stat span { color: var(--muted); font-size: 13px; }
-  .heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 320px; }
-  .heat i { aspect-ratio: 1; border-radius: 4px; background: var(--surface-2); max-width: 100%; }
-  .heat b { font-size: 11px; color: var(--faint); text-align: center; font-weight: 400; }
-  .legend { font-size: 12px; color: var(--faint); }
-  .horizon { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .horizon li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
-  .horizon li:last-child { border-bottom: 0; }
-  .horizon .when { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; }
-  .horizon .what { min-width: 0; }
-  .horizon .what small { display: block; color: var(--muted); font-size: 13px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; text-decoration: none; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .card:hover { border-color: rgba(230,236,255,.2); }
-  .card .name { font-weight: 700; font-size: 1.1rem; }
-  .card .swatch { width: 26px; height: 6px; border-radius: 3px; }
-  .card p { margin: 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
-  .card .flag { color: var(--warn); font-size: 13px; }
-  .bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  /* Life tree */
+  .tree { display: flex; flex-direction: column; gap: 8px; }
+  .area { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .area-head { width: 100%; display: flex; gap: 12px; align-items: center; background: none; border: 0; padding: 14px 16px; text-align: left; }
+  .area-head .dot { width: 12px; height: 12px; }
+  .area-head .name { font-weight: 700; font-size: 1.1rem; }
+  .area-head .status { color: var(--muted); font-size: 14px; }
+  .area-head .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chev { color: var(--faint); transition: transform .15s; }
+  .area.open .chev { transform: rotate(90deg); }
+  .area-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .proj { width: 100%; background: var(--surface-2); border: 0; border-radius: 14px; padding: 12px 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+  .proj .name { font-weight: 700; }
+  .proj .nxt { color: var(--muted); font-size: 14px; }
+  .proj .nxt b { color: var(--fg); font-weight: 400; }
+  .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.06); overflow: hidden; }
   .bar > i { display: block; height: 100%; border-radius: 3px; }
+  .loose { display: flex; flex-direction: column; gap: 4px; padding: 4px 4px 0; }
+  .loose .lrow { display: flex; gap: 10px; align-items: center; padding: 6px 0; }
+  .loose .lrow .item-main { font-size: 15px; }
+  .muted-line { color: var(--faint); font-size: 13px; padding: 0 4px; background: none; border: 0; text-align: left; }
+
   .summary { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .summary p { margin: 0; }
   .label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-
   .doc { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .doc pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font); font-size: 15px; line-height: 1.5; max-height: 420px; overflow: auto; }
-  .doc .row { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+  .doc pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font); font-size: 15px; line-height: 1.5; max-height: 360px; overflow: auto; }
+  .doc .row { justify-content: space-between; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details[open] summary { margin-bottom: 8px; }
 
-  /* Capture */
-  .capture { display: flex; flex-direction: column; gap: 14px; }
-  textarea, input[type=text], select { width: 100%; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); padding: 14px 16px; font-size: 1.1rem; }
-  textarea { resize: none; }
-  textarea::placeholder, input::placeholder { color: var(--faint); }
-  .save { border: 0; border-radius: 16px; padding: 16px; background: var(--accent); color: var(--accent-ink); font-size: 1.15rem; font-weight: 700; }
-  .save:disabled { opacity: .3; cursor: default; }
-  .hint { color: var(--faint); font-size: 14px; margin: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 12px; font-size: 14px; color: var(--muted); text-align: left; text-decoration: none; }
-  .chip:hover { color: var(--fg); border-color: rgba(230,236,255,.2); }
-
-  /* Timeline */
+  /* Activity */
   .frag { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .frag .said { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .frag .said { margin: 0; font-size: 1.02rem; overflow-wrap: anywhere; }
   .frag .said::before { content: "\201C"; color: var(--faint); }
   .frag .said::after { content: "\201D"; color: var(--faint); }
-  .frag .did { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; display: flex; flex-direction: column; gap: 2px; }
+  .frag ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; display: flex; flex-direction: column; gap: 2px; }
   .frag .reply { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 15px; }
-  .frag .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+  .frag .row { justify-content: space-between; }
   .status { font-size: 13px; color: var(--muted); }
   .status.working { color: var(--accent); }
   .status.error { color: var(--warn); }
-  .status.undone { color: var(--faint); }
   .src { font-size: 12px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; margin-left: 6px; }
 
   .empty { background: var(--surface); border: 1px dashed rgba(230,236,255,.18); border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
   .empty p { margin: 0; color: var(--muted); }
-  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-  details[open] summary { margin-bottom: 8px; }
-  .wrapup { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 12px; font-size: 14px; color: var(--muted); text-align: left; }
+  .chip:hover { color: var(--fg); }
+  .hint { color: var(--faint); font-size: 13px; margin: 0; }
 
-  /* Bottom nav */
-  nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(14,15,18,.96); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
-  nav .tabs { max-width: 38rem; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; }
-  nav a { text-align: center; padding: 14px 0 12px; color: var(--faint); text-decoration: none; font-size: 13px; font-weight: 700; position: relative; }
-  nav a[aria-current="page"] { color: var(--fg); }
-  nav a.cap span { display: grid; place-items: center; width: 54px; height: 54px; margin: -22px auto 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: 0 6px 20px rgba(242,184,75,.25); }
-  nav a.cap svg { width: 26px; height: 26px; }
-  .badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 11px; line-height: 18px; }
+  /* Bottom: command bar + tabs */
+  .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(14,15,18,.97); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .dock-inner { max-width: 36rem; margin: 0 auto; display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+  .cmd { display: flex; gap: 8px; align-items: center; }
+  .cmd input { flex: 1; min-width: 0; border-radius: 999px; border: 1px solid rgba(242,184,75,.35); background: var(--surface); padding: 13px 18px; font-size: 1rem; }
+  .cmd input::placeholder { color: var(--faint); }
+  .cmd button { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }
+  .cmd button svg { width: 22px; height: 22px; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .tabs a { text-align: center; padding: 10px 0 10px; color: var(--faint); text-decoration: none; font-size: 13px; font-weight: 700; }
+  .tabs a[aria-current="page"] { color: var(--fg); }
 
-  .toast-zone { position: fixed; left: 0; right: 0; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; pointer-events: none; padding: 0 16px; z-index: 30; }
+  .toast-zone { position: fixed; left: 0; right: 0; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; pointer-events: none; padding: 0 16px; z-index: 30; }
   .toast { border-radius: 999px; padding: 12px 20px; font-weight: 700; color: #fff; background: #23705a; box-shadow: 0 8px 24px rgba(0,0,0,.45); text-align: center; max-width: 100%; }
   .toast.info { background: var(--surface-2); }
   .toast.error { background: #8d3a2e; }
 
-  /* Item sheet */
+  /* Sheets */
   .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
-  .sheet { background: var(--surface); border-radius: 22px 22px 0 0; width: 100%; max-width: 38rem; padding: 20px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 12px; max-height: 90%; overflow: auto; }
-  .sheet .field { display: flex; flex-direction: column; gap: 6px; }
-  .sheet .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .sheet .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
-  .sheet select, .sheet input[type=text] { font-size: 1rem; padding: 12px; border-radius: 12px; background: var(--surface-2); }
-  @media (max-width: 380px) { .sheet .two { grid-template-columns: 1fr; } .stats { grid-template-columns: 1fr 1fr; } }
+  .sheet { background: var(--surface); border-radius: 22px 22px 0 0; width: 100%; max-width: 36rem; padding: 22px max(18px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; max-height: 90%; overflow: auto; }
+  .sheet h3 { margin: 0; font-size: 1.4rem; line-height: 1.2; overflow-wrap: anywhere; }
+  .sheet .tell { display: flex; gap: 8px; }
+  .sheet .tell input { flex: 1; min-width: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); padding: 12px; }
+  .plan { border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .plan.pick { border-color: var(--accent); }
+  .plan b { font-size: 1.05rem; }
+  .plan .price { font-size: 1.4rem; font-weight: 700; }
+  .plan .price small { font-size: 14px; color: var(--muted); font-weight: 400; }
+  .days { display: flex; gap: 4px; }
+  .days i { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--faint); }
+  .days i.done { border-color: transparent; }
+  .days i.off { border: 0; background: var(--line); transform: scale(.45); }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
   .spin { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
@@ -199,23 +201,30 @@
 <div class="wrap">
   <div class="topline">
     <span class="brand">Fragments</span>
-    <span class="seg" role="group" aria-label="Which brain">
-      <button type="button" id="mode-demo" aria-pressed="true">Demo month</button>
-      <button type="button" id="mode-mine" aria-pressed="false">My brain</button>
+    <span class="top-right">
+      <span class="seg" role="group" aria-label="Which brain">
+        <button type="button" id="mode-demo" aria-pressed="true">Demo</button>
+        <button type="button" id="mode-mine" aria-pressed="false">Mine</button>
+      </span>
+      <button type="button" class="gear" id="settings-btn" aria-label="Plan and settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></button>
     </span>
   </div>
   <div id="view" class="view"></div>
 </div>
 
-<nav>
-  <div class="tabs">
-    <a href="#today" data-tab="today">Today</a>
-    <a href="#life" data-tab="life">Life</a>
-    <a href="#capture" data-tab="capture" class="cap" aria-label="Capture"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke-linecap="round"></path></svg></span></a>
-    <a href="#inbox" data-tab="inbox">Inbox<span id="inbox-badge"></span></a>
-    <a href="#timeline" data-tab="timeline">Timeline</a>
+<div class="dock">
+  <div class="dock-inner">
+    <form class="cmd" id="cmd-form">
+      <input type="text" id="cmd-input" placeholder="Tell me anything…" aria-label="Tell Fragments anything" autocomplete="off">
+      <button type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </form>
+    <nav class="tabs">
+      <a href="#home" data-tab="home">Home</a>
+      <a href="#life" data-tab="life">Life</a>
+      <a href="#activity" data-tab="activity">Activity</a>
+    </nav>
   </div>
-</nav>
+</div>
 <div class="toast-zone" aria-live="polite"><div class="toast" id="toast" hidden></div></div>
 <div id="sheet-root"></div>
 
@@ -379,17 +388,19 @@ function buildDemo() {
   const at = (d, hm) => { const [H, M] = hm.split(":").map(Number); const x = addDays(now, d); x.setHours(H, M, 0, 0); return x; };
   const md = (d) => fmtMD(at(d, "12:00"));
   const sunday = (7 - now.getDay()) % 7 || 7;
+  const saturday = (6 - now.getDay() + 7) % 7 || 7;
   const S = emptyState();
+  S.actions = [];
   const PROJ = {
-    fitness: { area: "side", name: "Fitness app", summary: "A habit-first fitness app. Ideas so far: weekly streaks, a minimum-workout mode for low-energy days, friends seeing each other's streaks, and streaks that forgive one missed day a week. The home screen is just today's minimum workout." },
+    fitness: { area: "side", name: "Fitness app", summary: "A habit-first fitness app. Ideas so far: weekly streaks, a minimum-workout mode for low-energy days, friends seeing each other's streaks, streaks that forgive one missed day a week, and a home screen that shows only today's minimum workout." },
     playbook: { area: "side", name: "Lacrosse playbook", summary: "An app for coaches to draw plays: drag players on the field, animate a play step by step, and share plays to the team group chat. You think it might be bigger than the fitness app." },
-    knee: { area: "health", name: "Knee recovery", summary: "PT Tuesdays and Thursdays after the knee tweak. It feels much better; PT says about two more weeks. Follow-up with Dr. Patel is booked." },
-    wedding: { area: "people", name: "Jake's wedding", summary: `Asheville on ${md(16)}. Flights are booked. Still open: the hotel (filling up) and getting the suit tailored.` },
-    mom60: { area: "people", name: "Mom's 60th", summary: `Surprise dinner for Mom's 60th on ${md(23)} at Lucia's for 8. Guest list is sent. Gift idea: a photo book from old family albums; scanning hasn't started.` },
+    knee: { area: "health", name: "Knee recovery", summary: "PT Tuesdays and Thursdays. The knee feels much better; PT says about two more weeks. Follow-up with Dr. Patel is booked." },
+    wedding: { area: "people", name: "Jake's wedding", summary: `Asheville on ${md(16)}. Flights are booked. Still open: the hotel (rooms are filling up), the suit tailoring, and the spare key for Jake.` },
+    mom60: { area: "people", name: "Mom's 60th", summary: `Surprise dinner on ${md(23)} at Lucia's for 8. Guest list is sent. Gift: a photo book from old family albums; scanning hasn't started.` },
     launch: { area: "work", name: "Q4 launch", summary: `Onboarding redesign ships ${md(20)}. Copy is done. Design review is ${md(3)}; the release checklist still needs a draft.` },
     review: { area: "work", name: "Performance review", summary: `Self-review due ${md(8)}. Wins so far: shipped the pricing page, mentored Priya, led the onboarding kickoff, cut support tickets 12%.` },
-    garage: { area: "home", name: "Garage cleanout", summary: "Goal: park in the garage before winter. Nothing sorted yet." },
-    budget: { area: "money", name: "Budget reset", summary: "Cutting subscriptions and automating bills. Hulu, the meal kit and the class pass are cancelled; electric autopay is set up." },
+    garage: { area: "home", name: "Garage cleanout", summary: "Goal: park in the garage before winter. Boxes are labeled; the shelf by the door is next." },
+    budget: { area: "money", name: "Budget reset", summary: "Cutting subscriptions and automating bills. Hulu, the meal kit and the class pass are cancelled; electric autopay is on." },
   };
   const P = {}, I = {};
   const rand = mulberry(42);
@@ -406,22 +417,20 @@ function buildDemo() {
         const def = PROJ[op.p];
         P[op.p] = { id: "p_" + op.p, areaId: def.area, name: def.name, summary: def.summary, status: "active", createdAt: created.toISOString(), docs: [] };
         S.projects.push(P[op.p]);
-        frag.did.push(`Started project “${def.name}” in ${DEFAULT_AREAS.find((a) => a.id === def.area).name}`);
+        frag.did.push(`Started a project, “${def.name}”, in ${DEFAULT_AREAS.find((a) => a.id === def.area).name}`);
       }
       if (op.new) {
         const it = {
           id: "i_" + op.new, type: op.type || "task", title: op.title, body: op.body || "", areaId: op.p ? PROJ[op.p].area : op.area, projectId: op.p ? "p_" + op.p : null,
           status: "open", dueAt: op.due ? localIso(at(...op.due)) : null, remindAt: op.remind ? localIso(at(...op.remind)) : null,
-          recurrence: op.rec || null, priority: op.pri || "normal", confidence: op.inbox ? 0.4 : 0.92, inInbox: !!op.inbox, fragmentId: frag.id,
+          recurrence: op.rec || null, priority: op.pri || "normal", confidence: op.guess ? 0.5 : 0.92, guess: !!op.guess, fragmentId: frag.id,
           createdAt: created.toISOString(), firstStep: op.step || null, cue: op.cue || null, history: op.rec ? [] : undefined,
         };
-        if (op.inbox) it.body = op.inbox;
         if (op.done != null) { it.status = "done"; it.doneAt = clampPast(at(op.done, op.doneAt || "18:30")).toISOString(); }
         I[op.new] = it;
         S.items.push(it);
-        (frag.itemIds ||= []).push(it.id);
         const area = DEFAULT_AREAS.find((a) => a.id === it.areaId);
-        frag.did.push(op.inbox ? `Sent “${it.title}” to your Inbox to confirm` : `Added ${TYPE_LABEL[it.type].toLowerCase()} “${it.title}” to ${area.name}${op.p ? " → " + PROJ[op.p].name : ""}`);
+        frag.did.push(`Added ${TYPE_LABEL[it.type].toLowerCase()} “${it.title}” to ${area.name}${op.p ? " → " + PROJ[op.p].name : ""}${op.guess ? " (best guess)" : ""}`);
       }
       if (op.upd) {
         const it = I[op.upd];
@@ -429,14 +438,14 @@ function buildDemo() {
         if (op.body) it.body = op.body;
         if (op.due) it.dueAt = localIso(at(...op.due));
         if (op.pri) it.priority = op.pri;
-        if (op.done != null) { it.status = "done"; it.doneAt = clampPast(at(op.done, op.doneAt || hm)).toISOString(); frag.did.push(`Marked “${it.title}” done`); }
+        if (op.done != null) { it.status = "done"; it.doneAt = clampPast(at(op.done, op.doneAt || hm)).toISOString(); frag.did.push(`Checked off “${it.title}”`); }
         else frag.did.push(`Updated “${it.title}”`);
       }
       if (op.link) {
         S.links.push({ id: "l_" + op.link[0] + op.link[1], from: "i_" + op.link[0], to: "i_" + op.link[1], reason: op.link[2] });
-        frag.did.push(`Linked “${I[op.link[0]].title}” with “${I[op.link[1]].title}”`);
+        frag.did.push(`Connected “${I[op.link[0]].title}” to “${I[op.link[1]].title}”`);
       }
-      if (op.sum) frag.did.push(`Refreshed the summary of “${PROJ[op.sum].name}”`);
+      if (op.sum) frag.did.push(`Updated where “${PROJ[op.sum].name}” stands`);
     }
     S.fragments.push(frag);
   }
@@ -445,7 +454,7 @@ function buildDemo() {
   F(-29, "12:15", "idea for the fitness app — show weekly streaks", { p: "fitness" }, { new: "streaks", type: "idea", title: "Show weekly streaks", p: "fitness" });
   F(-29, "21:03", "remind me tomorrow at 9 to call the PT office about my knee", { p: "knee" }, { new: "callpt", type: "reminder", title: "Call the PT office about my knee", p: "knee", remind: [-28, "09:00"], done: -28, doneAt: "09:20" });
   F(-28, "09:31", "PT is tuesdays and thursdays at 7:30am starting next week", { new: "pt", type: "habit", title: "Physical therapy, 7:30 AM", p: "knee", rec: "FREQ=WEEKLY;BYDAY=TU,TH" }, { src: "watch" });
-  F(-28, "18:40", "buy dog food", { new: "dogfood", title: "Buy dog food", area: "home", done: -27, cue: "Next time you're at the store" });
+  F(-28, "18:40", "buy dog food", { new: "dogfood", title: "Buy dog food", area: "home", done: -27 });
   F(-28, "18:52", "also get treats", { upd: "dogfood", title: "Buy dog food and treats" });
   F(-27, "08:05", "need to schedule a follow up with dr patel before the wedding", { new: "bookpatel", title: "Book follow-up with Dr. Patel", p: "knee", due: [15, "17:00"] });
   F(-27, "13:30", `jake's wedding is ${md(16)} in asheville`, { p: "wedding" }, { new: "wedding", type: "event", title: "Jake's wedding in Asheville", p: "wedding", due: [16, "16:00"] });
@@ -456,29 +465,29 @@ function buildDemo() {
   F(-25, "19:30", `mom turns 60 on ${md(23)} — do something big`, { p: "mom60" }, { new: "mombday", type: "event", title: "Mom's 60th birthday dinner", p: "mom60", due: [23, "19:00"] });
   F(-24, "08:15", "flights for the wedding — book before prices go up", { new: "flights", title: "Book flights to Asheville", p: "wedding", pri: "high", done: -22 });
   F(-24, "12:40", "fitness app: minimum workout mode for bad days", { new: "minwork", type: "idea", title: "Minimum-workout mode for low-energy days", p: "fitness" }, { sum: "fitness" });
-  F(-24, "20:00", "did I pay rent?", { reply: "I don't have any record of paying rent this month. I added a task to check." }, { new: "rent", title: "Check that rent is paid", area: "money", pri: "high", done: -24, doneAt: "21:10" });
+  F(-24, "20:00", "did I pay rent?", { reply: "I don't have any record of paying rent this month, so I added a check." }, { new: "rent", title: "Check that rent is paid", area: "money", pri: "high", done: -24, doneAt: "21:10" });
   F(-24, "21:10", "paid rent", { upd: "rent", done: -24, doneAt: "21:10" });
   F(-23, "07:30", "take vitamins", { new: "vit", type: "habit", title: "Take vitamins", area: "health", rec: "FREQ=DAILY" }, { src: "watch" });
   F(-23, "15:20", `q4 launch: onboarding redesign ships ${md(20)}`, { p: "launch" }, { new: "launchday", type: "event", title: "Onboarding redesign ships", p: "launch", due: [20, "10:00"] });
   F(-23, "15:25", "need to finish onboarding copy by end of next week", { new: "copy", title: "Finish onboarding copy", p: "launch", due: [-14, "17:00"], done: -15 });
   F(-22, "11:00", "cancel hulu and the meal kit thing", { p: "budget" }, { new: "hulu", title: "Cancel Hulu", p: "budget", done: -21 }, { new: "mealkit", title: "Cancel the meal kit subscription", p: "budget", done: -18 });
   F(-22, "21:45", "idea: lacrosse app animates a play step by step", { new: "animate", type: "idea", title: "Animate a play step by step", p: "playbook" }, { link: ["animate", "drag", "Both are about the play editor"] });
-  F(-21, "09:00", "car registration expires end of month", { new: "reg", title: "Renew car registration", area: "home", due: [2, "17:00"], pri: "high", step: "Find the renewal notice or the plate number" });
+  F(-21, "09:00", "car registration expires end of month", { new: "reg", title: "Renew car registration", area: "home", due: [2, "17:00"], pri: "high" });
   F(-21, "17:30", "call grandma this weekend", { new: "grandma", title: "Call Grandma", area: "people", done: -19 }, { src: "phone" });
   F(-20, "08:30", `booked dr patel ${md(5)} at 10`, { upd: "bookpatel", done: -20, doneAt: "08:30" }, { new: "patel", type: "event", title: "Dr. Patel follow-up", p: "knee", due: [5, "10:00"], remind: [5, "09:00"] });
-  F(-20, "13:00", "garage is a disaster, want to park in it before winter", { p: "garage" }, { new: "garage", title: "Sort the garage into keep, donate and trash", p: "garage", step: "Grab 3 boxes and label them" });
+  F(-20, "13:00", "garage is a disaster, want to park in it before winter", { p: "garage" }, { new: "garage", title: "Sort the garage into keep, donate and trash", p: "garage" });
   F(-19, "19:00", "restaurant ideas for mom: lucia's, the oyster bar, or cook at home", { new: "restos", type: "note", title: "Restaurant ideas for Mom's dinner", p: "mom60", body: "Lucia's, the oyster bar, or cook at home." });
   F(-19, "19:10", "ask sara and ben if they can come to mom's party", { new: "askcousins", title: "Ask Sara and Ben about Mom's party", p: "mom60", done: -17 });
   F(-18, "07:50", "read 20 min before bed instead of phone", { new: "read", type: "habit", title: "Read 20 minutes before bed", area: "health", rec: "FREQ=DAILY" });
   F(-18, "12:00", "fitness app: let friends see each other's streaks", { new: "friends", type: "idea", title: "Friends can see each other's streaks", p: "fitness" }, { link: ["friends", "streaks", "Builds on weekly streaks"] }, { sum: "fitness" });
-  F(-17, "10:30", "dentist cleaning overdue", { new: "dentist", title: "Book a dentist cleaning", area: "health", pri: "low" });
+  F(-17, "10:30", "dentist cleaning overdue", { new: "dentist", title: "Book a dentist cleaning", area: "health" });
   F(-17, "16:00", "book lucia's for mom, 8 people", { new: "lucias", title: "Reserve Lucia's for 8", p: "mom60", done: -15 }, { link: ["lucias", "restos", "Picked from the restaurant ideas"] });
-  F(-16, "09:10", "wedding hotel?? everything near the venue is filling up", { new: "hotel", title: "Book the Asheville hotel", p: "wedding", due: [1, "12:00"], pri: "high", step: "Open the wedding website's hotel block link" }, { src: "watch" });
+  F(-16, "09:10", "wedding hotel?? everything near the venue is filling up", { new: "hotel", title: "Book the Asheville hotel", p: "wedding", due: [1, "12:00"], pri: "high" }, { src: "watch" });
   F(-16, "14:00", "set up autopay for electric", { new: "autopay", title: "Set up autopay for electric", p: "budget", done: -10 });
   F(-15, "08:00", `design review for onboarding moved to ${md(3)}`, { new: "designrev", type: "event", title: "Onboarding design review", p: "launch", due: [3, "14:00"] });
   F(-15, "20:30", "biscuit needs his shots, call the vet", { new: "vet", title: "Book Biscuit's vet visit for shots", area: "home", done: -12 });
-  F(-14, "11:15", "newsletter idea??", { new: "newsletter", title: "Newsletter idea", area: "side", inbox: "Not sure if this is for the fitness app or something new." });
-  F(-13, "18:00", "suit for the wedding needs tailoring", { new: "suit", title: "Get the suit tailored", p: "wedding", due: [9, "17:00"], step: "Find a tailor near work" });
+  F(-14, "11:15", "newsletter idea??", { new: "newsletter", type: "idea", title: "A weekly newsletter", p: "fitness", guess: true });
+  F(-13, "18:00", "suit for the wedding needs tailoring", { new: "suit", title: "Get the suit tailored", p: "wedding", due: [9, "17:00"] });
   F(-12, "07:40", "gift for mom — photo book from old albums?", { new: "photobook", type: "idea", title: "Photo book from old family albums", p: "mom60" }, { src: "watch" });
   F(-12, "21:00", "remind me in 2 days to send the guest list to sara", { new: "guestlist", type: "reminder", title: "Send the guest list to Sara", p: "mom60", remind: [-10, "09:00"], done: -2, doneAt: "19:00" });
   F(-11, "09:30", "wins: led the onboarding kickoff, cut support tickets 12%", { upd: "wins", body: "Shipped the pricing page. Mentored Priya. Led the onboarding kickoff. Cut support tickets 12%." }, { sum: "review" });
@@ -487,18 +496,17 @@ function buildDemo() {
   F(-10, "17:45", "pick up dry cleaning", { new: "dryclean", title: "Pick up dry cleaning", area: "home", done: -8 }, { src: "phone" });
   F(-9, "12:00", "talk to priya about taking over the help center", { new: "priya", title: "Talk to Priya about owning the help center", area: "work", done: -7 });
   F(-8, "19:15", `grandma's hip surgery is ${md(11)}, send flowers`, { new: "flowers", title: "Send Grandma flowers", area: "people", due: [10, "12:00"], remind: [10, "09:00"] });
-  F(-7, "07:55", "release checklist for the launch", { new: "checklist", title: "Draft the release checklist", p: "launch", due: [2, "17:00"], step: "Copy last launch's checklist into a new doc" });
+  F(-7, "07:55", "release checklist for the launch", { new: "checklist", title: "Draft the release checklist", p: "launch", due: [2, "17:00"] });
   F(-7, "22:10", "can't sleep. idea: fitness app home screen is just today's minimum workout", { new: "home", type: "idea", title: "Home screen shows only today's minimum workout", p: "fitness" }, { link: ["home", "minwork", "Uses the minimum-workout mode"] }, { sum: "fitness" });
-  F(-6, "10:00", "ask about the thing", { new: "thing", title: "Ask about “the thing”", area: "work", inbox: "Couldn't tell what “the thing” refers to." });
-  F(-6, "16:30", "start scanning old photos for mom's book", { new: "scan", title: "Scan old photos for Mom's photo book", p: "mom60", due: [12, "17:00"], step: "Get the album box from the hall closet" }, { link: ["scan", "photobook", "Needed for the photo book"] });
-  F(-5, "08:10", "oil change", { new: "oil", title: "Get an oil change", area: "home", pri: "low", cue: "Next time you're driving past the shop" }, { src: "watch" });
-  F(-5, "13:00", `pay credit card before the ${new Date(at(5, "12:00")).getDate()}th`, { new: "cc", title: "Pay the credit card", area: "money", due: [4, "17:00"] });
+  F(-6, "16:30", "start scanning old photos for mom's book", { new: "scan", title: "Scan old photos for Mom's photo book", p: "mom60", due: [12, "17:00"] }, { link: ["scan", "photobook", "Needed for the photo book"] });
+  F(-5, "08:10", "oil change", { new: "oil", title: "Get an oil change", area: "home", cue: "Next time you're driving past the shop" }, { src: "watch" });
+  F(-5, "13:00", `pay credit card before the ${at(5, "12:00").getDate()}th`, { new: "cc", title: "Pay the credit card", area: "money", due: [4, "17:00"] });
   F(-4, "18:20", "text jake congrats on the bachelor party", { new: "textjake", title: "Text Jake congrats", p: "wedding", done: -4, doneAt: "18:40" }, { src: "phone" });
   F(-4, "21:00", "self review: finish wins section, then manager questions", { upd: "selfrev", body: "Finish the wins section, then the manager questions." });
-  F(-2, "17:40", "when I get home grab the spare key from the drawer for jake", { new: "key", title: "Grab the spare key for Jake", p: "wedding", cue: "When you get home" }, { src: "watch" });
-  F(-3, "09:00", "costco", { new: "costco", title: "Costco run", area: "home", inbox: "Not sure what you need from Costco, or when." }, { src: "watch" });
+  F(-3, "09:00", "costco", { new: "costco", title: "Costco run", area: "home", guess: true }, { src: "watch" });
   F(-3, "12:30", "fitness app: what if streaks forgive one missed day a week", { new: "forgive", type: "idea", title: "Streaks forgive one missed day a week", p: "fitness" }, { link: ["forgive", "streaks", "Changes how weekly streaks count"] }, { sum: "fitness" });
   F(-2, "07:30", "knee feels way better, PT says 2 more weeks", { new: "kneenote", type: "note", title: "Knee much better; about 2 more weeks of PT", p: "knee" }, { sum: "knee" });
+  F(-2, "17:40", "when I get home grab the spare key from the drawer for jake", { new: "key", title: "Grab the spare key for Jake", p: "wedding", cue: "When you get home" }, { src: "watch" });
   F(-2, "19:00", "guest list sent to sara", { upd: "guestlist", done: -2, doneAt: "19:00" });
   F(-1, "14:00", "lacrosse playbook — honestly might be bigger than the fitness app", { new: "bigger", type: "note", title: "Might be bigger than the fitness app", p: "playbook" }, { sum: "playbook" });
   F(-1, "20:30", "call mom sunday", { new: "callmom", title: "Call Mom", area: "people", due: [sunday, "17:00"] }, { src: "phone" });
@@ -507,18 +515,17 @@ function buildDemo() {
   F(0, "07:20", "car registration — do it today, I keep forgetting", { upd: "reg", due: [0, "17:00"], pri: "high" });
 
   // Habit history: a believable month, stronger lately.
-  const habits = [["gym", -29, 0.7], ["pt", -25, 0.85], ["walk", -26, 0.8], ["vit", -23, 0.65], ["read", -18, 0.6]];
-  for (const [key, start, p] of habits) {
+  for (const [key, start, p] of [["gym", -29, 0.7], ["pt", -25, 0.85], ["walk", -26, 0.8], ["vit", -23, 0.65], ["read", -18, 0.6]]) {
     const it = I[key];
     for (let d = start; d < 0; d++) {
       const day = at(d, "12:00");
-      if (!habitDueOn(it, day)) continue;
-      if (rand() < (d > -6 ? 0.97 : p)) it.history.push(dayKey(day));
+      if (habitDueOn(it, day) && rand() < (d > -6 ? 0.97 : p)) it.history.push(dayKey(day));
     }
   }
   I.vit.history.push(dayKey(now));
   I.walk.history.push(dayKey(now));
 
+  // Things Fragments did on its own: steps, drafts, times, plans.
   I.reg.steps = [
     { text: "Find the renewal notice or your plate number", mins: 2, done: false },
     { text: "Open the DMV renewal page and fill it in", mins: 10, done: false },
@@ -528,12 +535,33 @@ function buildDemo() {
     { text: "Grab 3 boxes and label them keep, donate, trash", mins: 5, done: true },
     { text: "Clear the shelf by the door into the boxes", mins: 15, done: false },
     { text: "Put the donate box in the car", mins: 2, done: false },
-    { text: "Sweep the cleared corner", mins: 10, done: false },
   ];
+  I.selfrev.steps = [
+    { text: "Paste your wins list into the review doc", mins: 2, done: false },
+    { text: "Write two sentences on the onboarding kickoff", mins: 10, done: false },
+    { text: "Answer the three manager questions", mins: 20, done: false },
+  ];
+  I.hotel.draft = { kind: "email", to: "The hotel near the venue", subject: `Room for ${md(15)}–${md(17)}`, text: `Hi,\n\nI'm in town for a wedding on ${md(16)} and would like a room for the nights of ${md(15)} and ${md(16)}. Is anything still available, ideally under the wedding block rate?\n\nThanks,\n[Your name]` };
+  I.dentist.draft = { kind: "call", to: "Your dentist's office", text: "Hi, I'd like to book a cleaning. I'm a little overdue. Do you have anything Saturday morning or a weekday after 5? My name is [your name] and my birthday is [date]." };
+  I.flowers.draft = { kind: "text", to: "Flower order card", text: "Thinking of you and wishing you an easy recovery, Grandma. Can't wait to see you up and about. Love you!" };
+  I.callmom.draft = { kind: "text", to: "Mom", text: "Hey Mom! Free for a call Sunday around 5?" };
+  I.dentist.dueAt = localIso(at(saturday, "10:00")); I.dentist.autoScheduled = true;
+  I.garage.dueAt = localIso(at(saturday, "14:00")); I.garage.autoScheduled = true;
+  I.scan.cue = "Sunday afternoon, before you call Mom";
+
+  const A = (hoursAgo, icon, text, itemId) => S.actions.push({ id: uid("a"), at: new Date(now.getTime() - hoursAgo * 3600e3).toISOString(), icon, text, itemId });
+  A(14, "✉️", "Drafted an email to the Asheville hotel. Rooms are filling up.", "i_hotel");
+  A(13, "📅", "Put “Book a dentist cleaning” on Saturday at 10. It had been waiting 17 days.", "i_dentist");
+  A(13, "📞", "Wrote what to say when you call the dentist.", "i_dentist");
+  A(12, "🧩", "Broke “Renew car registration” into 3 small steps.", "i_reg");
+  A(12, "💐", "Wrote the card for Grandma's flowers.", "i_flowers");
+  A(11, "📅", "Saved Saturday 2 PM for the garage while it's still warm out.", "i_garage");
+  A(10, "📝", "Updated the Fitness app plan with the forgiving-streaks idea.", "i_forgive");
+  A(9, "🔗", "Connected “Pack the gym bag” to your gym habit.", "i_gymbag");
+
   P.fitness.docs.push({ kind: "plan", createdAt: at(-3, "13:00").toISOString(), text:
 `Goal: a fitness app that keeps people going on their worst days, not just their best.
 
-Phases
 1. Prove the core loop
    - Sketch the home screen: today's minimum workout, one button
    - Define what counts toward a weekly streak
@@ -543,15 +571,13 @@ Phases
    - A nudge when a friend's streak is at risk
 3. Ship a test build
    - Build the home screen and streak counter
-   - Put it on your own phone for a week
+   - Use it yourself for a week
 
-The very next step
-Sketch the home screen on paper: one workout, one button. 20 minutes.
+Very next step: sketch the home screen on paper. One workout, one button. 20 minutes.
 
-Open questions
-- What is the smallest workout that still counts?
-- Should streaks be weekly only, or daily too?` });
+Open questions: What's the smallest workout that still counts? Is the newsletter idea part of this app?` });
 
+  S.lastOpen = dayKey(now);
   S.rev = 1;
   return S;
 }
@@ -688,7 +714,7 @@ function contextItems(text) {
   const open = state.items.filter((i) => i.status === "open");
   const scored = open.map((it, idx) => {
     const iw = words(it.title + " " + (it.body || "") + " " + placeLabel(it));
-    let overlap = 0;
+    let overlap = text.includes(it.id) ? 100 : 0;
     for (const w of iw) if (fw.has(w) || [...fw].some((f) => f.length > 3 && (w.startsWith(f) || f.startsWith(w)))) overlap++;
     return { it, score: overlap * 10 + idx / open.length };
   });
@@ -701,7 +727,7 @@ function itemLine(i) {
   if (i.dueAt) bits.push("due " + i.dueAt);
   if (i.remindAt) bits.push("remind " + i.remindAt);
   if (i.recurrence) bits.push("repeats " + i.recurrence);
-  if (i.inInbox) bits.push("(in inbox)");
+  if (i.cue) bits.push("cue " + i.cue);
   return "- " + bits.join(" | ");
 }
 
@@ -712,8 +738,8 @@ function organizerPrompt(text) {
   const open = contextItems(text).map(itemLine).join("\n") || "(none yet)";
   const done = state.items.filter((i) => i.status === "done").sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || "")).slice(0, 10)
     .map((i) => `- ${i.title} | ${placeLabel(i)} | done ${i.doneAt || "?"}`).join("\n") || "(none)";
-  const corrections = state.corrections.slice(-8).map((c) => `- "${c.title}": you filed it under ${c.from}; the user moved it to ${c.to}`).join("\n") || "(none yet)";
-  return `You are the organizer inside Fragments, an "external brain" app for a person with ADHD. They capture scattered thoughts by voice or text. Read ONE new fragment and decide how to file it, using what the app already knows.
+  const corrections = state.corrections.slice(-8).map((c) => `- "${c.title}": first filed under ${c.from}; the user said it belongs in ${c.to}`).join("\n") || "(none yet)";
+  return `You are Fragments, a personal assistant and "external brain" for a person with ADHD. They tell you things in passing: tasks, ideas, reminders, plans, corrections, questions. Your job is to keep their whole life organized for them, so they never have to sort anything themselves. Read ONE message and act on it.
 
 CURRENT TIME: ${fmtDay(now)}, ${fmtTime(now)} — ISO ${localIso(now)} (time zone ${TZ}). Write every timestamp as full ISO 8601 with this offset (${offsetString(now)}).
 
@@ -723,60 +749,78 @@ ${areas}
 PROJECTS (id | area | name | summary):
 ${projects}
 
-OPEN ITEMS most related to this fragment (id | type | area → project | title | ...):
+OPEN ITEMS most related to this message (id | type | area → project | title | ...):
 ${open}
 
 RECENTLY COMPLETED:
 ${done}
 
-RECENT CORRECTIONS (the user moved items you filed — learn from these):
+PAST CORRECTIONS (learn from these):
 ${corrections}
 
 RULES
-- Prefer existing Areas and Projects. Only create a project for an ongoing effort with more to come (a named app, a playbook, a trip, a renovation, an event to plan). Single errands and one-off appointments go directly in an Area with no project.
-- A habit ("go to the gym", "drink more water") is type "habit" with an RRULE recurrence (e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR" or "FREQ=DAILY"), not a one-off task. If no frequency is given, pick a sensible default and say so in "explain".
-- "remind me ... at <time>" → type "reminder" with remindAt. Something that happens at a set time → "event" with dueAt. Something to do → "task". Product or project thoughts and "idea: ..." → "idea". Facts worth keeping → "note".
-- Resolve vague references ("that doctor appointment", "also get treats") against OPEN ITEMS. If the fragment adds to or completes an existing open item, use update_item on it instead of creating a duplicate (e.g. "Buy dog food" becomes "Buy dog food and treats"; "paid rent" sets status "done"). If it's related but separate, create it and link_items.
-- Parse relative dates in the user's time zone. "tonight" with no time = 20:00 today. "Sunday" = the coming Sunday. "before the 15th" = dueAt the 14th at 17:00. A day with no time for a call or errand: dueAt that day at 17:00.
-- One fragment can hold several thoughts ("ok so X, and also Y, oh and Z"). Split it into separate operations, one per thought.
-- Never invent details the user didn't say (no made-up people, places or times). Only set remindAt if they asked to be reminded or gave a time to act.
-- Titles: short, plain, action-first ("Book doctor appointment", "Call Mom"). Use body only for extra detail the user actually gave.
-- If the moment to act is a place or event rather than a clock time ("when I get home", "next time I'm at the store", "after my meeting"), set cue to that phrase in plain words ("When you get home") instead of inventing a time.
-- For a big or vague task ("clean the garage", "do taxes", "plan the trip"), set firstStep to one concrete action that takes under 5 minutes. Leave it null for small, clear tasks.
-- If the fragment is a question ("did I pay rent?"), answer it in "reply" using only the data above, and say plainly when there's no record. Create a task only if it helps (e.g. "Check whether rent is paid").
-- When an idea lands in a project, also update_project_summary for that project (1–2 sentences covering what the project is and its current ideas).
-- confidence (0–1) = how sure you are about BOTH the type and the placement. Anything under 0.6 goes to the user's Inbox to confirm. If you can't make sense of the fragment, use send_to_inbox.
+- Always file. Never ask the user where something goes. If unsure, pick the most likely place and give a lower confidence.
+- Nest well: Area → Project → item. Put an item in an existing project when it belongs to that effort. Create a project only for an ongoing effort with more to come (an app, a trip, an event to plan, a renovation). One-off errands go straight in an Area.
+- One message can hold several thoughts ("ok so X, and also Y, oh and Z"). Split it into separate operations.
+- Messages can be commands about existing items: "done with X", "move X to Friday", "X is actually for the wedding", "forget about X". Use update_item (status "done" or "dismissed", new dates, new area/project). When the user moves something, that is a correction.
+- A habit ("go to the gym") is type "habit" with an RRULE recurrence (e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR" or "FREQ=DAILY").
+- "remind me ... at <time>" → "reminder" with remindAt. Something at a set time → "event" with dueAt. Something to do → "task". Product or project thoughts → "idea". Facts to keep → "note".
+- Resolve vague references ("that doctor appointment", "also get treats") against OPEN ITEMS and update the existing item instead of duplicating it.
+- Dates are in the user's time zone. "tonight" = 20:00 today. "Sunday" = the coming Sunday. "before the 15th" = dueAt the 14th at 17:00.
+- If the moment to act is a place or event ("when I get home", "next time I'm at the store"), set cue to it in plain words instead of a clock time.
+- Do things for the user:
+  - A task with no date and no cue: set scheduleFor to a sensible slot in the next 7 days (weekend mornings for errands and calls to businesses, evenings for personal calls). The app tells the user you picked it.
+  - A task that means contacting someone (call, text, email, ask, tell, book, cancel): write a ready-to-use draft. kind "text" for texts, "email" for emails, "call" for a short script of what to say. Use only facts you have; put unknowns in [brackets]. Warm, short, plain.
+  - A big or vague task: set firstStep to one action that takes about 2 minutes.
+  - When an idea lands in a project, also update_project_summary (1–2 sentences on what the project is and where it stands).
+- If the message is a question, answer it in "reply" using only the data above; say plainly when there's no record.
+- Never invent facts the user didn't say (people, places, prices, numbers).
+- Titles: short, plain, action-first ("Book doctor appointment", "Call Mom").
 
 Reply with only one JSON object, no prose:
-{"explain": "<one short sentence telling the user what you did>", "reply": null or "<short answer if they asked a question>", "operations": [ ... ]}
+{"explain": "<one short, friendly sentence on what you did>", "reply": null or "<answer if they asked something>", "operations": [ ... ]}
 
 Operation shapes (omit fields you don't need):
 {"op":"create_project","area":"<area name>","name":"<project name>","summary":"<1–2 sentences>","confidence":0.9}
-{"op":"create_item","ref":"n1","type":"task|idea|reminder|habit|event|note","title":"...","body":"...","area":"<area name>","project":"<existing or newly created project name, or null>","dueAt":"<ISO or null>","remindAt":"<ISO or null>","recurrence":"<RRULE or null>","priority":"low|normal|high","firstStep":"<or null>","cue":"<place or event cue, or null>","confidence":0.9}
-{"op":"update_item","id":"<existing item id>","changes":{"title":"...","body":"...","status":"open|done","dueAt":"...","remindAt":"...","recurrence":"...","priority":"...","type":"...","area":"<area name>","project":"<project name>","firstStep":"..."},"confidence":0.9}
+{"op":"create_item","ref":"n1","type":"task|idea|reminder|habit|event|note","title":"...","body":"...","area":"<area name>","project":"<existing or new project name, or null>","dueAt":"<ISO or null>","remindAt":"<ISO or null>","scheduleFor":"<ISO or null>","recurrence":"<RRULE or null>","priority":"low|normal|high","firstStep":"<or null>","cue":"<or null>","draft":{"kind":"text|email|call","to":"<who>","subject":"<email only>","text":"..."} or null,"confidence":0.9}
+{"op":"update_item","id":"<existing item id>","changes":{"title":"...","body":"...","status":"open|done|dismissed","dueAt":"...","remindAt":"...","recurrence":"...","priority":"...","type":"...","area":"<area name>","project":"<project name>","firstStep":"...","cue":"...","draft":{...}},"confidence":0.9}
 {"op":"link_items","from":"<item id or ref>","to":"<item id or ref>","reason":"...","confidence":0.9}
 {"op":"update_project_summary","project":"<project id>","summary":"...","confidence":0.9}
-{"op":"send_to_inbox","title":"<short title>","reason":"<why you're unsure>","confidence":0.3}
 
-FRAGMENT: ${JSON.stringify(text)}`;
+MESSAGE: ${JSON.stringify(text)}`;
+}
+
+const DRAFT_ICON = { text: "💬", email: "✉️", call: "📞" };
+function addAction(icon, text, itemId) {
+  state.actions = state.actions || [];
+  state.actions.push({ id: uid("a"), at: new Date().toISOString(), icon, text, itemId: itemId || null });
+  state.actions = state.actions.slice(-200);
+}
+function cleanDraft(d) {
+  if (!d || typeof d !== "object" || typeof d.text !== "string" || !d.text.trim()) return null;
+  return { kind: DRAFT_ICON[d.kind] ? d.kind : "text", to: String(d.to || "").slice(0, 80), subject: d.subject ? String(d.subject).slice(0, 120) : null, text: d.text.slice(0, 2000) };
 }
 
 function applyOperations(frag, out) {
-  const undo = { createdItems: [], createdProjects: [], createdLinks: [], before: [], projectBefore: [] };
+  const undo = { createdItems: [], createdProjects: [], createdLinks: [], before: [], projectBefore: [], actions: (state.actions || []).length };
   const did = [];
   const refs = {};
   let filed = null;
   const ops = Array.isArray(out && out.operations) ? out.operations : [];
   const nowIso = new Date().toISOString();
+  const fallbackArea = (text) => {
+    const w = new Set(words(text));
+    return state.areas.map((a) => [a, words(a.name + " " + a.description).filter((x) => w.has(x)).length]).sort((x, y) => y[1] - x[1])[0][0];
+  };
 
   const ensureProject = (areaId, name, summary) => {
-    if (!name) return null;
+    if (!name || norm(name) === "null") return null;
     let p = findProject(areaId, name);
     if (!p && areaId) {
       p = { id: uid("p"), areaId, name: String(name).slice(0, 80), summary: summary || "", status: "active", createdAt: nowIso, docs: [] };
       state.projects.push(p);
       undo.createdProjects.push(p.id);
-      did.push(`Started project “${p.name}” in ${areaById(areaId).name}`);
+      did.push(`Started a project, “${p.name}”, in ${areaById(areaId).name}`);
     }
     return p;
   };
@@ -788,57 +832,65 @@ function applyOperations(frag, out) {
   for (const op of ops) {
     if (!op || typeof op !== "object") continue;
     const conf = typeof op.confidence === "number" ? op.confidence : 0.8;
-    if (op.op === "create_item" || op.op === "send_to_inbox") {
-      const isInbox = op.op === "send_to_inbox";
-      const a = isInbox ? null : findArea(op.area);
-      const p = a && op.project && norm(op.project) !== "null" ? ensureProject(a.id, op.project) : null;
+    if (op.op === "create_item") {
+      const a = findArea(op.area) || fallbackArea(op.title + " " + frag.text);
+      const p = op.project ? ensureProject(a.id, op.project) : null;
       const type = TYPE_LABEL[op.type] ? op.type : "note";
       const item = {
-        id: uid("i"), type: isInbox ? "note" : type,
-        title: String(op.title || frag.text).slice(0, 140),
-        body: String((isInbox ? op.reason : op.body) || "").slice(0, 2000),
-        areaId: a ? a.id : null, projectId: p ? p.id : null,
-        status: "open", dueAt: parseDate(op.dueAt) ? op.dueAt : null, remindAt: parseDate(op.remindAt) ? op.remindAt : null,
+        id: uid("i"), type, title: String(op.title || frag.text).slice(0, 140), body: String(op.body || "").slice(0, 2000),
+        areaId: a.id, projectId: p ? p.id : null, status: "open",
+        dueAt: parseDate(op.dueAt) ? op.dueAt : null, remindAt: parseDate(op.remindAt) ? op.remindAt : null,
         recurrence: op.recurrence || null, priority: ["low", "normal", "high"].includes(op.priority) ? op.priority : "normal",
         firstStep: typeof op.firstStep === "string" && op.firstStep.trim() ? op.firstStep.slice(0, 140) : null,
         cue: typeof op.cue === "string" && op.cue.trim() ? op.cue.slice(0, 80) : null,
-        confidence: conf, inInbox: isInbox || !a || conf < 0.6, fragmentId: frag.id, createdAt: nowIso, history: type === "habit" ? [] : undefined,
+        draft: cleanDraft(op.draft), confidence: conf, guess: conf < 0.6, fragmentId: frag.id, createdAt: nowIso,
+        history: type === "habit" ? [] : undefined,
       };
+      if (!item.dueAt && !item.remindAt && !item.cue && type === "task" && parseDate(op.scheduleFor)) {
+        item.dueAt = op.scheduleFor; item.autoScheduled = true;
+        addAction("📅", `Put “${item.title}” on ${fmtWhen(parseDate(item.dueAt))}.`, item.id);
+      }
+      if (item.draft) addAction(DRAFT_ICON[item.draft.kind], `${item.draft.kind === "call" ? "Wrote what to say" : "Drafted a " + item.draft.kind} for “${item.title}”.`, item.id);
       state.items.push(item);
       undo.createdItems.push(item.id);
       (frag.itemIds ||= []).push(item.id);
       if (op.ref) refs[op.ref] = item.id;
-      if (item.inInbox) { did.push(`Sent “${item.title}” to your Inbox to confirm`); filed = filed || "Sent to Inbox to confirm"; }
-      else { did.push(`Added ${TYPE_LABEL[item.type].toLowerCase()} “${item.title}” to ${placeLabel(item)}`); filed = filed || "Filed under " + placeLabel(item); }
+      did.push(`Added ${TYPE_LABEL[item.type].toLowerCase()} “${item.title}” to ${placeLabel(item)}${item.guess ? " (best guess)" : ""}`);
+      filed = filed || "Filed under " + placeLabel(item);
     } else if (op.op === "update_item") {
       const it = itemById(op.id);
       if (!it || !op.changes || typeof op.changes !== "object") continue;
       undo.before.push(clone(it));
       const c = op.changes;
-      for (const k of ["title", "body", "recurrence", "firstStep"]) if (typeof c[k] === "string") it[k] = c[k].slice(0, k === "body" ? 2000 : 140);
-      for (const k of ["dueAt", "remindAt"]) if (k in c) it[k] = parseDate(c[k]) ? c[k] : null;
+      const fromPlace = placeLabel(it);
+      for (const k of ["title", "body", "recurrence", "firstStep", "cue"]) if (typeof c[k] === "string") it[k] = c[k].slice(0, k === "body" ? 2000 : 140);
+      for (const k of ["dueAt", "remindAt"]) if (k in c) { it[k] = parseDate(c[k]) ? c[k] : null; it.autoScheduled = false; }
       if (["low", "normal", "high"].includes(c.priority)) it.priority = c.priority;
       if (TYPE_LABEL[c.type]) it.type = c.type;
-      if (c.status === "done" && it.status !== "done") { it.status = "done"; it.doneAt = nowIso; }
-      if (c.status === "open") it.status = "open";
-      if (c.area) { const a = findArea(c.area); if (a) { it.areaId = a.id; it.inInbox = false; } }
-      if (c.project) { const p = ensureProject(it.areaId, c.project); if (p) it.projectId = p.id; }
+      if (c.draft) it.draft = cleanDraft(c.draft) || it.draft;
+      if (c.area) { const a = findArea(c.area); if (a) { it.areaId = a.id; if (!c.project) it.projectId = null; } }
+      if (c.project) { const p = ensureProject(it.areaId, c.project); if (p) { it.projectId = p.id; it.areaId = p.areaId; } }
+      if (placeLabel(it) !== fromPlace) { state.corrections.push({ title: it.title, from: fromPlace, to: placeLabel(it), at: nowIso }); state.corrections = state.corrections.slice(-20); it.guess = false; }
+      let verb = "Updated";
+      if (c.status === "done" && it.status !== "done") { it.status = "done"; it.doneAt = nowIso; verb = "Checked off"; }
+      else if (c.status === "dismissed") { it.status = "dismissed"; verb = "Let go of"; }
+      else if (c.status === "open") it.status = "open";
       it.updatedAt = nowIso;
-      did.push(it.status === "done" && c.status === "done" ? `Marked “${it.title}” done` : `Updated “${it.title}” in ${placeLabel(it)}`);
-      filed = filed || (c.status === "done" ? "Marked “" + it.title + "” done" : "Updated “" + it.title + "”");
+      did.push(placeLabel(it) !== fromPlace ? `Moved “${it.title}” to ${placeLabel(it)}` : `${verb} “${it.title}”`);
+      filed = filed || (placeLabel(it) !== fromPlace ? "Moved to " + placeLabel(it) : `${verb} “${it.title}”`);
     } else if (op.op === "link_items") {
       const from = refs[op.from] || op.from, to = refs[op.to] || op.to;
       if (!itemById(from) || !itemById(to) || from === to) continue;
       const link = { id: uid("l"), from, to, reason: String(op.reason || "").slice(0, 200) };
       state.links.push(link);
       undo.createdLinks.push(link.id);
-      did.push(`Linked “${itemById(from).title}” with “${itemById(to).title}”`);
+      did.push(`Connected “${itemById(from).title}” to “${itemById(to).title}”`);
     } else if (op.op === "update_project_summary") {
       const p = projectById(op.project) || findProject(null, op.project);
       if (!p || typeof op.summary !== "string") continue;
       undo.projectBefore.push({ id: p.id, summary: p.summary });
       p.summary = op.summary.slice(0, 600);
-      did.push(`Refreshed the summary of “${p.name}”`);
+      did.push(`Updated where “${p.name}” stands`);
     }
   }
   frag.status = "organized";
@@ -848,7 +900,7 @@ function applyOperations(frag, out) {
   frag.did = did;
   frag.undo = undo;
   frag.error = null;
-  return filed || (frag.reply ? "Answered" : "Organized");
+  return filed || (frag.reply ? "Answered" : "Got it");
 }
 
 function undoFragment(frag) {
@@ -859,6 +911,7 @@ function undoFragment(frag) {
   for (const before of u.before) { const idx = state.items.findIndex((i) => i.id === before.id); if (idx >= 0) state.items[idx] = before; }
   for (const pb of u.projectBefore) { const p = projectById(pb.id); if (p) p.summary = pb.summary; }
   state.projects = state.projects.filter((p) => !u.createdProjects.includes(p.id) || state.items.some((i) => i.projectId === p.id));
+  if (state.actions) state.actions = state.actions.slice(0, u.actions);
   frag.status = "undone";
   frag.undo = null;
 }
@@ -878,7 +931,7 @@ async function pump() {
       const sample = await getSample();
       if (!sample) {
         frag.status = "error";
-        frag.error = "Organizing needs Claude, which isn't available in this view. Your thought is saved.";
+        frag.error = "I need Claude to organize this, and it isn't available in this view. Your words are saved.";
         frag.blocked = true;
         claudeState = "unavailable";
         await persist(); render();
@@ -893,7 +946,6 @@ async function pump() {
         frag.status = "error";
         frag.error = claudeError(e);
         if (e && e.code === "not_granted") { frag.blocked = true; claudeState = "denied"; }
-        toast("Saved, but not organized yet", "error");
         await persist(); render();
         if (e && (e.code === "not_granted" || e.code === "rate_limited")) break;
         continue;
@@ -904,17 +956,29 @@ async function pump() {
   } finally { pumping = false; }
 }
 
-function capture(text) {
+/* ---------- one box for everything ---------- */
+let lastExchange = null; // {kind:"capture", fragId} | {kind:"ask", q, text, busy}
+const QUESTION = /\?\s*$|^(what|when|where|who|why|how|did|do|does|is|are|was|were|can|could|should|have|has|which|am i|tell me|show me|remind me what)\b/i;
+
+function send(text, about) {
   const t = String(text || "").trim().slice(0, 5000);
   if (!t) return;
-  state.fragments.push({ id: uid("f"), text: t, source: "web", createdAt: new Date().toISOString(), status: "queued" });
+  if (!about && QUESTION.test(t) && !/^remind me (to|at|in|tomorrow|tonight|on)\b/i.test(t)) { ask(t); return; }
+  const body = about ? `About “${about.title}” [${about.id}]: ${t}` : t;
+  const frag = { id: uid("f"), text: body, said: t, source: "web", createdAt: new Date().toISOString(), status: "queued" };
+  state.fragments.push(frag);
+  lastExchange = { kind: "capture", fragId: frag.id };
   persist();
-  render();
+  if ((location.hash.slice(1) || "home") !== "home") location.hash = "#home"; else render();
   pump();
 }
+document.getElementById("cmd-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("cmd-input");
+  send(input.value);
+  input.value = "";
+});
 
-/* ---------- Ask your brain ---------- */
-let lastAnswer = null;
 function brainContext() {
   const items = state.items.filter((i) => i.status !== "dismissed").map((i) => {
     const bits = [i.type, placeLabel(i), i.title, "status " + i.status];
@@ -922,23 +986,21 @@ function brainContext() {
     if (i.dueAt) bits.push("due " + i.dueAt);
     if (i.remindAt) bits.push("remind " + i.remindAt);
     if (i.doneAt) bits.push("done " + i.doneAt.slice(0, 10));
-    if (i.recurrence) bits.push("repeats " + recurrenceLabel(i.recurrence) + `, streak ${habitStreak(i)}, done ${(i.history || []).length} times`);
-    if (i.firstStep) bits.push("first step: " + i.firstStep);
+    if (i.cue) bits.push("cue: " + i.cue);
+    if (i.recurrence) bits.push("repeats " + recurrenceLabel(i.recurrence) + `, kept ${habitKept(i).kept} of last ${habitKept(i).due}`);
     return "- " + bits.join(" | ");
   }).join("\n");
   const projects = state.projects.map((p) => `- ${p.name} (${areaById(p.areaId)?.name}): ${p.summary}`).join("\n");
-  const said = state.fragments.slice(-120).map((f) => `- ${f.createdAt.slice(0, 10)}: ${f.text}`).join("\n");
+  const said = state.fragments.slice(-120).map((f) => `- ${f.createdAt.slice(0, 10)}: ${f.said || f.text}`).join("\n");
   return `PROJECTS:\n${projects || "(none)"}\n\nITEMS:\n${items || "(none)"}\n\nEVERYTHING THEY SAID (oldest first):\n${said || "(nothing yet)"}`;
 }
 async function ask(q) {
-  q = String(q || "").trim();
-  if (!q) return;
   const sample = await getSample();
-  if (!sample) { toast("Asking needs Claude, which isn't available in this view", "error"); return; }
+  lastExchange = { kind: "ask", q, text: "", busy: true };
+  if ((location.hash.slice(1) || "home") !== "home") location.hash = "#home"; else render();
+  if (!sample) { lastExchange = { kind: "ask", q, text: "I need Claude to answer that, and it isn't available in this view.", busy: false }; render(); return; }
   const now = new Date();
-  lastAnswer = { q, text: "", busy: true };
-  render();
-  const prompt = `You are the memory of Fragments, an external brain for a person with ADHD. Answer their question using ONLY the data below. Be brief and warm: 1–4 short sentences, with specific dates written like "Tue, Nov 3". If there's no record, say so plainly. If it helps, end with one concrete next step. Talk to them as "you". After the answer, add a final line starting with "From:" that lists 1–3 of their own captured thoughts you relied on, as date and short quote, e.g. From: Oct 12 "booked dr patel nov 3 at 10".
+  const prompt = `You are Fragments, the personal assistant and memory of a person with ADHD. Answer their question using ONLY the data below. Be brief and warm: 1–4 short sentences, with specific dates written like "Tue, Nov 3". If there's no record, say so plainly. If it helps, end with one concrete next step. Talk to them as "you". Then add a final line starting with "From:" listing 1–3 of their own captured thoughts you relied on, as date and short quote.
 
 NOW: ${fmtDay(now)} ${fmtTime(now)} (${TZ})
 
@@ -946,74 +1008,39 @@ ${brainContext()}
 
 QUESTION: ${JSON.stringify(q)}`;
   try {
-    const { text } = await sample(prompt, { modelTier: "quick", onText: ({ text }) => { lastAnswer.text = text; const el = document.getElementById("answer-text"); if (el) el.textContent = text; } });
-    lastAnswer = { q, text, busy: false };
+    const { text } = await sample(prompt, { modelTier: "quick", onText: ({ text }) => { lastExchange.text = text; const el = document.getElementById("answer-text"); if (el) el.textContent = text; } });
+    lastExchange = { kind: "ask", q, text, busy: false };
     claudeState = "granted";
   } catch (e) {
-    lastAnswer = { q, text: claudeError(e), busy: false };
+    lastExchange = { kind: "ask", q, text: claudeError(e), busy: false };
     if (e && e.code === "not_granted") claudeState = "denied";
   }
   render();
 }
 
-/* ---------- first steps ---------- */
+/* ---------- things it does on its own ---------- */
 const skipped = new Set();
-const showAllSteps = new Set();
 let breaking = null;
-function stepsBlock(item) {
-  if (item.steps && item.steps.length) {
-    const nextIdx = item.steps.findIndex((s) => !s.done);
-    const doneN = item.steps.filter((x) => x.done).length;
-    const st = item.steps[nextIdx];
-    if (!showAllSteps.has(item.id)) return h("div", { class: "step" }, h("span", null, `Step ${nextIdx + 1} of ${item.steps.length}: `), st.text, st.mins ? h("small", { style: "color:var(--faint)" }, ` · ${st.mins} min`) : null,
-      h("div", { class: "row", style: "margin-top:8px;display:flex;gap:8px;flex-wrap:wrap" },
-        h("button", { class: "btn small primary", onclick: async () => { st.done = true; if (item.steps.every((x) => x.done)) { await toggleDone(item); return; } await persist(); render(); toast(doneN + 1 >= 2 ? "Nice. Next step's ready." : "Started. That's the hard part."); } }, "Did it"),
-        h("button", { class: "btn small ghost", onclick: () => { showAllSteps.add(item.id); render(); } }, "See all steps")));
-    return h("ul", { class: "list steps" }, item.steps.map((st, idx) => h("li", { class: "stepline" + (st.done ? " done" : "") + (idx === nextIdx ? " now" : "") },
-      h("button", { class: "check small" + (st.done ? " on" : ""), "aria-label": st.done ? "Mark step not done" : "Mark step done", onclick: async () => { st.done = !st.done; if (item.steps.every((x) => x.done)) { await toggleDone(item); return; } await persist(); render(); } }, st.done ? checkSvg() : null),
-      h("span", null, st.text, st.mins ? h("small", null, ` · ${st.mins} min`) : null))));
-  }
-  return item.firstStep ? h("div", { class: "step" }, h("span", null, "Start with: "), item.firstStep) : null;
-}
-async function breakDown(item) {
-  if (breaking) return;
+async function autoBreak(item) {
+  if (breaking || item.steps || item.autoBroke || claudeState !== "granted" || item.type !== "task") return;
+  item.autoBroke = true;
   const sample = await getSample();
-  if (!sample) { toast("Breaking things down needs Claude, which isn't available in this view", "error"); return; }
-  breaking = item.id; render();
-  const prompt = `Break this task into 3–6 tiny, concrete steps for a person with ADHD who is stuck starting. The first step must take about 2 minutes and need no decisions. Use only what's known; don't invent facts. Reply with only JSON: {"steps":[{"text":"<short imperative step>","mins":<estimated minutes>}]}
+  if (!sample) return;
+  breaking = item.id;
+  const prompt = `A person with ADHD needs to do this task. If it is already one small action (under ~10 minutes, no decisions), reply {"steps":[]}. Otherwise break it into 3–5 tiny, concrete steps; the first takes about 2 minutes and needs no decisions. Use only what's known; don't invent facts. Reply with only JSON: {"steps":[{"text":"<short imperative step>","mins":<minutes>}]}
 
 TASK: ${JSON.stringify(item.title)}
 DETAILS: ${JSON.stringify(item.body || "")}
 WHERE IT LIVES: ${placeLabel(item)}`;
   try {
     const out = await sample.json(prompt, { modelTier: "quick" });
-    const steps = Array.isArray(out && out.steps) ? out.steps.filter((x) => x && x.text).slice(0, 6).map((x) => ({ text: String(x.text).slice(0, 120), mins: Number(x.mins) || null, done: false })) : [];
-    if (steps.length) { item.steps = steps; claudeState = "granted"; await persist(); toast("Broken into " + plural(steps.length, "step")); }
-    else toast("Couldn't break that down. Try again.", "error");
-  } catch (e) { toast(claudeError(e), "error"); if (e && e.code === "not_granted") claudeState = "denied"; }
-  breaking = null; render();
+    const steps = Array.isArray(out && out.steps) ? out.steps.filter((x) => x && x.text).slice(0, 5).map((x) => ({ text: String(x.text).slice(0, 120), mins: Number(x.mins) || null, done: false })) : [];
+    if (steps.length) { item.steps = steps; addAction("🧩", `Broke “${item.title}” into ${steps.length} small steps.`, item.id); await persist(); }
+  } catch (e) { /* stays a single task */ }
+  breaking = null;
+  render();
 }
 
-/* ---------- actions ---------- */
-async function toggleDone(item) {
-  if (item.type === "habit") {
-    const k = dayKey(new Date());
-    item.history = item.history || [];
-    if (habitDoneToday(item)) { item.history = item.history.filter((d) => d !== k); item.lastDoneAt = null; }
-    else { item.history.push(k); item.lastDoneAt = new Date().toISOString(); const n = habitStreak(item); toast(n > 1 ? `${n}-day streak. Keep it going.` : "Done for today"); }
-  } else if (item.status === "done") { item.status = "open"; item.doneAt = null; }
-  else { item.status = "done"; item.doneAt = new Date().toISOString(); toast(cheer()); }
-  await persist(); render();
-}
-function cheer() {
-  const n = state.items.filter((i) => i.doneAt && dayKey(new Date(i.doneAt)) === dayKey(new Date())).length;
-  return n >= 3 ? `${n} done today. You're on a roll.` : "Done. Nice.";
-}
-async function snooze(item) {
-  item.remindAt = localIso(new Date(Date.now() + 3600e3));
-  await persist(); render();
-  toast("Snoozed for an hour", "info");
-}
 // New day: quietly move unfinished things from earlier days to today. No overdue pile.
 function rollForward() {
   const today = dayKey(new Date());
@@ -1021,7 +1048,7 @@ function rollForward() {
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const moved = [];
   for (const i of state.items) {
-    if (i.status !== "open" || i.inInbox || !["task", "reminder"].includes(i.type)) continue;
+    if (i.status !== "open" || !["task", "reminder"].includes(i.type)) continue;
     const w = whenOf(i);
     if (!w || w >= start) continue;
     const shift = (v) => { const d = parseDate(v); if (!d) return v; const t = new Date(); t.setHours(Math.max(d.getHours(), 9), d.getMinutes(), 0, 0); return localIso(t); };
@@ -1029,39 +1056,32 @@ function rollForward() {
     if (i.remindAt) i.remindAt = shift(i.remindAt);
     moved.push(i.title);
   }
-  if (state.lastOpen && moved.length) state.rolled = { date: today, moved };
+  if (state.lastOpen && moved.length) addAction("↪️", `Carried over ${moved.length === 1 ? "“" + moved[0] + "”" : plural(moved.length, "thing")} from before. ${moved.length === 1 ? "It's" : "They're"} on today now.`);
   state.lastOpen = today;
   if (moved.length) persist();
 }
 
-async function wrapUp() {
-  const now = new Date();
-  const end = new Date(now); end.setHours(23, 59, 59, 999);
-  const moved = [];
-  for (const i of state.items) {
-    if (i.status !== "open" || i.inInbox || i.type === "habit" || i.type === "idea" || i.type === "note") continue;
-    const w = whenOf(i);
-    if (!w || w > end) continue;
-    const shift = (v) => { const d = parseDate(v); if (!d) return v; const t = addDays(now, 1); t.setHours(d.getHours() || 9, d.getMinutes(), 0, 0); return localIso(t); };
-    if (i.type === "event" && parseDate(i.dueAt) < now) continue;
-    i.dueAt = i.dueAt ? shift(i.dueAt) : null;
-    i.remindAt = i.remindAt ? shift(i.remindAt) : null;
-    moved.push(i.title);
+/* ---------- small actions ---------- */
+async function toggleDone(item) {
+  if (item.type === "habit") {
+    const k = dayKey(new Date());
+    item.history = item.history || [];
+    if (habitDoneToday(item)) item.history = item.history.filter((d) => d !== k);
+    else { item.history.push(k); const kept = habitKept(item); toast(`${kept.kept} of the last ${kept.due} days. Nice.`); }
+  } else if (item.status === "done") { item.status = "open"; item.doneAt = null; }
+  else {
+    item.status = "done"; item.doneAt = new Date().toISOString();
+    const n = state.items.filter((i) => i.doneAt && dayKey(new Date(i.doneAt)) === dayKey(new Date())).length;
+    toast(n >= 3 ? `${n} done today. You're on a roll.` : "Done. Nice.");
   }
-  const done = state.items.filter((i) => i.doneAt && dayKey(new Date(i.doneAt)) === dayKey(now)).length;
-  const habits = state.items.filter((i) => i.type === "habit" && habitDoneToday(i)).length;
-  state.lastWrap = { date: dayKey(now), done, habits, moved };
+  skipped.delete(item.id);
   await persist(); render();
 }
-function moveItem(item, areaId, projectId) {
-  const from = placeLabel(item);
-  item.areaId = areaId; item.projectId = projectId || null; item.inInbox = false;
-  const to = placeLabel(item);
-  if (from !== to && item.fragmentId) state.corrections.push({ title: item.title, from, to, at: new Date().toISOString() });
-  state.corrections = state.corrections.slice(-20);
+async function snooze(item) {
+  item.remindAt = localIso(new Date(Date.now() + 3600e3));
+  await persist(); render();
+  toast("I'll bring it back in an hour", "info");
 }
-
-/* ---------- toast ---------- */
 let toastTimer;
 function toast(message, kind) {
   const el = document.getElementById("toast");
@@ -1071,24 +1091,42 @@ function toast(message, kind) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 3000);
 }
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
+  catch (e) { const pre = btn.closest(".doc, .sheet").querySelector("pre"); const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected. Press copy."; }
+}
 
 /* ---------- components ---------- */
 const checkSvg = () => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.innerHTML = '<path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#0e0f12" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'; return s; };
-
-function itemMeta(item, { showPlace = true } = {}) {
+const checkBtn = (item, cls = "") => {
+  const on = item.type === "habit" ? habitDoneToday(item) : item.status === "done";
+  return h("button", { class: "check " + cls + (on ? " on" : ""), "aria-label": on ? "Mark not done" : "Mark done", onclick: () => toggleDone(item) }, on ? checkSvg() : null);
+};
+function whenText(item) {
   const now = new Date();
-  const bits = [];
-  if (item.type !== "task" && item.type !== "habit") bits.push(h("span", null, TYPE_LABEL[item.type]));
-  const due = parseDate(item.dueAt), rem = parseDate(item.remindAt);
-  if (rem && item.status === "open") bits.push(h("span", { class: rem < now ? "late" : dayKey(rem) === dayKey(now) ? "hot" : null }, "⏰ " + fmtWhen(rem)));
-  if (due && item.status === "open" && !(rem && Math.abs(rem - due) < 6 * 3600e3)) bits.push(h("span", { class: due < now ? "late" : dayKey(due) === dayKey(now) ? "hot" : null }, (item.type === "event" ? "" : "Due ") + fmtWhen(due)));
-  if (item.cue && item.status === "open") bits.push(h("span", { class: "hot" }, "📍 " + item.cue));
-  if (item.recurrence) bits.push(h("span", null, "↻ " + recurrenceLabel(item.recurrence)));
-  if (item.priority === "high" && item.status === "open") bits.push(h("span", { class: "hot" }, "High priority"));
-  if (showPlace) { const a = areaById(item.areaId); bits.push(h("span", null, a ? h("span", { class: "dot", style: "background:" + a.color }) : null, placeLabel(item))); }
-  return h("div", { class: "meta" }, bits);
+  const w = whenOf(item);
+  if (item.cue && item.status === "open") return { text: "📍 " + item.cue, hot: true };
+  if (!w) return null;
+  const label = item.remindAt && !item.dueAt ? "⏰ " + fmtWhen(w) : fmtWhen(w);
+  return { text: label, hot: dayKey(w) <= dayKey(now) };
 }
-
+function metaLine(item, { place = true } = {}) {
+  const bits = [];
+  const w = whenText(item);
+  if (w && item.status === "open") bits.push(h("span", { class: w.hot ? "hot" : null }, w.text));
+  if (item.recurrence) bits.push(h("span", null, "↻ " + recurrenceLabel(item.recurrence)));
+  if (item.draft && item.status === "open") bits.push(h("span", { class: "hot" }, DRAFT_ICON[item.draft.kind] + " Draft ready"));
+  if (place) { const a = areaById(item.areaId); bits.push(h("span", null, a ? h("span", { class: "dot", style: "background:" + a.color }) : null, placeLabel(item))); }
+  return bits.length ? h("div", { class: "meta" }, bits) : null;
+}
+function itemRow(item, opts = {}) {
+  const a = areaById(item.areaId);
+  const lead = CHECKABLE.has(item.type) ? checkBtn(item)
+    : h("span", { class: "glyph", style: "background:" + (a ? a.color : "#59606d"), "aria-hidden": "true" }, item.type === "idea" ? "✦" : "¶");
+  return h("li", { class: "item" + (item.status === "done" ? " done" : "") }, lead,
+    h("button", { class: "item-main", onclick: () => openItem(item) }, h("span", { class: "item-title" }, item.title), metaLine(item, opts)));
+}
+const list = (items, opts) => h("ul", { class: "list" }, items.map((i) => itemRow(i, opts)));
 function habitDays(item) {
   const a = areaById(item.areaId);
   const cells = [];
@@ -1099,52 +1137,72 @@ function habitDays(item) {
   }
   return h("div", { class: "days", "aria-label": "Last 14 days" }, cells);
 }
-
-function itemRow(item, opts = {}) {
-  const isDone = item.type === "habit" ? habitDoneToday(item) : item.status === "done";
-  const a = areaById(item.areaId);
-  const lead = CHECKABLE.has(item.type)
-    ? h("button", { class: "check" + (isDone ? " on" : ""), "aria-label": isDone ? "Mark not done" : "Mark done", onclick: () => toggleDone(item) }, isDone ? checkSvg() : null)
-    : h("span", { class: "glyph", style: "background:" + (a ? a.color : "#59606d"), "aria-hidden": "true" }, item.type === "idea" ? "✦" : "¶");
-  const streak = item.type === "habit" ? habitStreak(item) : 0; // shown as a tooltip only
-  return h("li", { class: "item" + (isDone && item.type !== "habit" ? " done" : "") }, lead,
-    h("button", { class: "item-main", onclick: () => openSheet(item) },
-      h("span", { class: "item-title" }, item.title),
-      itemMeta(item, opts),
-      item.type === "habit" ? habitDays(item) : null),
-    item.type === "habit" ? (() => { const k = habitKept(item, 14); return k.due ? h("span", { class: "streak", title: streak > 1 ? `${streak}-day streak (one rest day a week never breaks it)` : null }, `${k.kept} of last ${k.due}`) : null; })() : null);
+function stepCard(item) {
+  if (item.steps && item.steps.length) {
+    const idx = item.steps.findIndex((s) => !s.done);
+    if (idx < 0) return null;
+    const st = item.steps[idx];
+    return h("div", { class: "step" },
+      h("span", null, h("span", { class: "lbl" }, `Step ${idx + 1} of ${item.steps.length}: `), st.text, st.mins ? h("small", null, ` · ${st.mins} min`) : null),
+      h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: async () => {
+        st.done = true;
+        if (item.steps.every((x) => x.done)) { await toggleDone(item); return; }
+        await persist(); render(); toast(idx === 0 ? "Started. That's the hard part." : "Nice. Next step's ready.");
+      } }, "Did it")));
+  }
+  if (breaking === item.id) return h("div", { class: "step spin" }, "Breaking this into small steps…");
+  if (item.firstStep) return h("div", { class: "step" }, h("span", null, h("span", { class: "lbl" }, "Start with: "), item.firstStep));
+  return null;
 }
-function list(items, opts) { return h("ul", { class: "list" }, items.map((i) => itemRow(i, opts))); }
-
-function modeNote() {
-  if (mode !== "demo") return null;
-  return h("div", { class: "note" },
-    h("span", null, h("strong", null, "Demo month. "), "A month of real-sounding thoughts, already sorted. Changes here aren't saved."),
-    h("button", { class: "btn small ghost", onclick: () => setMode("mine") }, "Use my brain"));
+function draftChip(item) {
+  if (!item.draft || item.status !== "open") return null;
+  const d = item.draft;
+  return h("button", { class: "draftchip", onclick: () => openItem(item) }, h("span", null, DRAFT_ICON[d.kind]), h("span", null, h("b", null, d.kind === "call" ? "What to say is ready" : `Your ${d.kind} is drafted`), ` · ${d.to || ""}`), h("span", { "aria-hidden": "true", style: "flex:none;color:var(--faint)" }, "›"));
 }
 
-/* ---------- views ---------- */
+/* ---------- Home: the command center ---------- */
 function greeting() {
   const hr = new Date().getHours();
   return hr < 5 ? "Still up?" : hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
 }
+function exchangeCard() {
+  if (!lastExchange) return null;
+  if (lastExchange.kind === "ask") {
+    const t = lastExchange.text || "";
+    const i = lastExchange.busy ? -1 : t.lastIndexOf("\nFrom:");
+    return h("div", { class: "exchange" }, h("p", { class: "you" }, "You asked: " + lastExchange.q),
+      h("p", { class: "me" + (lastExchange.busy && !t ? " spin" : ""), id: "answer-text" }, (i >= 0 ? t.slice(0, i).trim() : t) || "Thinking…"),
+      i >= 0 ? h("p", { class: "from" }, t.slice(i + 1).trim()) : null,
+      lastExchange.busy ? null : h("div", { class: "row" }, h("span"), h("button", { class: "btn small ghost", onclick: () => { lastExchange = null; render(); } }, "Close")));
+  }
+  const f = state.fragments.find((x) => x.id === lastExchange.fragId);
+  if (!f) return null;
+  const working = f.status === "queued" || f.status === "working";
+  return h("div", { class: "exchange" }, h("p", { class: "you" }, "You: " + (f.said || f.text)),
+    working ? h("p", { class: "me spin" }, "On it…", h("span", { class: "elapsed", "data-start": String(f.startedAt || Date.now()) })) : null,
+    f.status === "error" ? h("p", { class: "me" }, f.error, " ", h("button", { class: "btn small", onclick: () => { f.status = "queued"; f.error = null; persist(); render(); pump(); } }, "Try again")) : null,
+    f.reply ? h("p", { class: "me" }, f.reply) : null,
+    f.status === "organized" && f.did && f.did.length ? h("ul", null, f.did.map((d) => h("li", null, d))) : null,
+    f.status === "organized" && (!f.did || !f.did.length) && f.explain ? h("p", { class: "me" }, f.explain) : null,
+    working ? null : h("div", { class: "row" },
+      f.status === "organized" && f.undo ? h("button", { class: "btn small ghost", onclick: async () => { undoFragment(f); await persist(); render(); toast("Undone", "info"); } }, "Undo") : h("span"),
+      h("button", { class: "btn small ghost", onclick: () => { lastExchange = null; render(); } }, "Close")));
+}
 
-function viewToday() {
+function viewHome() {
+  rollForward();
   const now = new Date();
   const today = dayKey(now);
-  const open = state.items.filter((i) => i.status === "open" && !i.inInbox);
+  const open = state.items.filter((i) => i.status === "open");
   const out = [];
 
-  rollForward();
   if (!state.items.length && !state.fragments.length) {
-    out.push(h("div", { class: "greet" }, h("h1", null, greeting()), h("p", { class: "sub" }, fmtDay(now))));
+    out.push(h("div", { class: "greet" }, h("h1", null, greeting()), h("p", { class: "brief" }, "Tell me anything on your mind, in any order. I'll sort it into your life, plan it, and bring it back when it matters.")));
     out.push(h("div", { class: "empty" },
-      h("strong", null, "Your brain is empty, in a good way."),
-      h("p", null, "Say anything that's rattling around: errands, ideas, appointments, worries. Fragments files it and brings back only what matters today."),
-      h("div", { class: "chips" },
-        h("a", { class: "btn primary", href: "#capture" }, "Capture a thought"),
-        h("button", { class: "btn", onclick: loadExamples }, "Try 9 example thoughts"),
-        h("button", { class: "btn ghost", onclick: () => setMode("demo") }, "See a demo month"))));
+      h("strong", null, "Try saying:"),
+      h("div", { class: "chips" }, EXAMPLES.slice(0, 5).map((ex) => h("button", { class: "chip", onclick: () => send(ex) }, ex))),
+      h("button", { class: "btn ghost small", style: "align-self:flex-start", onclick: () => setMode("demo") }, "See a month of someone else's life")));
+    out.push(exchangeCard());
     return out;
   }
 
@@ -1153,310 +1211,200 @@ function viewToday() {
   const score = (i) => {
     const w = whenOf(i);
     let s = 0;
-    if (w && w < now) s += 300;
-    if (w && dayKey(w) === today) s += 200;
+    if (w && dayKey(w) <= today) s += 300;
     if (w && w - now < 3 * 864e5) s += 60;
     if (i.priority === "high") s += 120;
     if (i.priority === "low") s -= 40;
-    if (!w) s += 20;
-    if (i.type === "event") s -= 400;
-    return s - (w ? (w - now) / 864e5 : 0);
+    if (i.type === "event") s -= 500;
+    if (i.cue) s -= 80;
+    return s - (w ? (w - now) / 864e5 : 3);
   };
   const ranked = actionable.filter((i) => !ringing.includes(i)).sort((a, b) => score(b) - score(a));
-  const next = ranked.find((i) => !skipped.has(i.id)) || ranked[0];
-  const todayItems = actionable.filter((i) => i !== next && !ringing.includes(i) && whenOf(i) && (dayKey(whenOf(i)) === today || whenOf(i) < now)).sort((a, b) => whenOf(a) - whenOf(b));
-  const habits = state.items.filter((i) => i.type === "habit" && i.status === "open" && !i.inInbox && habitDueOn(i, now));
+  const now1 = ranked.find((i) => !skipped.has(i.id)) || ranked[0];
+  const todayRest = actionable.filter((i) => i !== now1 && !ringing.includes(i) && whenOf(i) && dayKey(whenOf(i)) <= today).sort((a, b) => whenOf(a) - whenOf(b));
+  const habits = open.filter((i) => i.type === "habit" && habitDueOn(i, now));
   const habitsLeft = habits.filter((i) => !habitDoneToday(i)).length;
-  const count = (next ? 1 : 0) + todayItems.length;
-  const best = habits.map((i) => [i, habitStreak(i)]).sort((a, b) => b[1] - a[1])[0];
+  const big = open.filter((i) => i.type === "event" && parseDate(i.dueAt) > now).sort((a, b) => parseDate(a.dueAt) - parseDate(b.dueAt));
+  const left = (now1 ? 1 : 0) + todayRest.length;
 
-  const subtitle = [fmtDay(now), count ? plural(count, "thing") + " today" : "nothing due today", habitsLeft ? plural(habitsLeft, "habit") + " to go" : habits.length ? "habits done" : null].filter(Boolean).join(" · ");
-  out.push(h("div", { class: "greet" }, h("h1", null, greeting()), h("p", { class: "sub" }, subtitle),
-    best && best[1] > 2 ? h("p", { class: "sub", style: "color:var(--accent);font-size:14px" }, `${best[0].title}: ${best[1]}-day streak`) : null));
+  const brief = [];
+  brief.push(left ? ["You have ", h("b", null, plural(left, "thing")), " left today"] : ["Nothing left on today"]);
+  if (habitsLeft) brief.push([plural(habitsLeft, "habit") + " to go"]);
+  if (big[0]) { const d = daysUntil(big[0].dueAt); brief.push([big[0].title, " is ", h("b", null, d === 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`)]); }
+  const briefEl = h("p", { class: "brief" }, brief.map((part, i) => [i === 0 ? "" : i === brief.length - 1 ? (brief.length > 2 ? ", and " : " and ") : ", ", ...part]), ".");
+  out.push(h("div", { class: "greet" }, mode === "demo" ? h("span", { class: "demo-pill" }, "Demo month · changes aren't saved") : null, h("h1", null, greeting()), briefEl));
 
-  if (state.rolled && state.rolled.date === today) out.push(h("div", { class: "note" },
-    h("span", null, `Carried over from before: ${state.rolled.moved.join(", ")}. They're on today now.`),
-    h("button", { class: "btn small ghost", onclick: () => { state.rolled = null; persist(); render(); } }, "Got it")));
-
-  // Ask
-  const qInput = h("input", { type: "text", id: "ask-input", placeholder: "Ask your brain anything…", "aria-label": "Ask your brain" });
-  out.push(h("form", { class: "ask", onsubmit: (e) => { e.preventDefault(); ask(qInput.value); qInput.value = ""; } }, qInput, h("button", { class: "btn small", type: "submit" }, "Ask")));
-  if (lastAnswer) out.push(h("div", { class: "answer" }, h("span", { class: "q" }, lastAnswer.q),
-    (() => { const t = lastAnswer.text || ""; const i = lastAnswer.busy ? -1 : t.lastIndexOf("\nFrom:"); return [
-      h("p", { id: "answer-text", class: lastAnswer.busy && !t ? "spin" : null }, (i >= 0 ? t.slice(0, i).trim() : t) || "Thinking…"),
-      i >= 0 ? h("p", { class: "hint", style: "font-size:13px" }, t.slice(i + 1).trim()) : null]; })(),
-    lastAnswer.busy ? null : h("button", { class: "btn small ghost", style: "align-self:flex-start", onclick: () => { lastAnswer = null; render(); } }, "Clear")));
-  else out.push(h("div", { class: "chips" }, ["What's coming up this month?", "What have I been putting off?", "What did I say about the fitness app?"].map((q) => h("button", { class: "chip", onclick: () => ask(q) }, q))));
+  out.push(exchangeCard());
 
   for (const r of ringing) out.push(h("div", { class: "alarm", role: "alert" },
-    h("span", null, "Reminder · " + fmtTime(new Date(r.remindAt)) + " · stays here until you answer it"), h("strong", null, r.title),
-    h("div", { class: "row" }, h("button", { class: "btn small", onclick: () => toggleDone(r) }, "Done"), h("button", { class: "btn small", onclick: () => snooze(r) }, "Snooze 1 hour"))));
+    h("span", null, "Reminder · " + fmtTime(new Date(r.remindAt))), h("strong", null, r.title),
+    h("div", { class: "row" }, h("button", { class: "btn small", onclick: () => toggleDone(r) }, "Done"), h("button", { class: "btn small", onclick: () => snooze(r) }, "In an hour"))));
 
-  if (next) {
-    out.push(h("div", { class: "next" },
-      h("span", { class: "eyebrow" }, "Next up"),
-      h("p", { class: "big" }, next.title),
-      itemMeta(next),
-      stepsBlock(next),
+  if (now1) {
+    if (!now1.steps && !now1.firstStep) setTimeout(() => autoBreak(now1), 0);
+    out.push(h("div", { class: "now" },
+      h("span", { class: "eyebrow" }, "Now"),
+      h("button", { class: "big", onclick: () => openItem(now1) }, now1.title),
+      metaLine(now1),
+      stepCard(now1),
+      draftChip(now1),
       h("div", { class: "row" },
-        h("button", { class: "btn primary", onclick: () => toggleDone(next) }, "Done"),
-        next.steps && next.steps.length ? null : h("button", { class: "btn", onclick: () => breakDown(next) }, breaking === next.id ? "Breaking it down…" : "Too big? Break it down"),
-        ranked.length > 1 ? h("button", { class: "btn ghost", onclick: () => { skipped.add(next.id); render(); } }, "Not now") : null)));
+        h("button", { class: "btn primary", onclick: () => toggleDone(now1) }, "Done"),
+        ranked.length > 1 ? h("button", { class: "btn ghost", onclick: () => { skipped.add(now1.id); render(); } }, "Not now") : null)));
   } else {
-    out.push(h("div", { class: "next" }, h("span", { class: "eyebrow" }, "Next up"), h("p", { class: "big" }, "Nothing urgent."), h("p", { class: "sub" }, "Enjoy it, or capture what's on your mind.")));
+    out.push(h("div", { class: "now" }, h("span", { class: "eyebrow" }, "Now"), h("p", { class: "big" }, "You're clear."), h("p", { class: "sub" }, "Nothing needs you right now. Tell me whatever's on your mind.")));
   }
 
-  if (todayItems.length) out.push(h("section", { class: "section" }, h("h2", null, "Also today"), list(todayItems)));
-  if (habits.length) out.push(h("section", { class: "section" }, h("h2", null, "Habits"), list(habits, { showPlace: false })));
+  const since = Date.now() - 36 * 3600e3;
+  const acts = (state.actions || []).filter((a) => new Date(a.at) >= since).slice(-6).reverse();
+  if (acts.length) out.push(h("section", { class: "section" }, h("h2", null, "I took care of"),
+    h("ul", { class: "did" }, acts.map((a) => h("li", null, h("button", { onclick: () => { const it = a.itemId && itemById(a.itemId); if (it) openItem(it); } },
+      h("span", { class: "ico", "aria-hidden": "true" }, a.icon), h("span", { class: "txt" }, a.text, h("small", null, fmtWhen(new Date(a.at))))))))));
 
-  const week = open.filter((i) => ["task", "reminder", "event"].includes(i.type) && i !== next && whenOf(i) && dayKey(whenOf(i)) > today && whenOf(i) - now < 7 * 864e5).sort((a, b) => whenOf(a) - whenOf(b));
-  if (week.length) out.push(h("details", null, h("summary", null, `Later this week (${week.length})`), list(week)));
+  if (todayRest.length || habits.length) out.push(h("section", { class: "section" }, h("h2", null, "Also today"),
+    todayRest.length ? list(todayRest) : null,
+    habits.length ? h("div", { class: "habits" }, habits.map((i) => h("span", { class: "habit" }, checkBtn(i), h("button", { class: "item-main", style: "flex-direction:row;gap:6px;align-items:center", onclick: () => openItem(i) }, i.title, (() => { const k = habitKept(i); return k.due ? h("small", null, `${k.kept}/${k.due}`) : null; })())))) : null));
 
-  const inbox = inboxItems().length;
-  if (inbox) out.push(h("a", { class: "chip", href: "#inbox", style: "align-self:flex-start" }, `${inbox} in your Inbox to confirm →`));
-
-  const w = state.lastWrap && state.lastWrap.date === today ? state.lastWrap : null;
-  out.push(w
-    ? h("div", { class: "wrapup" }, h("span", { class: "label" }, "Day wrapped"),
-        h("strong", null, `${plural(w.done, "thing")} done and ${plural(w.habits, "habit")} kept today.`),
-        h("p", { class: "sub" }, w.moved.length ? `Moved to tomorrow, no guilt: ${w.moved.join(", ")}.` : "Nothing left hanging. Rest up."))
-    : h("div", { class: "wrapup" }, h("span", { class: "label" }, "End of day"),
-        h("p", { class: "sub" }, "Anything you didn't get to moves to tomorrow. No pile-up."),
-        h("button", { class: "btn small", style: "align-self:flex-start", onclick: wrapUp }, "Wrap up the day")));
+  const soon = open.filter((i) => ["event", "task", "reminder"].includes(i.type) && i !== now1 && whenOf(i) && dayKey(whenOf(i)) > today && daysUntil(whenOf(i)) <= 30)
+    .sort((a, b) => whenOf(a) - whenOf(b)).filter((i, k) => i.type === "event" || k < 4).slice(0, 5);
+  if (soon.length) out.push(h("section", { class: "section" }, h("h2", null, "Coming up"),
+    h("ul", { class: "soon" }, soon.map((i) => { const d = daysUntil(whenOf(i)); return h("li", null, h("button", { onclick: () => openItem(i) },
+      h("span", { class: "when" }, d === 1 ? "Tomorrow" : d < 7 ? new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(whenOf(i)) : `${d} days`),
+      h("span", null, i.title, h("small", null, placeLabel(i))))); }))));
   return out;
 }
 
-function viewLife() {
+/* ---------- Life: everything, nested ---------- */
+const openAreas = new Set();
+function areaStatus(a) {
   const now = new Date();
-  const since = addDays(now, -30);
-  const frags30 = state.fragments.filter((f) => new Date(f.createdAt) >= since);
-  const done30 = state.items.filter((i) => i.doneAt && new Date(i.doneAt) >= since).length;
-  const habitDays = state.items.filter((i) => i.type === "habit").reduce((n, i) => n + (i.history || []).filter((k) => k >= dayKey(since)).length, 0);
-
-  // Capture heatmap: last 5 weeks, Monday-first.
-  const counts = {};
-  for (const f of state.fragments) { const k = dayKey(new Date(f.createdAt)); counts[k] = (counts[k] || 0) + 1; }
-  const startMon = addDays(addDays(now, -((now.getDay() + 6) % 7)), -28);
-  const cells = ["M", "T", "W", "T", "F", "S", "S"].map((d) => h("b", null, d));
-  for (let k = 0; k < 35; k++) {
-    const d = addDays(startMon, k);
-    const c = d > now ? -1 : counts[dayKey(d)] || 0;
-    cells.push(h("i", { title: `${fmtMD(d)}: ${c < 0 ? "" : plural(c, "thought")}`, style: c < 0 ? "opacity:.25" : c ? `background:rgba(242,184,75,${Math.min(1, 0.25 + c * 0.25)})` : null }));
-  }
-
-  const horizon = state.items.filter((i) => i.status === "open" && i.type === "event" && parseDate(i.dueAt) && parseDate(i.dueAt) > now && daysUntil(i.dueAt) <= 45).sort((a, b) => parseDate(a.dueAt) - parseDate(b.dueAt));
-
-  const areaCards = state.areas.map((a) => {
-    const items = state.items.filter((i) => i.areaId === a.id && !i.inInbox);
-    const open = items.filter((i) => i.status === "open" && i.type !== "habit" && i.type !== "note" && i.type !== "idea").length;
-    const done = items.filter((i) => i.doneAt && new Date(i.doneAt) >= since).length;
-    const overdue = items.filter((i) => i.status === "open" && whenOf(i) && whenOf(i) < now && i.type !== "habit").length;
-    const stale = items.filter((i) => i.status === "open" && i.type === "task" && !whenOf(i) && now - new Date(i.createdAt) > 14 * 864e5).length;
-    const projects = state.projects.filter((p) => p.areaId === a.id).length;
-    const ideas = items.filter((i) => i.status === "open" && i.type === "idea").length;
-    const total = Math.max(1, open + done);
-    return h("a", { class: "card", href: "#area-" + a.id },
-      h("span", { class: "swatch", style: "background:" + a.color }),
-      h("span", { class: "name" }, a.name),
-      h("p", null, [`${open} open`, ideas ? plural(ideas, "idea") : null, projects ? plural(projects, "project") : null].filter(Boolean).join(" · ")),
-      h("div", { class: "bar", title: `${done} done this month` }, h("i", { style: `width:${Math.round((done / total) * 100)}%;background:${a.color}` })),
-      overdue ? h("span", { class: "flag", style: "color:var(--accent)" }, `${overdue} need${overdue === 1 ? "s" : ""} a new time`) : stale ? h("span", { class: "flag", style: "color:var(--muted)" }, `${stale} waiting a while`) : null);
-  });
-
-  return [
-    h("h1", null, "Your life"),
-    h("div", { class: "stats" },
-      h("div", { class: "stat" }, h("b", null, frags30.length), h("span", null, "thoughts captured")),
-      h("div", { class: "stat" }, h("b", null, done30), h("span", null, "things done")),
-      h("div", { class: "stat" }, h("b", null, habitDays), h("span", null, "habit check-ins"))),
-    h("p", { class: "legend" }, "Last 30 days"),
-    horizon.length ? h("section", { class: "section" }, h("h2", null, "On the horizon"),
-      h("ul", { class: "horizon" }, horizon.map((i) => h("li", null,
-        h("span", { class: "when" }, daysUntil(i.dueAt) === 0 ? "Today" : daysUntil(i.dueAt) === 1 ? "Tmrw" : `${daysUntil(i.dueAt)} days`),
-        h("button", { class: "what item-main", onclick: () => openSheet(i) }, h("span", null, i.title), h("small", null, fmtWhen(parseDate(i.dueAt)) + " · " + placeLabel(i))))))) : null,
-    h("section", { class: "section" }, h("h2", null, "Areas"), h("div", { class: "grid" }, areaCards)),
-    h("p", { class: "hint" }, "Your brain is private to you. Fragments only drafts things; it never sends anything on your behalf."),
-    h("section", { class: "section" }, h("div", { class: "section-head" }, h("h2", null, "When your thoughts came in"), h("span", { class: "legend" }, "darker = more")), h("div", { class: "heat" }, cells)),
-  ];
+  const items = state.items.filter((i) => i.areaId === a.id && i.status === "open");
+  const todo = items.filter((i) => ["task", "reminder"].includes(i.type));
+  const ev = items.filter((i) => i.type === "event" && parseDate(i.dueAt) > now).sort((x, y) => parseDate(x.dueAt) - parseDate(y.dueAt))[0];
+  const bits = [];
+  if (ev && daysUntil(ev.dueAt) <= 30) bits.push(`${ev.title} in ${plural(daysUntil(ev.dueAt), "day")}`);
+  const ideas = items.filter((i) => i.type === "idea").length;
+  bits.push(todo.length ? plural(todo.length, "thing") + " to do" : ideas ? plural(ideas, "idea") + " growing" : "all clear");
+  return bits.join(" · ");
 }
-
-function groupByType(items) {
-  const groups = [
-    ["To do", items.filter((i) => ["task", "reminder", "event"].includes(i.type))],
-    ["Habits", items.filter((i) => i.type === "habit")],
-    ["Ideas", items.filter((i) => i.type === "idea")],
-    ["Notes", items.filter((i) => i.type === "note")],
-  ];
-  return groups.filter(([, g]) => g.length).map(([label, g]) => h("section", { class: "section" }, h("h2", null, label), list(g, { showPlace: false })));
+function nextOf(items) {
+  return items.filter((i) => i.status === "open" && ["task", "reminder"].includes(i.type)).sort((a, b) => (whenOf(a) || 9e15) - (whenOf(b) || 9e15))[0];
 }
-
-function viewArea(id) {
-  const a = areaById(id);
-  if (!a) return [h("p", { class: "sub" }, "That area doesn't exist."), h("a", { class: "back", href: "#life" }, "← Life")];
-  const projects = state.projects.filter((p) => p.areaId === a.id);
-  const loose = state.items.filter((i) => i.areaId === a.id && !i.projectId && i.status === "open" && !i.inInbox);
-  const done = state.items.filter((i) => i.areaId === a.id && !i.projectId && i.status === "done");
+function viewLife() {
   return [
-    h("a", { class: "back", href: "#life" }, "← Life"),
-    h("h1", null, h("span", { class: "dot", style: `background:${a.color};width:12px;height:12px` }), a.name),
-    projects.length ? h("section", { class: "section" }, h("h2", null, "Projects"), h("div", { class: "grid" }, projects.map((p) => {
-      const its = state.items.filter((i) => i.projectId === p.id && ["task", "reminder", "event"].includes(i.type));
-      const d = its.filter((i) => i.status === "done").length;
-      return h("a", { class: "card", href: "#project-" + p.id }, h("span", { class: "name" }, p.name),
-        h("p", null, p.summary ? p.summary.slice(0, 100) + (p.summary.length > 100 ? "…" : "") : "No summary yet."),
-        its.length ? h("div", { class: "bar", title: `${d} of ${its.length} done` }, h("i", { style: `width:${Math.round((d / its.length) * 100)}%;background:${a.color}` })) : null);
-    }))) : null,
-    groupByType(loose),
-    !projects.length && !loose.length ? h("p", { class: "sub" }, "Nothing here yet.") : null,
-    done.length ? h("details", null, h("summary", null, `Done (${done.length})`), list(done, { showPlace: false })) : null,
+    h("div", { class: "greet" }, h("h1", null, "Your life"), h("p", { class: "sub" }, "Everything you've told me, sorted. Tap to open.")),
+    h("div", { class: "tree" }, state.areas.map((a) => {
+      const isOpen = openAreas.has(a.id);
+      const projects = state.projects.filter((p) => p.areaId === a.id && state.items.some((i) => i.projectId === p.id && i.status !== "dismissed"));
+      const loose = state.items.filter((i) => i.areaId === a.id && !i.projectId && i.status === "open");
+      const todo = loose.filter((i) => ["task", "reminder", "event"].includes(i.type)).sort((x, y) => (whenOf(x) || 9e15) - (whenOf(y) || 9e15));
+      const habits = loose.filter((i) => i.type === "habit");
+      const kept = loose.filter((i) => i.type === "idea" || i.type === "note");
+      return h("div", { class: "area" + (isOpen ? " open" : "") },
+        h("button", { class: "area-head", "aria-expanded": String(isOpen), onclick: () => { isOpen ? openAreas.delete(a.id) : openAreas.add(a.id); render(); } },
+          h("span", { class: "dot", style: "background:" + a.color }),
+          h("span", { class: "txt" }, h("span", { class: "name" }, a.name), h("span", { class: "status" }, areaStatus(a))),
+          h("span", { class: "chev", "aria-hidden": "true" }, "›")),
+        isOpen ? h("div", { class: "area-body" },
+          projects.map((p) => {
+            const its = state.items.filter((i) => i.projectId === p.id && ["task", "reminder", "event"].includes(i.type) && i.status !== "dismissed");
+            const d = its.filter((i) => i.status === "done").length;
+            const nx = nextOf(state.items.filter((i) => i.projectId === p.id));
+            return h("button", { class: "proj", onclick: () => { location.hash = "#project-" + p.id; } },
+              h("span", { class: "name" }, p.name),
+              h("span", { class: "nxt" }, nx ? h("span", null, "Next: ", h("b", null, nx.title)) : (() => { const n = state.items.filter((i) => i.projectId === p.id && i.status === "open" && i.type === "idea").length; return n ? `${plural(n, "idea")}${p.docs && p.docs.length ? " · plan ready" : ""}` : "Nothing to do right now"; })()),
+              its.length ? h("div", { class: "bar" }, h("i", { style: `width:${Math.round((d / its.length) * 100)}%;background:${a.color}` })) : null);
+          }),
+          todo.length || habits.length ? h("div", { class: "loose" },
+            todo.map((i) => h("div", { class: "lrow" }, checkBtn(i), h("button", { class: "item-main", onclick: () => openItem(i) }, h("span", null, i.title), metaLine(i, { place: false })))),
+            habits.map((i) => h("div", { class: "lrow" }, checkBtn(i), h("button", { class: "item-main", onclick: () => openItem(i) }, h("span", null, i.title), h("span", { class: "meta" }, `↻ ${recurrenceLabel(i.recurrence)} · ${habitKept(i).kept} of last ${habitKept(i).due}`))))) : null,
+          kept.length ? h("details", null, h("summary", null, `${plural(kept.length, "note")} and ideas`), list(kept, { place: false })) : null,
+          !projects.length && !todo.length && !habits.length && !kept.length ? h("p", { class: "muted-line" }, "Nothing here yet.") : null) : null);
+    })),
   ];
 }
 
 function viewProject(id) {
   const p = projectById(id);
-  if (!p) return [h("p", { class: "sub" }, "That project doesn't exist."), h("a", { class: "back", href: "#life" }, "← Life")];
+  if (!p) return [h("p", { class: "sub" }, "That project isn't here anymore."), h("a", { class: "back", href: "#life" }, "← Life")];
   const a = areaById(p.areaId);
   const items = state.items.filter((i) => i.projectId === p.id && i.status !== "dismissed");
-  const open = items.filter((i) => i.status === "open");
-  const done = items.filter((i) => i.status === "done");
   const todo = items.filter((i) => ["task", "reminder", "event"].includes(i.type));
-  const ids = new Set(items.map((i) => i.id));
-  const linked = state.links.filter((l) => ids.has(l.from) !== ids.has(l.to)).map((l) => itemById(ids.has(l.from) ? l.to : l.from)).filter(Boolean);
-  const history = state.fragments.filter((f) => items.some((i) => i.fragmentId === f.id)).slice().reverse();
+  const openTodo = todo.filter((i) => i.status === "open").sort((x, y) => (whenOf(x) || 9e15) - (whenOf(y) || 9e15));
+  const ideas = items.filter((i) => i.status === "open" && (i.type === "idea" || i.type === "note"));
+  const habits = items.filter((i) => i.status === "open" && i.type === "habit");
+  const done = todo.filter((i) => i.status === "done");
+  const nx = nextOf(items);
   p.docs = p.docs || [];
+  if (!p.docs.length && ideas.length >= 3 && claudeState === "granted" && !p.autoPlanned) setTimeout(() => runAction(p, "plan", true), 0);
   return [
-    h("a", { class: "back", href: "#area-" + a.id }, "← " + a.name),
+    h("button", { class: "back", onclick: () => { openAreas.add(a.id); location.hash = "#life"; } }, "← " + a.name),
     h("h1", null, p.name),
-    h("div", { class: "summary" }, h("span", { class: "label" }, "Where it stands · kept up to date by Claude"), h("p", null, p.summary || "No summary yet."),
-      todo.length ? h("div", { class: "bar", title: `${todo.filter((i) => i.status === "done").length} of ${todo.length} done` }, h("i", { style: `width:${Math.round((todo.filter((i) => i.status === "done").length / todo.length) * 100)}%;background:${a.color}` })) : null,
-      todo.length ? h("span", { class: "legend" }, `${todo.filter((i) => i.status === "done").length} of ${todo.length} to-dos done`) : null),
-    h("section", { class: "section" }, h("h2", null, "Work on this with Claude"),
-      h("div", { class: "chips" },
-        h("button", { class: "btn primary", onclick: () => runAction(p, "plan") }, "Make a plan"),
-        h("button", { class: "btn", onclick: () => runAction(p, "brief") }, "Claude Code brief")),
-      h("div", { id: "action-out", class: "section" }),
-      p.docs.slice().reverse().map((d) => docCard(p, d))),
-    groupByType(open),
-    linked.length ? h("section", { class: "section" }, h("h2", null, "Connected elsewhere"), list(linked)) : null,
-    done.length ? h("details", null, h("summary", null, `Done (${done.length})`), list(done, { showPlace: false })) : null,
-    history.length ? h("details", null, h("summary", null, `How this project grew (${history.length} thoughts)`), history.map(fragCard)) : null,
+    h("div", { class: "summary" }, h("span", { class: "label" }, "Where it stands"), h("p", null, p.summary || "Just getting started."),
+      todo.length ? h("div", { class: "bar" }, h("i", { style: `width:${Math.round((done.length / todo.length) * 100)}%;background:${a.color}` })) : null,
+      todo.length ? h("span", { class: "hint" }, `${done.length} of ${todo.length} done`) : null),
+    nx ? h("div", { class: "now" }, h("span", { class: "eyebrow" }, "Next"), h("button", { class: "big", style: "font-size:1.5rem", onclick: () => openItem(nx) }, nx.title), metaLine(nx, { place: false }), stepCard(nx), draftChip(nx),
+      h("div", { class: "row" }, h("button", { class: "btn primary small", onclick: () => toggleDone(nx) }, "Done"))) : null,
+    openTodo.filter((i) => i !== nx).length ? h("section", { class: "section" }, h("h2", null, "Then"), list(openTodo.filter((i) => i !== nx), { place: false })) : null,
+    habits.length ? h("section", { class: "section" }, h("h2", null, "Habits"), list(habits, { place: false })) : null,
+    ideas.length ? h("section", { class: "section" }, h("h2", null, "Ideas and notes"), list(ideas, { place: false })) : null,
+    h("section", { class: "section" }, h("h2", null, "Plan"), h("div", { id: "action-out" }),
+      p.docs.length ? p.docs.slice().reverse().slice(0, 1).map((d) => docCard(p, d)) : h("p", { class: "hint" }, ideas.length >= 3 ? "I'll write a plan once Claude is connected." : "I'll write a plan once there's a bit more here."),
+      h("div", { class: "row" }, h("button", { class: "btn small", onclick: () => runAction(p, "plan") }, p.docs.length ? "Refresh the plan" : "Plan it now"), h("button", { class: "btn small ghost", onclick: () => runAction(p, "brief") }, "Brief for Claude Code"))),
+    done.length ? h("details", null, h("summary", null, `Done (${done.length})`), list(done, { place: false })) : null,
   ];
 }
-
 function docCard(p, d) {
   return h("div", { class: "doc" },
     h("div", { class: "row" }, h("span", { class: "label" }, (d.kind === "plan" ? "Plan" : "Claude Code brief") + " · " + fmtWhen(new Date(d.createdAt))),
-      h("span", null,
-        h("button", { class: "btn small", onclick: (e) => copyText(d.text, e.currentTarget) }, "Copy"), " ",
-        h("button", { class: "btn small ghost", onclick: async () => { p.docs = p.docs.filter((x) => x !== d); await persist(); render(); } }, "Delete"))),
+      h("button", { class: "btn small", onclick: (e) => copyText(d.text, e.currentTarget) }, "Copy")),
     h("pre", null, d.text));
 }
-async function copyText(text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
-  catch (e) { const pre = btn.closest(".doc").querySelector("pre"); const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected. Press copy."; }
-}
-
 let actionBusy = false;
-async function runAction(p, kind) {
+async function runAction(p, kind, auto) {
   if (actionBusy) return;
+  if (auto) p.autoPlanned = true;
   const sample = await getSample();
-  if (!sample) { toast("Claude isn't available in this view", "error"); return; }
+  if (!sample) { if (!auto) toast("I need Claude for that, and it isn't available in this view", "error"); return; }
   actionBusy = true;
   const items = state.items.filter((i) => i.projectId === p.id);
   const fmtItems = (f) => items.filter(f).map((i) => `- [${i.status === "done" ? "x" : " "}] ${i.type}: ${i.title}${i.body ? " — " + i.body : ""}`).join("\n") || "(none)";
-  const history = state.fragments.filter((f) => items.some((i) => i.fragmentId === f.id)).map((f) => `- ${f.createdAt.slice(0, 10)}: "${f.text}"`).join("\n") || "(none)";
+  const history = state.fragments.filter((f) => items.some((i) => i.fragmentId === f.id)).map((f) => `- ${f.createdAt.slice(0, 10)}: "${f.said || f.text}"`).join("\n") || "(none)";
   const ctx = `PROJECT: ${p.name} (area: ${areaById(p.areaId).name})\nSUMMARY: ${p.summary || "(none)"}\n\nIDEAS:\n${fmtItems((i) => i.type === "idea")}\n\nTASKS AND OTHER ITEMS:\n${fmtItems((i) => i.type !== "idea")}\n\nWHAT THE USER SAID, IN ORDER:\n${history}`;
   const prompt = kind === "plan"
-    ? `You help a person with ADHD turn scattered ideas into action. Write a short, practical plan for this project using ONLY what's below; don't invent features, deadlines or facts. Plain text, no Markdown symbols: a one-line goal, then "Phases" (2–4 small phases with 2–4 concrete steps each, smallest first), then "The very next step" (one action doable in under 30 minutes), then "Open questions". Under 250 words.\n\n${ctx}`
-    : `Write a Markdown brief the user will paste into a fresh Claude Code session to start building this project. Use ONLY what's below; mark anything unknown as an open question instead of guessing. Sections: "# ${p.name}", "## Goal", "## Background (what I've said so far)", "## Decisions so far", "## Features / ideas to build", "## Open tasks", "## Open questions", "## Suggested first step for Claude Code". Be concise.\n\n${ctx}`;
+    ? `You help a person with ADHD turn scattered ideas into action. Write a short, practical plan for this project using ONLY what's below; don't invent features, deadlines or facts. Plain text, no Markdown symbols: a one-line goal, then 2–4 small numbered phases with 2–3 concrete steps each, then "Very next step:" (one action under 30 minutes), then "Open questions:". Under 220 words.\n\n${ctx}`
+    : `Write a Markdown brief the user will paste into a fresh Claude Code session to start building this project. Use ONLY what's below; mark anything unknown as an open question. Sections: "# ${p.name}", "## Goal", "## Background (what I've said so far)", "## Decisions so far", "## Features / ideas to build", "## Open tasks", "## Open questions", "## Suggested first step for Claude Code". Be concise.\n\n${ctx}`;
   const outBox = document.getElementById("action-out");
-  const pre = h("pre", { class: "spin" }, "Thinking…");
-  if (outBox) outBox.replaceChildren(h("div", { class: "doc" }, h("span", { class: "label" }, kind === "plan" ? "Writing a plan…" : "Writing a Claude Code brief…"), pre));
+  const pre = h("pre", { class: "spin" }, "Writing…");
+  if (outBox) outBox.replaceChildren(h("div", { class: "doc" }, h("span", { class: "label" }, kind === "plan" ? "Writing the plan…" : "Writing a Claude Code brief…"), pre));
   try {
     const { text } = await sample(prompt, { onText: ({ text }) => { pre.classList.remove("spin"); pre.textContent = text; } });
-    p.docs = p.docs || [];
     p.docs.push({ kind, text, createdAt: new Date().toISOString() });
+    addAction("📝", `${kind === "plan" ? "Wrote a plan" : "Wrote a Claude Code brief"} for ${p.name}.`, null);
     claudeState = "granted";
     await persist();
-    toast(kind === "plan" ? "Plan saved to the project" : "Brief saved to the project");
-  } catch (e) { toast(claudeError(e), "error"); if (e && e.code === "not_granted") claudeState = "denied"; }
+    if (!auto) toast(kind === "plan" ? "Plan saved" : "Brief saved");
+  } catch (e) { if (!auto) toast(claudeError(e), "error"); if (e && e.code === "not_granted") claudeState = "denied"; }
   actionBusy = false;
   render();
 }
 
-function placeSelectors(item) {
-  const areaSel = h("select", { id: "sheet-area-" + item.id, "aria-label": "Area" }, state.areas.map((a) => h("option", { value: a.id }, a.name)));
-  areaSel.value = item.areaId || state.areas[0].id;
-  const projSel = h("select", { id: "sheet-project-" + item.id, "aria-label": "Project" });
-  const fill = () => {
-    projSel.replaceChildren(h("option", { value: "" }, "No project"), state.projects.filter((p) => p.areaId === areaSel.value).map((p) => h("option", { value: p.id }, p.name)));
-    projSel.value = item.areaId === areaSel.value && item.projectId ? item.projectId : "";
-  };
-  areaSel.addEventListener("change", fill);
-  fill();
-  return { areaSel, projSel };
-}
-
-function viewInbox() {
-  const items = inboxItems();
-  return [
-    h("h1", null, "Inbox"),
-    h("p", { class: "sub" }, "Things Claude wasn't sure about. Pick where they go, one tap each. Claude learns from every choice."),
-    items.length ? items.map((item) => {
-      const { areaSel, projSel } = placeSelectors(item);
-      const frag = state.fragments.find((f) => f.id === item.fragmentId);
-      return h("div", { class: "frag" },
-        frag ? h("p", { class: "said" }, frag.text) : h("strong", null, item.title),
-        item.body ? h("p", { class: "sub", style: "font-size:14px" }, item.body) : null,
-        h("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px" }, areaSel, projSel),
-        h("div", { class: "row" },
-          h("button", { class: "btn primary small", onclick: async () => { moveItem(item, areaSel.value, projSel.value); await persist(); render(); toast("Filed under " + placeLabel(item)); } }, "File it"),
-          h("button", { class: "btn ghost small", onclick: async () => { item.status = "dismissed"; await persist(); render(); } }, "Dismiss")));
-    }) : h("div", { class: "empty" }, h("strong", null, "All clear."), h("p", null, "Nothing waiting for you here.")),
-  ];
-}
-
+/* ---------- Activity ---------- */
 const SRC = { watch: "⌚ Watch", phone: "Phone", web: null };
 function fragCard(f) {
-  const statusText = { queued: "Waiting…", working: "Organizing…", organized: "Organized", error: "Not organized", undone: "Undone" }[f.status] || f.status;
+  const statusText = { queued: "Waiting…", working: "On it…", organized: null, error: "Didn't go through", undone: "Undone" }[f.status];
   return h("div", { class: "frag" },
-    h("p", { class: "said" }, f.text),
+    h("p", { class: "said" }, f.said || f.text),
     f.reply ? h("p", { class: "reply" }, f.reply) : null,
-    f.status === "organized" && f.did && f.did.length ? h("ul", { class: "did" }, f.did.map((d) => h("li", null, d))) : null,
-    f.status === "organized" && f.itemIds && f.itemIds.some(itemById) ? h("div", { class: "fixes" }, f.itemIds.map(itemById).filter(Boolean).map((it) =>
-      h("button", { class: "fix", title: "Wrong place? Tap to move it", onclick: () => openSheet(it) }, (it.inInbox ? "Inbox" : placeLabel(it)) + " · Change"))) : null,
-    f.status === "organized" && f.explain && (!f.did || !f.did.length) ? h("p", { class: "sub", style: "font-size:14px" }, f.explain) : null,
-    f.error && f.status === "error" ? h("p", { class: "sub", style: "font-size:14px" }, f.error) : null,
+    f.status === "organized" && f.did && f.did.length ? h("ul", null, f.did.map((d) => h("li", null, d))) : null,
+    f.status === "error" ? h("p", { class: "sub", style: "font-size:14px" }, f.error) : null,
     h("div", { class: "row" },
-      h("span", { class: "status " + (f.status === "working" || f.status === "queued" ? "working spin" : f.status === "error" ? "error" : f.status === "undone" ? "undone" : "") },
-        fmtTime(new Date(f.createdAt)) + " · " + statusText, f.status === "working" ? h("span", { class: "elapsed", "data-start": String(f.startedAt || Date.now()) }) : null,
-        SRC[f.source] ? h("span", { class: "src" }, SRC[f.source]) : null),
+      h("span", { class: "status " + (f.status === "working" || f.status === "queued" ? "working spin" : f.status === "error" ? "error" : "") },
+        fmtTime(new Date(f.createdAt)) + (statusText ? " · " + statusText : ""), SRC[f.source] ? h("span", { class: "src" }, SRC[f.source]) : null),
       f.status === "organized" && f.undo ? h("button", { class: "btn small ghost", onclick: async () => { undoFragment(f); await persist(); render(); toast("Undone", "info"); } }, "Undo") : null,
-      f.status === "error" || f.status === "undone" ? h("button", { class: "btn small", onclick: () => { f.status = "queued"; f.error = null; persist(); render(); pump(); } }, "Organize") : null));
+      f.status === "error" || f.status === "undone" ? h("button", { class: "btn small", onclick: () => { f.status = "queued"; f.error = null; persist(); render(); pump(); } }, "Try again") : null));
 }
-
-function viewCapture() {
-  const ta = h("textarea", { id: "capture-text", rows: "4", placeholder: "Say or type anything…", "aria-label": "Your thought" });
-  const save = h("button", { type: "submit", class: "save", disabled: true }, "Save");
-  ta.addEventListener("input", () => (save.disabled = !ta.value.trim()));
-  ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } });
-  const submit = () => { if (!ta.value.trim()) return; capture(ta.value); ta.value = ""; save.disabled = true; toast("Saved. Organizing…", "info"); };
-  const form = h("form", { class: "capture", onsubmit: (e) => { e.preventDefault(); submit(); } }, ta, save);
-  const recent = state.fragments.slice(-4).reverse();
-  const tries = mode === "demo"
-    ? ["ok so the hotel is booked, the one by the river, and I still need to call the dentist, and when I get home check if sara replied about mom's party", "idea for the playbook: let players vote on plays", "did I ever book the dentist?", "remind me tomorrow at 7 to take vitamins"]
-    : EXAMPLES;
-  return [
-    h("h1", null, "What's on your mind?"),
-    h("p", { class: "hint" }, "On a phone, tap the mic on your keyboard to talk. Don't sort it. Just say it."),
-    form,
-    h("section", { class: "section" }, h("h2", null, mode === "demo" ? "Try one on the demo month" : "Try one"),
-      h("div", { class: "chips" }, tries.map((ex) => h("button", { class: "chip", onclick: () => { capture(ex); toast("Saved. Organizing…", "info"); } }, ex)))),
-    recent.length ? h("section", { class: "section" }, h("h2", null, "Just captured"), recent.map(fragCard)) : null,
-  ];
-}
-
-function viewTimeline() {
+function viewActivity() {
   const frags = state.fragments.slice().reverse();
   const days = [];
   for (const f of frags) {
@@ -1465,96 +1413,85 @@ function viewTimeline() {
     if (last && last.label === label) last.items.push(f); else days.push({ label, items: [f] });
   }
   return [
-    h("h1", null, "Timeline"),
-    h("p", { class: "sub" }, `Everything you've said (${state.fragments.length} thoughts), and what Claude did with each one.`),
-    state.fragments.some((f) => f.status === "error") ? h("button", { class: "btn small", style: "align-self:flex-start", onclick: () => { for (const f of state.fragments) if (f.status === "error") { f.status = "queued"; f.error = null; f.blocked = false; } persist(); render(); pump(); } }, "Organize everything that didn't go through") : null,
-    days.length ? days.map((d) => h("section", { class: "section" }, h("h2", null, d.label), d.items.map(fragCard))) : h("div", { class: "empty" }, h("p", null, "Nothing captured yet.")),
-    mode === "mine" && state.fragments.length ? h("details", null, h("summary", null, "Start over"),
-      h("p", { class: "sub", style: "font-size:14px" }, "Deletes every thought, item and project in your brain."),
-      h("button", { class: "btn small", style: "margin-top:8px", onclick: async () => { state = Object.assign(emptyState(), { rev: state.rev }); await persist(); location.hash = "#today"; render(); } }, "Delete everything")) : null,
+    h("div", { class: "greet" }, h("h1", null, "Activity"), h("p", { class: "sub" }, `Everything you've told me (${state.fragments.length}) and what I did with it. Something wrong? Just tell me, like “the newsletter idea is its own project.”`)),
+    state.fragments.some((f) => f.status === "error") ? h("button", { class: "btn small", style: "align-self:flex-start", onclick: () => { for (const f of state.fragments) if (f.status === "error") { f.status = "queued"; f.error = null; f.blocked = false; } persist(); render(); pump(); } }, "Retry everything that didn't go through") : null,
+    days.length ? days.map((d) => h("section", { class: "section" }, h("h2", null, d.label), d.items.map(fragCard))) : h("div", { class: "empty" }, h("p", null, "Nothing yet. Tell me anything below.")),
   ];
 }
 
-function loadExamples() {
-  for (const ex of EXAMPLES) state.fragments.push({ id: uid("f"), text: ex, source: "web", createdAt: new Date().toISOString(), status: "queued" });
-  persist();
-  location.hash = "#timeline";
-  render();
-  pump();
-}
-
-/* ---------- item sheet ---------- */
-function openSheet(item) {
+/* ---------- sheets ---------- */
+function openSheetEl(content) {
   const root = document.getElementById("sheet-root");
   const close = () => root.replaceChildren();
-  const title = h("input", { type: "text", id: "sheet-title", value: item.title, "aria-label": "Title" });
-  const typeSel = h("select", { id: "sheet-type", "aria-label": "Type" }, Object.entries(TYPE_LABEL).map(([k, v]) => h("option", { value: k }, v)));
-  typeSel.value = item.type;
-  const { areaSel, projSel } = placeSelectors(item);
-  const frag = state.fragments.find((f) => f.id === item.fragmentId);
-  const links = state.links.filter((l) => l.from === item.id || l.to === item.id).map((l) => ({ other: itemById(l.from === item.id ? l.to : l.from), reason: l.reason })).filter((x) => x.other);
-  const sheet = h("div", { class: "sheet", role: "dialog", "aria-label": "Edit item" },
-    h("div", { class: "field" }, h("span", { class: "label" }, "Title"), title),
-    item.body ? h("p", { class: "sub" }, item.body) : null,
-    itemMeta(item, { showPlace: false }),
-    stepsBlock(item),
-    item.remindAt && item.status === "open" ? h("p", { class: "hint" }, `One nudge at ${fmtWhen(parseDate(item.remindAt))}. If you're busy, it waits at the top of Today. No repeat pings.`) : null,
-    item.type === "habit" ? h("p", { class: "hint" }, "Missed a day? One rest day a week never breaks your streak.") : null,
-    item.type === "habit" ? h("div", { class: "field" }, h("span", { class: "label" }, `Last 14 days · kept ${habitKept(item).kept} of ${habitKept(item).due} · ${habitStreak(item)}-day streak`), habitDays(item)) : null,
-    h("div", { class: "two" }, h("div", { class: "field" }, h("span", { class: "label" }, "Type"), typeSel), h("div", { class: "field" }, h("span", { class: "label" }, "Area"), areaSel)),
-    h("div", { class: "field" }, h("span", { class: "label" }, "Project"), projSel),
-    links.length ? h("div", { class: "field" }, h("span", { class: "label" }, "Connected to"), links.map((x) => h("span", { class: "sub", style: "font-size:14px" }, "↔ " + x.other.title + (x.reason ? " · " + x.reason : "")))) : null,
-    frag ? h("p", { class: "hint" }, `You said “${frag.text}” · ${fmtWhen(new Date(frag.createdAt))}`) : null,
-    h("div", { class: "row" },
-      h("button", { class: "btn primary", onclick: async () => {
-        item.title = title.value.trim() || item.title;
-        item.type = typeSel.value;
-        if (areaSel.value !== item.areaId || (projSel.value || null) !== (item.projectId || null) || item.inInbox) moveItem(item, areaSel.value, projSel.value);
-        await persist(); close(); render(); toast("Saved");
-      } }, "Save"),
-      h("button", { class: "btn", onclick: async () => { close(); await toggleDone(item); } }, item.status === "done" ? "Reopen" : item.type === "habit" ? (habitDoneToday(item) ? "Not done today" : "Done today") : "Mark done"),
-      h("button", { class: "btn ghost", onclick: async () => { item.status = "dismissed"; await persist(); close(); render(); toast("Removed", "info"); } }, "Remove"),
-      h("button", { class: "btn ghost", onclick: close }, "Close")));
+  const sheet = h("div", { class: "sheet", role: "dialog" }, content(close));
   const scrim = h("div", { class: "scrim", onclick: (e) => { if (e.target === scrim) close(); } }, sheet);
   scrim.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   root.replaceChildren(scrim);
-  title.focus();
+  sheet.querySelector("button, input")?.focus();
 }
+function openItem(item) {
+  openSheetEl((close) => {
+    const frag = state.fragments.find((f) => f.id === item.fragmentId);
+    const links = state.links.filter((l) => l.from === item.id || l.to === item.id).map((l) => ({ other: itemById(l.from === item.id ? l.to : l.from), reason: l.reason })).filter((x) => x.other && x.other.status !== "dismissed");
+    const tell = h("input", { type: "text", id: "tell-" + item.id, placeholder: "Tell me what to change…", "aria-label": "Tell Fragments what to change" });
+    const d = item.draft;
+    return [
+      h("span", { class: "label" }, placeLabel(item) + (item.guess ? " · my best guess" : "")),
+      h("h3", null, item.title),
+      metaLine(item, { place: false }),
+      item.body ? h("p", { class: "sub" }, item.body) : null,
+      item.autoScheduled && item.status === "open" ? h("p", { class: "hint" }, "I picked this time so it doesn't get lost. Tell me if another time works better.") : null,
+      stepCard(item),
+      item.steps && item.steps.length ? h("details", null, h("summary", null, "All steps"), h("ol", { style: "margin:0;padding-left:20px;color:var(--muted)" }, item.steps.map((s) => h("li", { style: s.done ? "text-decoration:line-through;color:var(--faint)" : null }, s.text)))) : null,
+      d && item.status === "open" ? h("div", { class: "doc" }, h("div", { class: "row" }, h("span", { class: "label" }, `${DRAFT_ICON[d.kind]} ${d.kind === "call" ? "What to say" : "Draft " + d.kind}${d.to ? " · " + d.to : ""}`), h("button", { class: "btn small", onclick: (e) => copyText((d.subject ? "Subject: " + d.subject + "\n\n" : "") + d.text, e.currentTarget) }, "Copy")),
+        d.subject ? h("p", { class: "sub", style: "font-size:14px" }, "Subject: " + d.subject) : null, h("pre", null, d.text),
+        h("p", { class: "hint" }, "I never send anything for you. Copy it, tweak it, send it.")) : null,
+      item.type === "habit" ? h("div", { class: "section" }, h("span", { class: "label" }, `Kept ${habitKept(item).kept} of the last ${habitKept(item).due} days`), habitDays(item), h("p", { class: "hint" }, "Missed a day? That's fine. One rest day a week never breaks a streak.")) : null,
+      item.remindAt && item.status === "open" ? h("p", { class: "hint" }, `One nudge at ${fmtWhen(parseDate(item.remindAt))}. If you're busy, it waits at the top of Home. No repeat pings.`) : null,
+      links.length ? h("div", { class: "section" }, h("span", { class: "label" }, "Connected to"), links.map((x) => h("button", { class: "back", onclick: () => openItem(x.other) }, "↔ " + x.other.title + (x.reason ? " · " + x.reason : "")))) : null,
+      frag ? h("p", { class: "hint" }, `You said “${frag.said || frag.text}” · ${fmtWhen(new Date(frag.createdAt))}`) : null,
+      h("form", { class: "tell", onsubmit: (e) => { e.preventDefault(); if (!tell.value.trim()) return; send(tell.value, item); close(); } }, tell, h("button", { class: "btn small", type: "submit" }, "Tell")),
+      h("div", { class: "row" },
+        CHECKABLE.has(item.type) ? h("button", { class: "btn primary", onclick: async () => { close(); await toggleDone(item); } }, item.status === "done" ? "Reopen" : item.type === "habit" ? (habitDoneToday(item) ? "Not done today" : "Done today") : "Done") : null,
+        h("button", { class: "btn ghost", onclick: async () => { item.status = "dismissed"; await persist(); close(); render(); toast("Let go", "info"); } }, "Let it go"),
+        h("button", { class: "btn ghost", onclick: close }, "Close")),
+    ];
+  });
+}
+function openSettings() {
+  openSheetEl((close) => [
+    h("h3", null, "Your plan"),
+    h("p", { class: "sub" }, "Fragments is one plan, with Claude built in. Everything is automatic, so there's no free tier that makes you sort things yourself."),
+    h("div", { class: "plan pick" }, h("b", null, "Fragments"), h("span", { class: "price" }, "$8", h("small", null, " / month, or $72 / year")), h("span", { class: "sub" }, "Claude included. Unlimited capture, organizing, drafts and plans. Cancel any time.")),
+    h("div", { class: "plan" }, h("b", null, "Bring your own Claude key"), h("span", { class: "price" }, "$4", h("small", null, " / month")), h("span", { class: "sub" }, "Paste your Anthropic API key and pay Anthropic directly. Typical use costs about $1–2 a month. Set a monthly cap and it pauses before you go over.")),
+    h("p", { class: "hint" }, "Prototype: billing and API keys come with the real app. This preview uses your Claude account."),
+    h("h3", { style: "font-size:1.1rem" }, "Privacy"),
+    h("p", { class: "sub" }, "Your brain is private to you. I only draft things; I never send anything on your behalf. Export or delete everything any time."),
+    mode === "mine" && state.fragments.length ? h("details", null, h("summary", null, "Delete everything"),
+      h("button", { class: "btn small", style: "margin-top:8px", onclick: async () => { state = Object.assign(emptyState(), { rev: state.rev }); await persist(); close(); location.hash = "#home"; render(); } }, "Yes, delete my brain")) : null,
+    h("button", { class: "btn ghost", onclick: close }, "Close"),
+  ]);
+}
+document.getElementById("settings-btn").addEventListener("click", openSettings);
 
 /* ---------- router ---------- */
-let lastHash = null;
 function render() {
-  const hash = location.hash.slice(1) || "today";
+  const hash = location.hash.slice(1) || "home";
   const view = document.getElementById("view");
-  let tab = hash;
-  let content;
+  let tab = hash, content;
   if (mode === "mine" && !mineLoaded) content = [h("p", { class: "sub spin" }, "Loading your brain…")];
-  else if (hash.startsWith("area-")) { tab = "life"; content = viewArea(hash.slice(5)); }
   else if (hash.startsWith("project-")) { tab = "life"; content = viewProject(hash.slice(8)); }
-  else if (hash === "capture") content = viewCapture();
-  else if (hash === "life" || hash === "areas") { tab = "life"; content = viewLife(); }
-  else if (hash === "inbox") content = viewInbox();
-  else if (hash === "timeline") content = viewTimeline();
-  else { tab = "today"; content = viewToday(); }
-  const draft = document.getElementById("capture-text");
-  const draftVal = draft && hash === "capture" ? draft.value : "";
-  const askEl = document.getElementById("ask-input");
-  const askVal = askEl && document.activeElement === askEl ? askEl.value : null;
-  const focusCapture = hash === "capture" && lastHash !== "capture";
-  lastHash = hash;
-  view.replaceChildren(...[loaded ? modeNote() : null, loaded ? claudeBanner() : null, ...content].flat().filter(Boolean));
-  if (draftVal) { const t = document.getElementById("capture-text"); t.value = draftVal; t.dispatchEvent(new Event("input")); }
-  if (askVal != null) { const a = document.getElementById("ask-input"); if (a) { a.value = askVal; a.focus(); } }
-  if (focusCapture) document.getElementById("capture-text")?.focus();
-  for (const a of document.querySelectorAll("nav a")) {
+  else if (hash === "life") content = viewLife();
+  else if (hash === "activity") content = viewActivity();
+  else { tab = "home"; content = viewHome(); }
+  view.replaceChildren(...[claudeBanner(), ...content].flat().filter(Boolean));
+  for (const a of document.querySelectorAll(".tabs a")) {
     if (a.dataset.tab === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
-  const n = inboxItems().length;
-  document.getElementById("inbox-badge").replaceChildren(n ? h("span", { class: "badge" }, n) : "");
 }
 window.addEventListener("hashchange", () => { document.getElementById("sheet-root").replaceChildren(); render(); window.scrollTo(0, 0); });
 setInterval(() => { for (const el of document.querySelectorAll(".elapsed")) el.textContent = " " + Math.round((Date.now() - Number(el.dataset.start)) / 1000) + "s"; }, 1000);
-setInterval(() => { if ((location.hash || "#today") === "#today" && !document.getElementById("sheet-root").firstChild && document.activeElement?.id !== "ask-input") render(); }, 60e3);
+setInterval(() => { if ((location.hash.slice(1) || "home") === "home" && !document.getElementById("sheet-root").firstChild) render(); }, 60e3);
 
 demo = buildDemo();
 state = demo;
